@@ -791,13 +791,13 @@ input,select,button,textarea{font-family:inherit;}
   position:fixed;inset:0;z-index:600;
   background:rgba(0,0,0,.7);backdrop-filter:blur(3px);
   opacity:0;pointer-events:none;transition:opacity .25s;
-  display:flex;align-items:flex-end;
+  display:flex;align-items:flex-end;justify-content:center;
 }
 .soverlay.on{opacity:1;pointer-events:all;}
 .sheet{
   background:var(--bg1);border-radius:20px 20px 0 0;
   border-top:1px solid var(--br);
-  width:100%;max-width:100%;max-height:92dvh;overflow-y:auto;overflow-x:hidden;
+  width:100%;max-width:600px;max-height:92dvh;overflow-y:auto;overflow-x:hidden;
   padding:0 16px calc(24px + var(--sfb));
   box-sizing:border-box;
   transform:translateY(100%);transition:transform .3s cubic-bezier(.32,0,.67,0);
@@ -3133,7 +3133,23 @@ async function sbReq(table, method='GET', data=null, query=''){
 async function sbBatchUpsert(table, rows){
   if(!rows.length) return;
   for(let i=0; i<rows.length; i+=SB_BATCH){
-    await sbReq(table,'POST', rows.slice(i, i+SB_BATCH));
+    try {
+      await sbReq(table,'POST', rows.slice(i, i+SB_BATCH));
+    } catch(e) {
+      // 컬럼 불일치 에러 시 누락 컬럼 제거 후 재시도
+      if(e.message && e.message.includes('column') && e.message.includes('does not exist')){
+        console.warn('[SB] 컬럼 불일치 재시도:', e.message);
+        // 에러 메시지에서 컬럼명 추출
+        const m = e.message.match(/column "([^"]+)"/);
+        if(m){
+          const badCol = m[1];
+          const cleaned = rows.slice(i, i+SB_BATCH).map(r => { const c={...r}; delete c[badCol]; return c; });
+          await sbReq(table,'POST', cleaned);
+          continue;
+        }
+      }
+      throw e;
+    }
   }
 }
 
@@ -3184,6 +3200,12 @@ async function syncNow(){
 ────────────────────────────────────────────────────────── */
 async function _syncToSupabase(){
   const siteMap = Object.fromEntries(getSites().map(s=>[s.id,s.name]));
+  const _dot = document.getElementById('sdot');
+  const _txt = document.getElementById('stxt');
+  const _setStatus = (cls, msg) => {
+    if(_dot) _dot.className = 'sdot ' + cls;
+    if(_txt) _txt.innerHTML = msg;
+  };
 
   // IDB 초기화 대기 (최대 3초)
   let idbReady = false;
@@ -4811,11 +4833,9 @@ function _trAddSpecRow(spec='', model='', qty=1, equipNos=''){
   const isOut = document.querySelector('#tr-type-chips .chip.on')?.textContent==='반출';
   const div=document.createElement('div');
   div.style.cssText='margin-bottom:8px;background:rgba(59,130,246,.04);border:1px solid var(--br);border-radius:8px;padding:7px 8px';
-  const equipLabel = isOut ? '반출 장비번호' : '장비번호';
-  const equipPlaceholder = isOut ? '장비번호 입력 또는 선택 (자동완성)' : '예: GK228, GK229 (선택사항)';
   const equipId = 'tr-spec-equip-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,4);
   div.innerHTML=`
-  <div style="display:flex;gap:6px;align-items:center;margin-bottom:5px">
+  <div style="display:flex;gap:6px;align-items:center;margin-bottom:${isOut?'5px':'0'}">
     <select class="fg-select tr-spec" style="flex:3;font-size:12px;padding:6px 8px">
       ${TR_SPECS.map(s=>`<option${s===spec?' selected':''}>${s}</option>`).join('')}
     </select>
@@ -4823,13 +4843,13 @@ function _trAddSpecRow(spec='', model='', qty=1, equipNos=''){
     ${isOut?`<input type="text" class="fg-input tr-model" value="${model}" style="flex:2;padding:6px 8px;font-size:12px" placeholder="모델명">`:''}
     <button onclick="this.closest('div[style*=margin-bottom]').remove()" style="background:none;border:none;color:#f87171;font-size:18px;cursor:pointer;flex-shrink:0;line-height:1">x</button>
   </div>
-  <div style="display:flex;align-items:center;gap:5px;position:relative">
-    <span style="font-size:10px;color:var(--tx3);white-space:nowrap;flex-shrink:0">${equipLabel}</span>
+  ${isOut?`<div style="display:flex;align-items:center;gap:5px;position:relative">
+    <span style="font-size:10px;color:var(--tx3);white-space:nowrap;flex-shrink:0">반출 장비번호</span>
     <input type="text" class="fg-input tr-spec-equip" id="${equipId}"
-      value="${equipNos}" placeholder="${equipPlaceholder}"
+      value="${equipNos}" placeholder="장비번호 입력 또는 선택 (자동완성)"
       style="flex:1;padding:5px 9px;font-size:12px;font-family:monospace;text-transform:uppercase;background:var(--bg2)"
       autocomplete="off" oninput="this.value=this.value.toUpperCase()">
-  </div>`;
+  </div>`:'<input type="hidden" class="tr-spec-equip" id="'+equipId+'" value="">'}`;
   list.appendChild(div);
   // 자동완성: 반출 시에만 마스터에서 선택 가능
   if (isOut) {
@@ -6380,7 +6400,7 @@ initLogin();
         <div class="chip" onclick="selectOne(this,'tr-type-chips');_updateSpecModelVisibility()">반입</div>
         <div class="chip" onclick="selectOne(this,'tr-type-chips');_updateSpecModelVisibility()">반출</div>
       </div>
-      <div style="font-size:10px;color:var(--tx3);margin-top:4px">반출 선택 시 장비번호 입력이 필요합니다</div>
+      <div style="font-size:10px;color:var(--tx3);margin-top:4px">반출 선택 시 제원별 장비번호 입력이 필요합니다</div>
     </div>
 
     <!-- 반입/반출 요청일 -->
