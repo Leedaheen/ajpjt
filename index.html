@@ -2979,7 +2979,9 @@ function enterApp(){
 }
 
 /* ── Service Worker 등록 (PWA) ──────────────────────────── */
-if('serviceWorker' in navigator){
+// claudeusercontent.com / 로컬 미리보기에서는 SW 등록 생략
+const _swSkip = location.hostname.includes('claudeusercontent.com') || location.hostname === 'localhost' && !location.port;
+if('serviceWorker' in navigator && !_swSkip){
   window.addEventListener('load', ()=>{
     navigator.serviceWorker.register('./sw.js')
       .then(reg => {
