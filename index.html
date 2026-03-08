@@ -1857,6 +1857,8 @@ const IDB = (() => {
       const req = indexedDB.open(DB_NAME, DB_VER);
       req.onupgradeneeded = e => {
         const db = e.target.result;
+        // 기존 트랜잭션이 남아있는 경우 안전하게 처리
+        try { e.target.transaction.onabort = ev => console.warn('[IDB] upgrade aborted:', ev); } catch {}
         // LOGS
         if (!db.objectStoreNames.contains('logs')) {
           const s = db.createObjectStore('logs', { keyPath: 'id' });
@@ -1900,8 +1902,34 @@ const IDB = (() => {
           s.createIndex('status',  'status',  { unique: false });
         }
       };
-      req.onsuccess = e => { _db = e.target.result; res(_db); };
-      req.onerror   = e => rej(e.target.error);
+      req.onsuccess = e => {
+        _db = e.target.result;
+        // 버전 불일치 감지 — versionchange 이벤트 처리
+        _db.onversionchange = () => {
+          _db.close();
+          _db = null;
+          console.warn('[IDB] 버전 변경 감지 — DB 닫음');
+        };
+        res(_db);
+      };
+      req.onerror = e => {
+        const err = e.target.error;
+        // AbortError(upgradeneeded 충돌) 시 DB 삭제 후 재시도
+        if (err?.name === 'AbortError' || err?.name === 'VersionError') {
+          console.warn('[IDB] 버전 충돌 — DB 삭제 후 재시도');
+          indexedDB.deleteDatabase(DB_NAME);
+          _db = null;
+          // 재시도
+          setTimeout(() => open().then(res).catch(rej), 500);
+        } else {
+          rej(err);
+        }
+      };
+      req.onblocked = () => {
+        console.warn('[IDB] blocked - 다른 탭 종료 후 새로고침 필요');
+        // onblocked에서는 기다리지 않고 에러 처리
+        rej(new Error('IDB blocked'));
+      };
     });
   }
 
@@ -2913,12 +2941,30 @@ function enterApp(){
   }
   seedIfEmpty();
   renderHome();
+  // 로그인 직후 동기화 상태 초기값 설정
+  const _dot = document.getElementById('sdot');
+  const _txt = document.getElementById('stxt');
+  if (_dot && _txt) {
+    const hasSB = DB.g(K.SB_URL, '');
+    _dot.className = 'sdot sync';
+    _txt.innerHTML = hasSB ? '<b>연결 확인 중...</b>' : '<b>미연동</b> · 관리 탭에서 Supabase 설정';
+    if (!hasSB) _dot.className = 'sdot err';
+  }
   updateLogBadge();
   check3PMAlert();
-  setTimeout(syncNow, 1500);
   setTimeout(checkUnreadNotifs, 500);
-  // IDB 초기화 + LS→IDB 마이그레이션 (백그라운드)
-  IDB.open().then(()=> _migrateFromLocalStorage()).catch(()=>{});
+  // IDB 초기화 완료 후 syncNow 실행 (순서 보장)
+  IDB.open()
+    .then(() => _migrateFromLocalStorage())
+    .then(() => {
+      // IDB 준비 완료 후 동기화 (충돌 방지)
+      return syncNow();
+    })
+    .catch(e => {
+      console.warn('[init] IDB/sync 초기화 에러:', e.message);
+      // IDB 없어도 Supabase 직접 연결 시도
+      syncNow().catch(()=>{});
+    });
   setInterval(check3PMAlert, 60000);
 }
 
@@ -3127,8 +3173,20 @@ async function syncNow(){
 async function _syncToSupabase(){
   const siteMap = Object.fromEntries(getSites().map(s=>[s.id,s.name]));
 
+  // IDB 초기화 대기 (최대 3초)
+  let idbReady = false;
+  try {
+    await Promise.race([
+      IDB.open(),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('IDB timeout')), 3000))
+    ]);
+    idbReady = true;
+  } catch(idbErr) {
+    console.warn('[sync] IDB 준비 실패, localStorage 폴백:', idbErr.message);
+  }
+
   // 1. LOGS
-  const unsyncLogs = await IDB.getUnsynced('logs');
+  const unsyncLogs = idbReady ? await IDB.getUnsynced('logs').catch(()=>[]) : getLogs().filter(l=>!l.synced);
   if(unsyncLogs.length){
     const rows = unsyncLogs.map(l=>({
       record_id:   l.id||'',
@@ -3149,12 +3207,12 @@ async function _syncToSupabase(){
       created_at:  l.createdAt ? new Date(l.createdAt).toISOString() : new Date(l.ts||Date.now()).toISOString()
     }));
     await sbBatchUpsert('logs', rows);
-    await IDB.markSynced('logs', unsyncLogs.map(l=>l.id));
+    await IDB.markSynced('logs', unsyncLogs.map(l=>l.id)).catch(()=>{});
     _cache.todayLogs = null; // 캐시 무효화
   }
 
   // 2. TRANSIT
-  const unsyncTr = await IDB.getUnsynced('transit');
+  const unsyncTr = await IDB.getUnsynced('transit').catch(()=>[]);
   if(unsyncTr.length){
     const rows = unsyncTr.map(t=>({
       record_id:        t.id||'',
@@ -3176,12 +3234,12 @@ async function _syncToSupabase(){
       created_at:       t.createdAt ? new Date(t.createdAt).toISOString() : new Date().toISOString()
     }));
     await sbBatchUpsert('transit', rows);
-    await IDB.markSynced('transit', unsyncTr.map(t=>t.id));
+    await IDB.markSynced('transit', unsyncTr.map(t=>t.id)).catch(()=>{});
     _cache.transit = null; _cache.transitBySite = null;
   }
 
   // 3. AS
-  const unsyncAS = await IDB.getUnsynced('as_requests');
+  const unsyncAS = await IDB.getUnsynced('as_requests').catch(()=>[]);
   if(unsyncAS.length){
     const rows = unsyncAS.map(a=>({
       record_id:     a.id||'',
@@ -3202,12 +3260,12 @@ async function _syncToSupabase(){
       created_at:    a.createdAt ? new Date(a.createdAt).toISOString() : new Date().toISOString()
     }));
     await sbBatchUpsert('as_requests', rows);
-    await IDB.markSynced('as_requests', unsyncAS.map(a=>a.id));
+    await IDB.markSynced('as_requests', unsyncAS.map(a=>a.id)).catch(()=>{});
     _cache.asReqs = null; _cache.asBySite = null;
   }
 
   // 4. MEMBERS
-  const unsyncM = await IDB.getUnsynced('members');
+  const unsyncM = await IDB.getUnsynced('members').catch(()=>[]);
   if(unsyncM.length){
     const rows = unsyncM.map(m=>({
       record_id: m.id||'',
@@ -3220,7 +3278,7 @@ async function _syncToSupabase(){
       joined_at: new Date(m.joinedAt||Date.now()).toISOString()
     }));
     await sbBatchUpsert('members', rows);
-    await IDB.markSynced('members', unsyncM.map(m=>m.id));
+    await IDB.markSynced('members', unsyncM.map(m=>m.id)).catch(()=>{});
     _cache.members = null;
   }
 
