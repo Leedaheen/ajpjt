@@ -1791,6 +1791,11 @@ document.addEventListener('input', function(e){
 /* ═══════════════════════════════════════════
    DATA LAYER
 ═══════════════════════════════════════════ */
+/* ── Supabase 기본 연결 정보 (앱 배포 시 고정값) ── */
+/* 이 값이 있으면 localStorage 설정 없이도 항상 연결됩니다 */
+const SB_DEFAULT_URL = 'https://dmjelqvpcsafottblvwx.supabase.co';
+const SB_DEFAULT_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRtamVscXZwY3NhZm90dGJsdnd4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQxOTAzNDcsImV4cCI6MjA1OTc2NjM0N30.Z8NfPAVbUz7BIi9ifS9bdVFXUYj6dgu00pwP6THNA8A';
+
 const K = {
   SITES:   'sites_v3',
   COS:     'companies_v3',
@@ -1821,7 +1826,17 @@ const DB = {
   g(k, d) {
     try {
       const v = localStorage.getItem(k);
-      return v ? JSON.parse(v) : d;
+      const stored = v ? JSON.parse(v) : null;
+      // SB_URL / SB_KEY: 구버전 URL 감지 시 자동 교체
+      if (k === 'sb_url' && stored === 'https://jqhlxbarstqsnizquxeu.supabase.co') {
+        localStorage.removeItem(k);
+        return SB_DEFAULT_URL;
+      }
+      // SB_URL / SB_KEY: localStorage 없으면 하드코딩 기본값 사용
+      if (stored !== null && stored !== '') return stored;
+      if (k === 'sb_url'      && SB_DEFAULT_URL) return SB_DEFAULT_URL;
+      if (k === 'sb_anon_key' && SB_DEFAULT_KEY) return SB_DEFAULT_KEY;
+      return d !== undefined ? d : null;
     } catch { return d; }
   },
   s(k, v) {
@@ -2782,8 +2797,8 @@ function onSheetOpen(id){
   if(id==='sh-company') renderCoMgr();
   if(id==='sh-gs') document.getElementById('gs-url').value=DB.g(K.GS_URL,'')||'';
   if(id==='sh-supabase'){
-    document.getElementById('sb-url-input').value=DB.g(K.SB_URL,'')||'';
-    document.getElementById('sb-key-input').value=DB.g(K.SB_KEY,'')||'';
+    document.getElementById('sb-url-input').value=DB.g(K.SB_URL,'')||SB_DEFAULT_URL||'';
+    document.getElementById('sb-key-input').value=DB.g(K.SB_KEY,'')||SB_DEFAULT_KEY||'';
     // IDB 통계 비동기 표시
     const statsEl=document.getElementById('idb-stats');
     if(statsEl){
@@ -2965,14 +2980,15 @@ function enterApp(){
   setTimeout(checkUnreadNotifs, 500);
   // IDB 초기화 완료 후 syncNow 실행 (순서 보장)
   IDB.open()
-    .then(() => _migrateFromLocalStorage())
     .then(() => {
-      // IDB 준비 완료 후 동기화 (충돌 방지)
-      return syncNow();
+      window._IDB_READY = true; // 동기화 함수에서 IDB 사용 가능 여부 체크용
+      return _migrateFromLocalStorage();
     })
+    .then(() => syncNow())
     .catch(e => {
-      console.warn('[init] IDB/sync 초기화 에러:', e.message);
-      // IDB 없어도 Supabase 직접 연결 시도
+      console.warn('[init] IDB 초기화 에러, localStorage 모드로 진행:', e.message);
+      window._IDB_READY = false;
+      // IDB 없어도 Supabase에 localStorage 데이터로 동기화 시도
       syncNow().catch(()=>{});
     });
   setInterval(check3PMAlert, 60000);
@@ -3188,8 +3204,16 @@ async function syncNow(){
     toast('동기화 완료','ok');
   } catch(e){
     dot.className='sdot err';
-    txt.innerHTML='<b>연결 실패</b> · 로컬 저장 모드';
-    console.error('[Sync]', e.message);
+    const errMsg = e.message||'';
+    // 사용자에게 원인 힌트 제공
+    const hint = errMsg.includes('NO_SB_URL') ? 'Supabase 키 미설정'
+               : errMsg.includes('401')       ? 'API 키 오류'
+               : errMsg.includes('404')        ? '테이블 없음'
+               : errMsg.includes('column')     ? 'DB 컬럼 불일치'
+               : errMsg.includes('Failed to fetch') ? '네트워크 오류'
+               : '로컬 저장 모드';
+    txt.innerHTML=`<b>연결 실패</b> · ${hint}`;
+    console.error('[Sync 실패]', errMsg);
   }
 }
 
@@ -3200,27 +3224,14 @@ async function syncNow(){
 ────────────────────────────────────────────────────────── */
 async function _syncToSupabase(){
   const siteMap = Object.fromEntries(getSites().map(s=>[s.id,s.name]));
-  const _dot = document.getElementById('sdot');
-  const _txt = document.getElementById('stxt');
-  const _setStatus = (cls, msg) => {
-    if(_dot) _dot.className = 'sdot ' + cls;
-    if(_txt) _txt.innerHTML = msg;
-  };
 
-  // IDB 초기화 대기 (최대 3초)
-  let idbReady = false;
-  try {
-    await Promise.race([
-      IDB.open(),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('IDB timeout')), 3000))
-    ]);
-    idbReady = true;
-  } catch(idbErr) {
-    console.warn('[sync] IDB 준비 실패, localStorage 폴백:', idbErr.message);
-  }
+  // IDB 사용 가능 여부 확인 (타임아웃 없이 즉시 판단)
+  const idbReady = !!(window._IDB_READY);
 
-  // 1. LOGS
-  const unsyncLogs = idbReady ? await IDB.getUnsynced('logs').catch(()=>[]) : getLogs().filter(l=>!l.synced);
+  // 1. LOGS — IDB 준비 시 IDB, 아니면 localStorage
+  const unsyncLogs = idbReady
+    ? await IDB.getUnsynced('logs').catch(()=>[])
+    : getLogs().filter(l=>!l.synced);
   if(unsyncLogs.length){
     const rows = unsyncLogs.map(l=>({
       record_id:   l.id||'',
@@ -3246,7 +3257,7 @@ async function _syncToSupabase(){
   }
 
   // 2. TRANSIT
-  const unsyncTr = await IDB.getUnsynced('transit').catch(()=>[]);
+  const unsyncTr = idbReady ? await IDB.getUnsynced('transit').catch(()=>[]) : getTransit().filter(t=>!t.synced);
   if(unsyncTr.length){
     const rows = unsyncTr.map(t=>({
       record_id:        t.id||'',
@@ -3273,7 +3284,7 @@ async function _syncToSupabase(){
   }
 
   // 3. AS
-  const unsyncAS = await IDB.getUnsynced('as_requests').catch(()=>[]);
+  const unsyncAS = idbReady ? await IDB.getUnsynced('as_requests').catch(()=>[]) : getAsReqs().filter(a=>!a.synced);
   if(unsyncAS.length){
     const rows = unsyncAS.map(a=>({
       record_id:     a.id||'',
@@ -3301,7 +3312,7 @@ async function _syncToSupabase(){
   }
 
   // 4. MEMBERS
-  const unsyncM = await IDB.getUnsynced('members').catch(()=>[]);
+  const unsyncM = idbReady ? await IDB.getUnsynced('members').catch(()=>[]) : [];
   if(unsyncM.length){
     const rows = unsyncM.map(m=>({
       record_id: m.id||'',
@@ -6121,8 +6132,14 @@ function saveSupabaseConfig(){
   const key = document.getElementById('sb-key-input').value.trim();
   if(!url || !key){ toast('URL과 Key를 모두 입력하세요','err'); return; }
   if(!url.startsWith('https://')){ toast('URL은 https://로 시작해야 합니다','err'); return; }
+  // localStorage에 저장 (기기별 커스텀 유지)
   DB.s(K.SB_URL, url);
   DB.s(K.SB_KEY, key);
+  // 하드코딩값과 같으면 localStorage 제거 → 이후엔 기본값 사용 (저장 용량 절약)
+  if(url === SB_DEFAULT_URL && key === SB_DEFAULT_KEY){
+    localStorage.removeItem(K.SB_URL);
+    localStorage.removeItem(K.SB_KEY);
+  }
   toast('Supabase 연동 저장됨. 동기화 시도...','ok');
   closeSheet('sh-supabase');
   renderAdmin();
