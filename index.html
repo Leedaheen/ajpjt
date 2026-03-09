@@ -165,6 +165,18 @@
 .sheet         { will-change: transform; }
 .soverlay      { will-change: opacity; }
 
+/* ─── 엔터프라이즈 디자인 시스템 보강 ─── */
+:root {
+  /* 터치 타겟 최소 높이 */
+  --touch-min: 44px;
+  /* 엔터프라이즈 강조 선 */
+  --accent-line: 3px;
+  /* 카드 세밀 그림자 */
+  --shadow-enterprise: 0 1px 3px rgba(0,0,0,.18), 0 4px 16px rgba(0,0,0,.12);
+  /* 배지 */
+  --badge-r: 6px;
+}
+
 /* ═══════════════════════════════════════════
    RESET
 ═══════════════════════════════════════════ */
@@ -356,32 +368,40 @@ input,select,button,textarea{font-family:inherit;}
 
 /* Top Bar */
 .topbar{
-  flex-shrink:0;height:54px;
+  flex-shrink:0;height:56px;
   background:var(--bg1);
   border-bottom:1px solid var(--br);
   display:flex;align-items:center;padding:0 14px;gap:10px;
   position:relative;z-index:50;
+  box-shadow:0 2px 12px rgba(0,0,0,.15);
 }
 .topbar-logo{
-  width:32px;height:32px;border-radius:9px;flex-shrink:0;
+  width:34px;height:34px;border-radius:10px;flex-shrink:0;
   background:linear-gradient(135deg,var(--blue),#1a3a8f);
   display:flex;align-items:center;justify-content:center;
   font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:white;
 }
 .topbar-center{flex:1;min-width:0;}
 .topbar-title{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.topbar-sub{font-size:10px;color:var(--tx3);margin-top:1px;}
-.topbar-acts{display:flex;gap:6px;flex-shrink:0;}
+.topbar-sub{font-size:10px;color:var(--tx3);margin-top:1px;display:flex;align-items:center;gap:5px;}
+.topbar-acts{display:flex;gap:7px;flex-shrink:0;align-items:center;}
 .tb-btn{
-  width:34px;height:34px;border-radius:var(--rs);
+  width:36px;height:36px;border-radius:var(--rs);
   background:var(--bg2);border:1px solid var(--br);
   display:flex;align-items:center;justify-content:center;
-  font-size:15px;cursor:pointer;transition:all .15s;
+  font-size:16px;cursor:pointer;transition:all .15s;
   position:relative;flex-shrink:0;
 }
 .tb-btn:active{background:var(--bg3);transform:scale(.92);}
-.ndot{position:absolute;top:5px;right:5px;width:7px;height:7px;border-radius:50%;background:var(--red);border:1.5px solid var(--bg1);display:none;}
+.ndot{position:absolute;top:5px;right:5px;width:8px;height:8px;border-radius:50%;background:var(--red);border:2px solid var(--bg1);display:none;}
 .ndot.on{display:block;}
+/* 오프라인 상태 표시 */
+.offline-badge{
+  display:none;font-size:9px;font-weight:800;letter-spacing:.5px;
+  padding:2px 7px;border-radius:5px;background:rgba(239,68,68,.15);
+  color:var(--red);border:1px solid rgba(239,68,68,.3);
+}
+.offline-badge.on{display:inline-flex;align-items:center;gap:3px;}
 
 /* Role badge */
 .rbadge{
@@ -415,30 +435,31 @@ input,select,button,textarea{font-family:inherit;}
   flex-shrink:0;
   height:calc(var(--nav-h) + var(--sfb));
   background:var(--bg1);border-top:1px solid var(--br);
-  display:flex;align-items:flex-start;padding-top:4px;
+  display:flex;align-items:flex-start;padding-top:2px;
+  box-shadow:0 -4px 20px rgba(0,0,0,.15);
 }
 .ntab{
   flex:1;display:flex;flex-direction:column;align-items:center;
-  gap:2px;padding:5px 2px;cursor:pointer;position:relative;
+  gap:3px;padding:6px 2px;cursor:pointer;position:relative;
   transition:opacity .15s;
 }
 .ntab:active{opacity:.6;}
-.ntab-pip{position:absolute;top:0;width:26px;height:3px;border-radius:0 0 4px 4px;background:var(--blue);opacity:0;transition:opacity .2s;}
+.ntab-pip{position:absolute;top:0;width:32px;height:3px;border-radius:0 0 5px 5px;background:var(--blue);opacity:0;transition:opacity .2s,width .2s;box-shadow:0 2px 8px rgba(59,139,255,.4);}
 .ntab.on .ntab-pip{opacity:1;}
-.ntab-ico{font-size:21px;transition:transform .2s;line-height:1;}
-.ntab.on .ntab-ico{transform:scale(1.12);}
-.ntab-lbl{font-size:9px;font-weight:600;color:var(--tx3);transition:color .15s;}
+.ntab-ico{font-size:20px;transition:transform .2s;line-height:1;}
+.ntab.on .ntab-ico{transform:scale(1.1);}
+.ntab-lbl{font-size:10px;font-weight:700;color:var(--tx3);transition:color .15s;}
 .ntab.on .ntab-lbl{color:var(--blue);}
 .ntab-badge{
-  position:absolute;top:3px;right:calc(50% - 18px);
+  position:absolute;top:4px;right:calc(50% - 20px);
   background:var(--red);color:white;border-radius:8px;
-  font-size:8px;font-weight:700;padding:1px 5px;min-width:15px;text-align:center;
-  border:1.5px solid var(--bg1);display:none;
+  font-size:9px;font-weight:700;padding:1px 5px;min-width:16px;text-align:center;
+  border:2px solid var(--bg1);display:none;
 }
 .ntab-badge.on{display:block;}
 /* Locked nav item */
-.ntab.locked{opacity:.28;cursor:default;}
-.ntab.locked:active{opacity:.28;}
+.ntab.locked{opacity:.25;cursor:default;}
+.ntab.locked:active{opacity:.25;}
 
 /* AJ site selector bar */
 .site-selector-bar{
@@ -490,31 +511,32 @@ input,select,button,textarea{font-family:inherit;}
 }
 
 /* Sync */
-.sync-row{display:flex;align-items:center;gap:8px;background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);padding:9px 12px;margin-bottom:12px;}
-.sdot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
-.sdot.ok  {background:var(--green);animation:pulse 3s infinite;}
-.sdot.err {background:var(--red);}
-.sdot.sync{background:var(--yellow);}
-.sync-txt{flex:1;font-size:11px;color:var(--tx2);}
+.sync-row{display:flex;align-items:center;gap:10px;background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);padding:10px 14px;margin-bottom:14px;}
+.sdot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.sdot.ok  {background:var(--green);box-shadow:0 0 0 3px rgba(34,197,94,.2);animation:pulse 3s infinite;}
+.sdot.err {background:var(--red);box-shadow:0 0 0 3px rgba(239,68,68,.2);}
+.sdot.sync{background:var(--yellow);box-shadow:0 0 0 3px rgba(245,158,11,.2);}
+.sync-txt{flex:1;font-size:12px;color:var(--tx2);}
 .sync-txt b{color:var(--tx);}
-.sync-go{font-size:10px;color:var(--blue);cursor:pointer;padding:3px 9px;border-radius:5px;background:rgba(59,139,255,.12);border:1px solid rgba(59,139,255,.2);flex-shrink:0;}
+.sync-go{font-size:11px;color:var(--blue);cursor:pointer;padding:5px 11px;border-radius:6px;background:rgba(59,139,255,.12);border:1px solid rgba(59,139,255,.2);flex-shrink:0;font-weight:700;}
 
 /* Section headers */
-.shd{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:9px;}
-.shd-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--tx2);}
-.shd-more{font-size:11px;color:var(--blue);cursor:pointer;}
+.shd{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;}
+.shd-title{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--tx2);}
+.shd-more{font-size:11px;color:var(--blue);cursor:pointer;padding:3px 8px;border-radius:6px;background:rgba(59,139,255,.08);}
 
 /* KPI grid */
-.kpi-g{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:12px;}
+.kpi-g{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
 .kpi{
   background:var(--bg1);border:1px solid var(--br);border-radius:var(--r);
-  padding:14px 12px;position:relative;overflow:hidden;
+  padding:16px 14px;position:relative;overflow:hidden;
 }
-.kpi::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--kc,var(--blue));opacity:.5;}
-.kpi-ico{font-size:20px;margin-bottom:7px;}
-.kpi-val{font-size:26px;font-weight:900;line-height:1;color:var(--kc,var(--blue));font-family:'JetBrains Mono',monospace;}
-.kpi-lbl{font-size:10px;color:var(--tx2);margin-top:4px;}
-.kpi-trend{position:absolute;top:10px;right:10px;font-size:9px;padding:2px 6px;border-radius:4px;font-family:'JetBrains Mono',monospace;}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--kc,var(--blue));border-radius:var(--r) var(--r) 0 0;}
+.kpi::after{content:'';position:absolute;top:0;left:0;bottom:0;width:3px;background:var(--kc,var(--blue));opacity:.3;border-radius:var(--r) 0 0 var(--r);}
+.kpi-ico{font-size:22px;margin-bottom:8px;}
+.kpi-val{font-size:28px;font-weight:900;line-height:1;color:var(--kc,var(--blue));font-family:'JetBrains Mono',monospace;}
+.kpi-lbl{font-size:11px;color:var(--tx2);margin-top:5px;font-weight:500;}
+.kpi-trend{position:absolute;top:12px;right:12px;font-size:10px;padding:3px 7px;border-radius:5px;font-family:'JetBrains Mono',monospace;font-weight:700;}
 .t-up {background:rgba(34,197,94,.15); color:var(--green);}
 .t-dn {background:rgba(239,68,68,.15); color:var(--red);}
 
@@ -527,22 +549,24 @@ input,select,button,textarea{font-family:inherit;}
 .bar-lbl{font-size:7px;color:var(--tx3);font-family:'JetBrains Mono',monospace;}
 
 /* Company list on home */
-.co-list{display:flex;flex-direction:column;gap:7px;}
+.co-list{display:flex;flex-direction:column;gap:8px;}
 .co-card{
   background:var(--bg1);border:1px solid var(--br);border-radius:var(--rs);
-  padding:11px 13px;display:flex;align-items:center;gap:11px;
+  padding:12px 14px;display:flex;align-items:center;gap:12px;
+  transition:border-color .15s;
 }
+.co-card:active{border-color:var(--blue);}
 .co-avi{
-  width:36px;height:36px;border-radius:var(--rs);flex-shrink:0;
+  width:38px;height:38px;border-radius:10px;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;
-  font-size:11px;font-weight:900;font-family:'JetBrains Mono',monospace;
+  font-size:12px;font-weight:900;font-family:'JetBrains Mono',monospace;
 }
 .co-inf{flex:1;min-width:0;}
-.co-nm{font-size:12px;font-weight:700;}
-.co-mt{font-size:10px;color:var(--tx2);margin-top:1px;}
+.co-nm{font-size:13px;font-weight:700;}
+.co-mt{font-size:11px;color:var(--tx2);margin-top:2px;}
 .co-rt{text-align:right;flex-shrink:0;}
-.co-pct{font-size:16px;font-weight:900;font-family:'JetBrains Mono',monospace;}
-.co-bar{width:52px;height:3px;background:var(--br);border-radius:2px;margin-top:4px;}
+.co-pct{font-size:17px;font-weight:900;font-family:'JetBrains Mono',monospace;}
+.co-bar{width:56px;height:4px;background:var(--br);border-radius:2px;margin-top:5px;}
 .co-bar-f{height:100%;border-radius:2px;}
 
 /* ═══════════════════════════════════════════
@@ -599,8 +623,9 @@ input,select,button,textarea{font-family:inherit;}
 /* Chips */
 .chips{display:flex;flex-wrap:wrap;gap:6px;}
 .chip{
-  padding:6px 12px;border-radius:20px;font-size:12px;font-weight:500;
+  padding:8px 14px;border-radius:20px;font-size:12px;font-weight:500;
   border:1px solid var(--br);background:var(--bg2);color:var(--tx2);cursor:pointer;transition:all .15s;
+  min-height:34px;display:inline-flex;align-items:center;
 }
 .chip.on{background:rgba(59,139,255,.15);border-color:var(--blue);color:var(--blue);font-weight:700;}
 .chip.on-teal{background:rgba(20,184,166,.15);border-color:var(--teal);color:var(--teal);font-weight:700;}
@@ -630,46 +655,55 @@ input,select,button,textarea{font-family:inherit;}
 }
 .floor-filter-row{margin-top:5px;padding-top:5px;border-top:1px solid var(--br2);}
 .floor-fc{
-  flex-shrink:0;padding:4px 10px;border-radius:12px;font-size:9px;font-weight:700;
+  flex-shrink:0;padding:6px 12px;border-radius:12px;font-size:10px;font-weight:700;
   border:1px solid var(--br);background:var(--bg3);color:var(--tx3);cursor:pointer;white-space:nowrap;
+  min-height:30px;display:inline-flex;align-items:center;
 }
 .floor-fc.on{background:rgba(20,184,166,.15);border-color:var(--teal);color:var(--teal);}
 .log-search{
   background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);
-  color:var(--tx);padding:9px 13px;font-size:13px;width:100%;outline:none;margin-bottom:9px;
+  color:var(--tx);padding:10px 14px;font-size:14px;width:100%;outline:none;margin-bottom:9px;
+  transition:border-color .2s;
 }
-.fchips{display:flex;gap:5px;overflow-x:auto;}
+.log-search:focus{border-color:var(--blue);}
+.fchips{display:flex;gap:6px;overflow-x:auto;}
 .fchips::-webkit-scrollbar{display:none;}
 .fc{
-  flex-shrink:0;padding:5px 12px;border-radius:14px;font-size:10px;
+  flex-shrink:0;padding:7px 13px;border-radius:14px;font-size:11px;font-weight:600;
   border:1px solid var(--br);background:var(--bg2);color:var(--tx2);cursor:pointer;white-space:nowrap;
+  min-height:32px;display:inline-flex;align-items:center;
 }
 .fc.on{background:rgba(59,139,255,.15);border-color:var(--blue);color:var(--blue);}
-.log-body{padding:9px 14px 24px;display:flex;flex-direction:column;gap:7px;}
+.log-body{padding:9px 14px 24px;display:flex;flex-direction:column;gap:8px;}
 
 /* Log card */
 .lcard{
   background:var(--bg1);border:1px solid var(--br);border-radius:var(--r);
-  padding:13px;animation:fadeUp .2s ease;
+  padding:14px;animation:fadeUp .2s ease;
+  border-left:3px solid var(--br3);
+  transition:border-color .15s;
 }
-.lc-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;}
+.lcard.s-start-card{border-left-color:var(--blue);}
+.lcard.s-end-card  {border-left-color:var(--teal);}
+.lcard.s-off-card  {border-left-color:var(--red);}
+.lc-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
 .lc-co{display:flex;align-items:center;gap:7px;}
-.lc-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
-.lc-name{font-size:12px;font-weight:700;}
-.lc-time{font-size:9px;color:var(--tx3);font-family:'JetBrains Mono',monospace;}
-.lc-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;}
-.lc-item{font-size:10px;color:var(--tx2);}
-.lc-item span{color:var(--tx);font-weight:500;}
-.lc-status{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700;}
+.lc-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.lc-name{font-size:13px;font-weight:800;}
+.lc-time{font-size:10px;color:var(--tx3);font-family:'JetBrains Mono',monospace;}
+.lc-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px 8px;}
+.lc-item{font-size:11px;color:var(--tx2);}
+.lc-item span{color:var(--tx);font-weight:600;}
+.lc-status{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:var(--badge-r,6px);font-size:11px;font-weight:700;letter-spacing:.3px;}
 .s-start{background:rgba(59,139,255,.15);color:var(--blue);}
 .s-end  {background:rgba(20,184,166,.15);color:var(--teal);}
 .s-off  {background:rgba(239,68,68,.15); color:var(--red);}
 .s-hol  {background:rgba(148,163,184,.1);color:var(--tx2);}
 .lc-dur{
-  margin-top:7px;padding-top:7px;border-top:1px solid var(--br2);
-  font-size:10px;color:var(--tx2);display:flex;align-items:center;gap:5px;
+  margin-top:9px;padding-top:9px;border-top:1px solid var(--br2);
+  font-size:11px;color:var(--tx2);display:flex;align-items:center;gap:5px;
 }
-.lc-dur b{color:var(--teal);font-family:'JetBrains Mono',monospace;}
+.lc-dur b{color:var(--teal);font-family:'JetBrains Mono',monospace;font-size:12px;}
 
 /* ═══════════════════════════════════════════
    PAGE: ANALYSIS (sub-admin + aj)
@@ -698,24 +732,26 @@ input,select,button,textarea{font-family:inherit;}
 .ai-re{font-size:10px;color:var(--purple);cursor:pointer;}
 
 /* Period tabs */
-.ptabs{display:flex;gap:5px;margin-bottom:13px;}
+.ptabs{display:flex;gap:5px;margin-bottom:14px;}
 .ptab{
-  flex:1;padding:7px;text-align:center;font-size:11px;font-weight:600;
+  flex:1;padding:9px 6px;text-align:center;font-size:12px;font-weight:700;
   border-radius:var(--rs);border:1px solid var(--br);background:var(--bg2);color:var(--tx2);cursor:pointer;
+  min-height:38px;display:flex;align-items:center;justify-content:center;
 }
 .ptab.on{background:rgba(59,139,255,.15);border-color:var(--blue);color:var(--blue);}
 
 /* Rank cards */
 .rank-list{display:flex;flex-direction:column;gap:7px;margin-bottom:13px;}
-.rc{background:var(--bg1);border:1px solid var(--br);border-radius:var(--rs);padding:11px 13px;display:flex;align-items:center;gap:11px;}
-.rk-n{font-size:18px;font-weight:900;font-family:'JetBrains Mono',monospace;width:24px;text-align:center;flex-shrink:0;}
-.rk-1{color:#fbbf24;}.rk-2{color:#9ca3af;}.rk-3{color:var(--orange);}
+.rc{background:var(--bg1);border:1px solid var(--br);border-radius:var(--rs);padding:12px 14px;display:flex;align-items:center;gap:12px;}
+.rk-n{font-size:16px;font-weight:900;font-family:'JetBrains Mono',monospace;width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:50%;flex-shrink:0;font-size:13px;}
+.rk-1{color:#111;background:#fbbf24;}.rk-2{color:#111;background:#9ca3af;}.rk-3{color:#111;background:var(--orange);}
+.rk-n:not(.rk-1):not(.rk-2):not(.rk-3){color:var(--tx3);background:var(--bg3);font-size:11px;}
 .rk-i{flex:1;min-width:0;}
-.rk-nm{font-size:12px;font-weight:700;}
-.rk-mt{font-size:10px;color:var(--tx2);margin-top:1px;}
+.rk-nm{font-size:13px;font-weight:700;}
+.rk-mt{font-size:11px;color:var(--tx2);margin-top:2px;}
 .rk-r{text-align:right;flex-shrink:0;}
-.rk-pct{font-size:17px;font-weight:900;font-family:'JetBrains Mono',monospace;}
-.rk-bar{width:60px;height:3px;background:var(--br);border-radius:2px;margin-top:4px;margin-left:auto;}
+.rk-pct{font-size:18px;font-weight:900;font-family:'JetBrains Mono',monospace;}
+.rk-bar{width:64px;height:4px;background:var(--br);border-radius:2px;margin-top:5px;margin-left:auto;}
 .rk-bf{height:100%;border-radius:2px;}
 
 /* Usage hours summary */
@@ -753,17 +789,18 @@ input,select,button,textarea{font-family:inherit;}
 .ap-role.aj {color:var(--aj);}
 .ap-role.sub{color:var(--teal);}
 
-.menu-list{display:flex;flex-direction:column;gap:7px;margin-bottom:16px;}
+.menu-list{display:flex;flex-direction:column;gap:8px;margin-bottom:16px;}
 .mrow{
   background:var(--bg1);border:1px solid var(--br);border-radius:var(--r);
-  padding:13px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:border-color .15s;
+  padding:14px 16px;display:flex;align-items:center;gap:13px;cursor:pointer;
+  transition:border-color .2s,background .2s;min-height:var(--touch-min,44px);
 }
-.mrow:active{border-color:var(--blue);}
-.mrow-ico{width:38px;height:38px;border-radius:var(--rs);display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;}
+.mrow:active{border-color:var(--blue);background:rgba(59,139,255,.03);}
+.mrow-ico{width:40px;height:40px;border-radius:var(--rs);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
 .mrow-inf{flex:1;}
-.mrow-title{font-size:13px;font-weight:700;}
-.mrow-desc{font-size:10px;color:var(--tx2);margin-top:1px;}
-.mrow-arr{color:var(--tx3);}
+.mrow-title{font-size:14px;font-weight:700;}
+.mrow-desc{font-size:11px;color:var(--tx2);margin-top:2px;}
+.mrow-arr{color:var(--tx3);font-size:16px;}
 
 /* Stats 2-col */
 .stat2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
@@ -809,19 +846,26 @@ input,select,button,textarea{font-family:inherit;}
 
 /* Buttons in sheets */
 .btn-full{
-  width:100%;height:48px;border-radius:var(--r);border:none;cursor:pointer;
-  font-size:14px;font-weight:700;color:white;
-  display:flex;align-items:center;justify-content:center;gap:7px;
+  width:100%;height:50px;border-radius:var(--r);border:none;cursor:pointer;
+  font-size:15px;font-weight:700;color:white;
+  display:flex;align-items:center;justify-content:center;gap:8px;
   background:linear-gradient(135deg,var(--blue),#1e3a8a);
   box-shadow:0 4px 14px rgba(59,139,255,.25);transition:all .15s;
+  letter-spacing:.2px;
 }
 .btn-full:active{transform:scale(.98);box-shadow:none;}
+.btn-full:disabled{opacity:.4;cursor:not-allowed;transform:none;}
 .btn-full.green{background:linear-gradient(135deg,var(--green),#15803d);box-shadow:0 4px 14px rgba(34,197,94,.2);}
 .btn-full.teal {background:linear-gradient(135deg,var(--teal),#0f766e); box-shadow:0 4px 14px rgba(20,184,166,.2);}
 .btn-full.red  {background:linear-gradient(135deg,var(--red),#991b1b);  box-shadow:0 4px 14px rgba(239,68,68,.2);}
 .btn-full.gold {background:linear-gradient(135deg,var(--aj),#92400e);  box-shadow:0 4px 14px rgba(245,158,11,.2);}
-.btn-ghost{width:100%;padding:13px;background:var(--bg2);border:1px solid var(--br);border-radius:var(--r);color:var(--tx2);font-size:13px;cursor:pointer;margin-top:7px;}
-.btn-gap{display:flex;flex-direction:column;gap:8px;}
+.btn-ghost{
+  width:100%;padding:13px;background:var(--bg2);border:1px solid var(--br);
+  border-radius:var(--r);color:var(--tx2);font-size:14px;cursor:pointer;margin-top:7px;
+  min-height:46px;font-weight:600;transition:background .15s;
+}
+.btn-ghost:active{background:var(--bg3);}
+.btn-gap{display:flex;flex-direction:column;gap:9px;}
 
 /* Toast */
 .toast-wrap{position:fixed;top:calc(62px + var(--sft));left:50%;transform:translateX(-50%) translateY(-10px);z-index:9999;pointer-events:none;}
@@ -1179,6 +1223,7 @@ textarea.fg-input{height:72px;line-height:1.5;}
       </div>
     </div>
     <div class="topbar-acts">
+      <div class="offline-badge" id="offline-badge">✕ 오프라인</div>
       <div class="rbadge" id="rbadge" style="display:flex;align-items:center;justify-content:center"></div>
       <div class="tb-btn" onclick="openNotifSheet()">🔔<div class="ndot" id="ndot"></div></div>
       <div class="tb-btn" onclick="doLogout()">🚪</div>
@@ -3005,6 +3050,17 @@ function enterApp(){
   setInterval(check3PMAlert, 60000);
 }
 
+/* ── 네트워크 오프라인 감지 ──────────────────────────────── */
+function _updateOfflineBadge(){
+  const el=document.getElementById('offline-badge');
+  if(!el) return;
+  const offline=!navigator.onLine;
+  el.classList.toggle('on', offline);
+  // 오프라인→온라인 복귀 시 자동 동기화 시도
+}
+window.addEventListener('online', ()=>{ _updateOfflineBadge(); syncNow().catch(()=>{}); });
+window.addEventListener('offline', ()=>{ _updateOfflineBadge(); const el=document.getElementById('sdot'); const txt=document.getElementById('stxt'); if(el){el.className='sdot err'; txt.innerHTML='<b>오프라인</b> · 네트워크 연결 없음';} });
+
 /* ── Service Worker 등록 (PWA) ──────────────────────────── */
 // claudeusercontent.com / 로컬 미리보기에서는 SW 등록 생략
 const _swSkip = location.hostname.includes('claudeusercontent.com') || location.hostname === 'localhost' && !location.port;
@@ -3228,119 +3284,127 @@ async function syncNow(){
   }
 }
 
-/* ── Supabase 동기화 (IDB 기반 배치 처리) ───────────────────
+/* ── Supabase 동기화 (병렬 배치 처리) ───────────────────────
    - IDB.getUnsynced()로 미동기화 건만 읽음 (전체 배열 메모리 로드 없음)
-   - SB_BATCH(500)건 단위로 분할 전송 → 동시 3000명 부하 분산
+   - logs / transit / as / members 병렬 전송 → 동기화 시간 ~4× 단축
+   - SB_BATCH(500)건 단위로 분할 전송
    - 성공 시 IDB markSynced → LS 백업 캐시 갱신
 ────────────────────────────────────────────────────────── */
 async function _syncToSupabase(){
   const siteMap = Object.fromEntries(getSites().map(s=>[s.id,s.name]));
-
-  // IDB 사용 가능 여부 확인 (타임아웃 없이 즉시 판단)
   const idbReady = !!(window._IDB_READY);
 
-  // 1. LOGS — IDB 준비 시 IDB, 아니면 localStorage
-  const unsyncLogs = idbReady
-    ? await IDB.getUnsynced('logs').catch(()=>[])
-    : getLogs().filter(l=>!l.synced);
-  if(unsyncLogs.length){
-    const rows = unsyncLogs.map(l=>({
-      record_id:   l.id||'',
-      date:        l.date||'',
-      site_id:     l.siteId||'',
-      site_name:   siteMap[l.siteId]||l.siteId||'',
-      company:     l.company||'',
-      floor:       l.floor||'',
-      equip:       l.equip||'',
-      recorder:    l.name||l.recorder||'',
-      status:      l.status||'',
-      start_time:  l.startTime||'',
-      end_time:    l.endTime||'',
-      used_hours:  l.duration||l.usedH||0,
-      meter_start: String(l.meterStart||''),
-      meter_end:   String(l.meterEnd||''),
-      off_reason:  l.offReason||'',
-      created_at:  l.createdAt ? new Date(l.createdAt).toISOString() : new Date(l.ts||Date.now()).toISOString()
-    }));
-    await sbBatchUpsert('logs', rows);
-    await IDB.markSynced('logs', unsyncLogs.map(l=>l.id)).catch(()=>{});
-    _cache.todayLogs = null; // 캐시 무효화
-  }
+  // 미동기화 항목 병렬 수집
+  const [unsyncLogs, unsyncTr, unsyncAS, unsyncM] = await Promise.all([
+    idbReady ? IDB.getUnsynced('logs').catch(()=>[]) : Promise.resolve(getLogs().filter(l=>!l.synced)),
+    idbReady ? IDB.getUnsynced('transit').catch(()=>[]) : Promise.resolve(getTransit().filter(t=>!t.synced)),
+    idbReady ? IDB.getUnsynced('as_requests').catch(()=>[]) : Promise.resolve(getAsReqs().filter(a=>!a.synced)),
+    idbReady ? IDB.getUnsynced('members').catch(()=>[]) : Promise.resolve([]),
+  ]);
 
-  // 2. TRANSIT
-  const unsyncTr = idbReady ? await IDB.getUnsynced('transit').catch(()=>[]) : getTransit().filter(t=>!t.synced);
-  if(unsyncTr.length){
-    const rows = unsyncTr.map(t=>({
-      record_id:        t.id||'',
-      date:             t.date||'',
-      type:             t.type==='in'?'반입':'반출',
-      site_id:          t.siteId||'',
-      site_name:        siteMap[t.siteId]||t.siteId||'',
-      company:          t.company||'',
-      equip_specs:      (t.specs||[]).map(s=>s.spec+(s.model?` (${s.model})`:'')+` ×${s.qty}`).join(', ')||t.equip||'',
-      aj_equip:         t.ajEquip||'',
-      reporter_name:    t.reporterName||t.recorder||'',
-      reporter_phone:   t.reporterPhone||'',
-      manager_name:     t.managerName||'',
-      manager_phone:    t.managerPhone||'',
-      manager_location: t.managerLocation||'',
-      note:             t.note||'',
-      status:           t.cancelled?'취소':(t.done?'완료':'대기'),
-      messages:         JSON.stringify(t.ajMsgs||[]),
-      created_at:       t.createdAt ? new Date(t.createdAt).toISOString() : new Date().toISOString()
-    }));
-    await sbBatchUpsert('transit', rows);
-    await IDB.markSynced('transit', unsyncTr.map(t=>t.id)).catch(()=>{});
-    _cache.transit = null; _cache.transitBySite = null;
-  }
+  // 병렬 업서트 (테이블 간 의존성 없음)
+  await Promise.all([
+    // 1. LOGS
+    (async()=>{
+      if(!unsyncLogs.length) return;
+      const rows = unsyncLogs.map(l=>({
+        record_id:   l.id||'',
+        date:        l.date||'',
+        site_id:     l.siteId||'',
+        site_name:   siteMap[l.siteId]||l.siteId||'',
+        company:     l.company||'',
+        floor:       l.floor||'',
+        equip:       l.equip||'',
+        recorder:    l.name||l.recorder||'',
+        status:      l.status||'',
+        start_time:  l.startTime||'',
+        end_time:    l.endTime||'',
+        used_hours:  l.duration||l.usedH||0,
+        meter_start: String(l.meterStart||''),
+        meter_end:   String(l.meterEnd||''),
+        off_reason:  l.offReason||'',
+        created_at:  l.createdAt ? new Date(l.createdAt).toISOString() : new Date(l.ts||Date.now()).toISOString()
+      }));
+      await sbBatchUpsert('logs', rows);
+      await IDB.markSynced('logs', unsyncLogs.map(l=>l.id)).catch(()=>{});
+      _cache.todayLogs = null;
+    })(),
 
-  // 3. AS
-  const unsyncAS = idbReady ? await IDB.getUnsynced('as_requests').catch(()=>[]) : getAsReqs().filter(a=>!a.synced);
-  if(unsyncAS.length){
-    const rows = unsyncAS.map(a=>({
-      record_id:     a.id||'',
-      date:          a.date||'',
-      site_id:       a.siteId||'',
-      site_name:     siteMap[a.siteId]||a.siteId||'',
-      company:       a.company||'',
-      equip:         a.equip||'',
-      location:      a.location||'',
-      fault_type:    a.type||a.faultType||'기타',
-      description:   a.desc||'',
-      reporter_name: a.reporterName||a.reporter||'',
-      reporter_phone:a.reporterPhone||'',
-      status:        a.status||'대기',
-      tech_name:     a.techName||'',
-      resolved_at:   a.resolvedAt ? new Date(a.resolvedAt).toISOString() : null,
-      resolve_note:  a.resolvedNote||'',
-      material_at:   a.materialAt ? new Date(a.materialAt).toISOString() : null,
-      requested_at:  a.requestedAt ? new Date(a.requestedAt).toISOString() : null,
-      created_at:    a.createdAt ? new Date(a.createdAt).toISOString() : new Date().toISOString()
-    }));
-    await sbBatchUpsert('as_requests', rows);
-    await IDB.markSynced('as_requests', unsyncAS.map(a=>a.id)).catch(()=>{});
-    _cache.asReqs = null; _cache.asBySite = null;
-  }
+    // 2. TRANSIT
+    (async()=>{
+      if(!unsyncTr.length) return;
+      const rows = unsyncTr.map(t=>({
+        record_id:        t.id||'',
+        date:             t.date||'',
+        type:             t.type==='in'?'반입':'반출',
+        site_id:          t.siteId||'',
+        site_name:        siteMap[t.siteId]||t.siteId||'',
+        company:          t.company||'',
+        equip_specs:      (t.specs||[]).map(s=>s.spec+(s.model?` (${s.model})`:'')+` ×${s.qty}`).join(', ')||t.equip||'',
+        aj_equip:         t.ajEquip||'',
+        reporter_name:    t.reporterName||t.recorder||'',
+        reporter_phone:   t.reporterPhone||'',
+        manager_name:     t.managerName||'',
+        manager_phone:    t.managerPhone||'',
+        manager_location: t.managerLocation||'',
+        note:             t.note||'',
+        status:           t.cancelled?'취소':(t.done?'완료':'대기'),
+        messages:         JSON.stringify(t.ajMsgs||[]),
+        created_at:       t.createdAt ? new Date(t.createdAt).toISOString() : new Date().toISOString()
+      }));
+      await sbBatchUpsert('transit', rows);
+      await IDB.markSynced('transit', unsyncTr.map(t=>t.id)).catch(()=>{});
+      _cache.transit = null; _cache.transitBySite = null;
+    })(),
 
-  // 4. MEMBERS
-  const unsyncM = idbReady ? await IDB.getUnsynced('members').catch(()=>[]) : [];
-  if(unsyncM.length){
-    const rows = unsyncM.map(m=>({
-      record_id: m.id||'',
-      name:      m.name||'',
-      company:   m.company||'',
-      site_id:   m.siteId||'',
-      site_name: siteMap[m.siteId]||m.siteId||'',
-      phone:     m.phone||'',
-      title:     m.title||'',
-      joined_at: new Date(m.joinedAt||Date.now()).toISOString()
-    }));
-    await sbBatchUpsert('members', rows);
-    await IDB.markSynced('members', unsyncM.map(m=>m.id)).catch(()=>{});
-    _cache.members = null;
-  }
+    // 3. AS REQUESTS
+    (async()=>{
+      if(!unsyncAS.length) return;
+      const rows = unsyncAS.map(a=>({
+        record_id:     a.id||'',
+        date:          a.date||'',
+        site_id:       a.siteId||'',
+        site_name:     siteMap[a.siteId]||a.siteId||'',
+        company:       a.company||'',
+        equip:         a.equip||'',
+        location:      a.location||'',
+        fault_type:    a.type||a.faultType||'기타',
+        description:   a.desc||'',
+        reporter_name: a.reporterName||a.reporter||'',
+        reporter_phone:a.reporterPhone||'',
+        status:        a.status||'대기',
+        tech_name:     a.techName||'',
+        resolved_at:   a.resolvedAt ? new Date(a.resolvedAt).toISOString() : null,
+        resolve_note:  a.resolvedNote||'',
+        material_at:   a.materialAt ? new Date(a.materialAt).toISOString() : null,
+        requested_at:  a.requestedAt ? new Date(a.requestedAt).toISOString() : null,
+        created_at:    a.createdAt ? new Date(a.createdAt).toISOString() : new Date().toISOString()
+      }));
+      await sbBatchUpsert('as_requests', rows);
+      await IDB.markSynced('as_requests', unsyncAS.map(a=>a.id)).catch(()=>{});
+      _cache.asReqs = null; _cache.asBySite = null;
+    })(),
 
-  // 5. EQUIPMENT MASTER (별도 테이블)
+    // 4. MEMBERS
+    (async()=>{
+      if(!unsyncM.length) return;
+      const rows = unsyncM.map(m=>({
+        record_id: m.id||'',
+        name:      m.name||'',
+        company:   m.company||'',
+        site_id:   m.siteId||'',
+        site_name: siteMap[m.siteId]||m.siteId||'',
+        phone:     m.phone||'',
+        title:     m.title||'',
+        joined_at: new Date(m.joinedAt||Date.now()).toISOString()
+      }));
+      await sbBatchUpsert('members', rows);
+      await IDB.markSynced('members', unsyncM.map(m=>m.id)).catch(()=>{});
+      _cache.members = null;
+    })(),
+  ]);
+
+  // 5. EQUIPMENT MASTER (transit 업서트 완료 후 순차 처리)
   const allEquip = getEquipMaster();
   const unsyncEq = allEquip.filter(e => !e.synced);
   if(unsyncEq.length){
@@ -3360,7 +3424,6 @@ async function _syncToSupabase(){
     }));
     try {
       await sbBatchUpsert('equipment', rows);
-      // synced 플래그 업데이트
       unsyncEq.forEach(e => e.synced = true);
       await saveEquipMaster(allEquip);
     } catch(err) {
@@ -4058,7 +4121,7 @@ function renderASPage(){
   </div>
   <div class="fchips" style="margin-bottom:12px;flex-wrap:wrap">
     <div class="fc${_asTypeFilter==='all'?' on':''}" onclick="_setAsTypeFilter('all',this)" style="font-size:9px">전체유형</div>
-    <div class="fc${_asTypeFilter==='작동불량'?' on':''}" onclick="    <div class="fc${_asTypeFilter==='작동불량'?' on':''}" onclick="_setAsTypeFilter('작동불량',this)" style="font-size:9px">작동불량</div>
+    <div class="fc${_asTypeFilter==='작동불량'?' on':''}" onclick="_setAsTypeFilter('작동불량',this)" style="font-size:9px">작동불량</div>
     <div class="fc${_asTypeFilter==='충전불량'?' on':''}" onclick="_setAsTypeFilter('충전불량',this)" style="font-size:9px">충전불량</div>
     <div class="fc${_asTypeFilter==='누유의심'?' on':''}" onclick="_setAsTypeFilter('누유의심',this)" style="font-size:9px">누유의심</div>
     <div class="fc${_asTypeFilter==='파손'?' on':''}" onclick="_setAsTypeFilter('파손',this)" style="font-size:9px">파손</div>
@@ -5483,7 +5546,7 @@ async function _renderHeatmapAsync(){
   const now=new Date(), td=today();
   const days=['일','월','화','수','목','금','토'];
   const startDt=new Date(now); startDt.setDate(startDt.getDate()-34);
-  const fromStr=startDt.toISOString().split('T')[0];
+  const fromStr=`${startDt.getFullYear()}-${String(startDt.getMonth()+1).padStart(2,'0')}-${String(startDt.getDate()).padStart(2,'0')}`;
 
   // IDB 범위 조회 — 최근 35일치만
   const logs = await getLogsByRange(fromStr, td, siteId, 20000);
@@ -5499,7 +5562,7 @@ async function _renderHeatmapAsync(){
   for(let d=0;d<35-start.getDay();d++){
     const dt=new Date(start); dt.setDate(dt.getDate()+d+start.getDay());
     if(dt>now){ html+=`<div></div>`; continue; }
-    const ds=dt.toISOString().split('T')[0];
+    const ds=`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
     const dl=(byDate.get(ds)||[]);
     let col='rgba(255,255,255,.03)';
     if(dl.length){
