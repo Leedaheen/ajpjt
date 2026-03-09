@@ -4425,7 +4425,7 @@ function _trCard(r, _unused, canEdit, canMsg){
   function _fmtTs(ts){ if(!ts) return ''; const d=new Date(ts); return (d.getMonth()+1)+'/'+(d.getDate())+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
   const _threadMsgs = _msgs.map((m,i) => {
     const _delBtn = canEdit
-      ? '<button data-rid="'+_rid+'" data-idx="'+i+'" onclick="var b=this;_delTransitMsg(b.dataset.rid,+b.dataset.idx)" style="margin-left:auto;background:none;border:none;color:var(--tx3);font-size:12px;cursor:pointer;padding:0 4px;line-height:1">×</button>'
+      ? '<button data-rid="'+r.id+'" data-idx="'+i+'" onclick="var b=this;_delTransitMsg(b.dataset.rid,+b.dataset.idx)" style="margin-left:auto;background:none;border:none;color:var(--tx3);font-size:12px;cursor:pointer;padding:0 4px;line-height:1">×</button>'
       : '';
     const _isAJMsg = m.role === 'aj' || (!m.role && (m.author === 'AJ' || (S?.role==='aj')));
     const _avatarBg = _isAJMsg ? 'linear-gradient(135deg,#f59e0b,#d97706)' : 'linear-gradient(135deg,#60a5fa,#2563eb)';
@@ -4449,8 +4449,8 @@ function _trCard(r, _unused, canEdit, canMsg){
   const _commentBox = _canAddMsg
     ? '<div style="display:flex;gap:8px;align-items:center;padding-top:8px;border-top:1px solid rgba(245,158,11,.15)">'
       + '<div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--blue),#1d4ed8);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:900;color:white;flex-shrink:0">'+_myInitials+'</div>'
-      + '<input type="text" id="tr-cmt-'+_rid+'" data-rid="'+_rid+'" placeholder="메시지 입력... (Enter)" onkeydown="if(event.keyCode===13){_addTransitMsg(this.dataset.rid);this.blur();}" style="flex:1;padding:7px 12px;font-size:11px;background:var(--bg2);border:1px solid var(--br);border-radius:20px;color:var(--tx);outline:none">'
-      + '<button data-rid="'+_rid+'" onclick="_addTransitMsg(this.dataset.rid)" style="width:30px;height:30px;border-radius:50%;background:#f59e0b;border:none;cursor:pointer;font-size:14px;color:white;flex-shrink:0">↑</button>'
+      + '<input type="text" id="tr-cmt-'+r.id+'" data-rid="'+r.id+'" placeholder="메시지 입력... (Enter)" onkeydown="if(event.keyCode===13){_addTransitMsg(this.dataset.rid);this.blur();}" style="flex:1;padding:7px 12px;font-size:11px;background:var(--bg2);border:1px solid var(--br);border-radius:20px;color:var(--tx);outline:none">'
+      + '<button data-rid="'+r.id+'" onclick="_addTransitMsg(this.dataset.rid)" style="width:30px;height:30px;border-radius:50%;background:#f59e0b;border:none;cursor:pointer;font-size:14px;color:white;flex-shrink:0">↑</button>'
       + '</div>'
     : (_msgs.length >= 3 ? '<div style="font-size:10px;color:var(--tx3);text-align:center;padding-top:6px">최대 3개 댓글</div>' : '');
   const threadBlock = (_msgs.length > 0 || _canAddMsg)
@@ -4922,6 +4922,7 @@ function _trAddSpecRow(spec='', model='', qty=1, equipNos=''){
   if(!list) return;
   const isOut = document.querySelector('#tr-type-chips .chip.on')?.textContent==='반출';
   const div=document.createElement('div');
+  div.className='tr-spec-row';
   div.style.cssText='margin-bottom:8px;background:rgba(59,130,246,.04);border:1px solid var(--br);border-radius:8px;padding:7px 8px';
   const equipId = 'tr-spec-equip-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,4);
   div.innerHTML=`
@@ -4931,7 +4932,7 @@ function _trAddSpecRow(spec='', model='', qty=1, equipNos=''){
     </select>
     <input type="number" class="fg-input tr-qty" value="${qty}" min="1" style="width:56px;flex-shrink:0;padding:6px 8px;font-size:12px;text-align:center" placeholder="수량">
     ${isOut?`<input type="text" class="fg-input tr-model" value="${model}" style="flex:2;padding:6px 8px;font-size:12px" placeholder="모델명">`:''}
-    <button onclick="this.closest('div[style*=margin-bottom]').remove()" style="background:none;border:none;color:#f87171;font-size:18px;cursor:pointer;flex-shrink:0;line-height:1">x</button>
+    <button onclick="this.closest('.tr-spec-row').remove()" style="background:none;border:none;color:#f87171;font-size:18px;cursor:pointer;flex-shrink:0;line-height:1">x</button>
   </div>
   ${isOut?`<div style="display:flex;align-items:center;gap:5px;position:relative">
     <span style="font-size:10px;color:var(--tx3);white-space:nowrap;flex-shrink:0">반출 장비번호</span>
