@@ -1883,8 +1883,8 @@ const IDB = (() => {
           s.createIndex('synced',  'synced',  { unique: false });
           s.createIndex('status',  'status',  { unique: false });
           s.createIndex('company', 'company', { unique: false });
-          // 복합 인덱스: [siteId, date] — 현장별 날짜 조회
-          s.createIndex('siteDate', ['siteId', 'date'], { unique: false });
+          // 복합 인덱스: [siteId, date] — 현장별 날짜 조회 (미지원 환경에서 무시)
+          try { s.createIndex('siteDate', ['siteId', 'date'], { unique: false }); } catch(e) { console.warn('[IDB] siteDate 복합인덱스 미지원:', e); }
         }
         // TRANSIT
         if (!db.objectStoreNames.contains('transit')) {
@@ -1914,7 +1914,7 @@ const IDB = (() => {
           const s = db.createObjectStore('equipment', { keyPath: 'id' });
           s.createIndex('siteId',  'siteId',  { unique: false });
           s.createIndex('company', 'company', { unique: false });
-          s.createIndex('siteComp', ['siteId', 'company'], { unique: false });
+          try { s.createIndex('siteComp', ['siteId', 'company'], { unique: false }); } catch(e) { console.warn('[IDB] siteComp 복합인덱스 미지원:', e); }
           s.createIndex('status',  'status',  { unique: false });
         }
       };
