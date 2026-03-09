@@ -884,6 +884,7 @@ input,select,button,textarea{font-family:inherit;}
 .toast.ok  {background:var(--green);border-color:transparent;color:white;}
 .toast.err {background:var(--red);  border-color:transparent;color:white;}
 .toast.warn{background:var(--yellow);border-color:transparent;color:#1a0e00;}
+.toast-close{background:none;border:none;color:inherit;font-size:16px;line-height:1;cursor:pointer;padding:0 0 0 10px;opacity:.7;vertical-align:middle;}
 
 /* Spinner overlay */
 .sp-ov{
@@ -900,6 +901,7 @@ input,select,button,textarea{font-family:inherit;}
 .empty{display:flex;flex-direction:column;align-items:center;padding:50px 20px;color:var(--tx3);}
 .empty-ico{font-size:40px;margin-bottom:12px;}
 .empty-txt{font-size:13px;margin-bottom:4px;}
+.empty-sub{font-size:11px;color:var(--tx3);margin-top:2px;}
 
 /* Divider */
 .div{height:1px;background:var(--br2);margin:13px 0;}
@@ -1149,7 +1151,7 @@ textarea.fg-input{height:72px;line-height:1.5;}
     <!-- ── 협력사 관리자 폼 ── -->
     <div id="form-sub" style="display:none">
       <div class="role-notice sub">
-        <div class="rn-txt">협력사 관리자는 <b>AJ관리자가 발급한 초대코드</b>를 입력해야 합니다. <b>AI 분석, 데이터 내보내기, 소속 장비 수정</b> 기능을 이용할 수 있습니다.</div>
+        <div class="rn-txt">협력사 관리자는 <b>AJ관리자가 발급한 초대코드</b>를 입력해야 합니다. <b>자동 분석, 데이터 내보내기, 소속 장비 수정</b> 기능을 이용할 수 있습니다.</div>
       </div>
       <div class="lg">
         <label class="lg-label">현장 선택 <span class="req">*</span></label>
@@ -1203,7 +1205,6 @@ textarea.fg-input{height:72px;line-height:1.5;}
         <input type="password" class="lg-input" id="ajPw" placeholder="비밀번호" onkeydown="if(event.key==='Enter')doLogin('aj')">
       </div>
       <button class="login-btn aj" onclick="doLogin('aj')">AJ 관리자로 로그인</button>
-      <div class="admin-hint">초기 계정: <code>admin</code> / <code>aj2025!</code> &nbsp;·&nbsp; 로그인 후 반드시 변경하세요</div>
     </div>
 
   </div><!-- /login-body -->
@@ -1796,16 +1797,17 @@ alter table equipment disable row level security;</pre>
 </div>
 
 <!-- PW change sheet -->
-<div class="soverlay" id="sh-pw" onclick="if(event.target===this)closeSheet('sh-pw')">
+<div class="soverlay" id="sh-pw" onclick="if(event.target===this&&!window._forcePwChange)closeSheet('sh-pw')">
   <div class="sheet">
     <div class="sh-handle"></div>
     <div class="sh-title">비밀번호 변경</div>
+    <div id="pw-force-notice" style="display:none;padding:10px 12px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:var(--rs);margin-bottom:12px;font-size:12px;color:var(--red);font-weight:600;line-height:1.6">⚠️ 초기 비밀번호가 감지되었습니다. 보안을 위해 지금 바로 변경해야 합니다. 변경 전에는 계속 이 화면이 표시됩니다.</div>
     <div class="lg"><label class="lg-label">현재 비밀번호</label><input type="password" class="lg-input" id="pw-cur" placeholder="현재 비밀번호"></div>
     <div class="lg"><label class="lg-label">새 비밀번호</label><input type="password" class="lg-input" id="pw-new" placeholder="새 비밀번호 (6자 이상)"></div>
     <div class="lg"><label class="lg-label">새 비밀번호 확인</label><input type="password" class="lg-input" id="pw-cfm" placeholder="재입력"></div>
     <div class="btn-gap">
-      <button class="btn-full gold" onclick="changePw()">🔑 변경</button>
-      <button class="btn-ghost" onclick="closeSheet('sh-pw')">취소</button>
+      <button class="btn-full gold" onclick="changePw()">변경</button>
+      <button class="btn-ghost" id="pw-cancel-btn" onclick="if(!window._forcePwChange)closeSheet('sh-pw')">취소</button>
     </div>
   </div>
 </div>
@@ -2279,6 +2281,7 @@ function getLogsByDate(date){
 
 // 새 로그 저장 (IDB + 로컬스토리지 동시)
 async function saveLog(entry) {
+  entry.updatedAt = Date.now();
   try { await IDB.put('logs', entry); } catch(e){ console.warn('[IDB] put 실패:', e); }
   // 캐시 업데이트
   if(_cache.todayLogs && entry.date === today()) {
@@ -2333,6 +2336,8 @@ function getTransitBySite(siteId){
   return _cache.transitBySite.get(siteId) || [];
 }
 async function saveTransit(arr){
+  const now = Date.now();
+  arr = arr.map(r => r.updatedAt ? r : {...r, updatedAt: now});
   _cache.transit = arr;
   _cache.transitBySite = null;
   DB.s(K.TRANSIT, arr.slice(0,100)); // LS 먼저 저장 (캐시 무효화 경합 방지)
@@ -2362,6 +2367,8 @@ function getAsBySite(siteId){
   return _cache.asBySite.get(siteId) || [];
 }
 async function saveAsReqs(arr){
+  const now = Date.now();
+  arr = arr.map(r => r.updatedAt ? r : {...r, updatedAt: now});
   _cache.asReqs = arr;
   _cache.asBySite = null;
   DB.s(K.AS_REQS, arr.slice(0,100)); // LS 먼저 저장 (캐시 무효화 경합 방지)
@@ -2839,8 +2846,14 @@ const fmtTS  = ts=>{ const d=new Date(ts); return `${String(d.getHours()).padSta
 
 let _tt; function toast(msg,type='',ms=2600){
   const el=document.getElementById('toast');
-  el.textContent=msg; el.className='toast on '+(type||'');
-  clearTimeout(_tt); _tt=setTimeout(()=>el.classList.remove('on'),ms);
+  clearTimeout(_tt);
+  if(type==='err'){
+    el.innerHTML=msg+'<button class="toast-close" onclick="document.getElementById(\'toast\').classList.remove(\'on\')">✕</button>';
+    el.className='toast on err';
+  } else {
+    el.textContent=msg; el.className='toast on '+(type||'');
+    _tt=setTimeout(()=>el.classList.remove('on'),ms);
+  }
 }
 function spinner(on,txt='처리 중...'){
   document.getElementById('sp-ov').classList.toggle('on',on);
@@ -2876,7 +2889,7 @@ function onSheetOpen(id){
     autoRotateInvite();
     const sites = getSites();
     const siteCodesHtml = sites.map(s => {
-      const code = DB.g(K.INVITE_SITE + s.id, null) || DB.g(K.INVITE,'SUB2025');
+      const code = DB.g(K.INVITE_SITE + s.id, null) || DB.g(K.INVITE,'') || '(미설정)';
       return `<div style="margin-bottom:10px;padding:10px;background:var(--bg3);border-radius:var(--rs);border:1px solid var(--br)">
         <div style="font-size:10px;color:var(--tx3);font-weight:700;margin-bottom:4px">${s.name}</div>
         <div style="font-size:18px;font-weight:900;font-family:'JetBrains Mono',monospace;color:var(--teal);letter-spacing:2px;margin-bottom:6px" id="invite-code-${s.id}">${code}</div>
@@ -2978,8 +2991,9 @@ function doLogin(role){
     const co=document.getElementById('subCompany').value;
     const name=document.getElementById('subName').value.trim();
     const code=document.getElementById('subCode').value.trim();
-    const validCode = DB.g(K.INVITE_SITE + site, null) || DB.g(K.INVITE,'SUB2025');
+    const validCode = DB.g(K.INVITE_SITE + site, null) || DB.g(K.INVITE,'') || '';
     if(!site||!co||!name||!code){ toast('모든 항목을 입력해주세요','err'); return; }
+    if(!validCode){ toast('이 현장의 초대코드가 설정되지 않았습니다. AJ 관리자에게 문의하세요','err'); return; }
     if(code!==validCode){ toast('초대코드가 올바르지 않습니다','err'); const el=document.getElementById('subCode'); el.classList.add('shake'); setTimeout(()=>el.classList.remove('shake'),500); return; }
     const subTitle=document.getElementById('subTitle')?.value.trim()||'';
     const subPhone=document.getElementById('subPhone')?.value.trim()||'';
@@ -3024,6 +3038,18 @@ function enterApp(){
   if(S.role==='aj'){
     const sel=document.getElementById('ajSiteSelect');
     if(sel && S.siteId) sel.value=S.siteId;
+    // 초기 비밀번호 감지 시 강제 변경
+    const _creds=DB.g(K.CREDS,{id:'admin',pw:'aj2025!'});
+    if(_creds.pw==='aj2025!'){
+      window._forcePwChange=true;
+      setTimeout(()=>{
+        const notice=document.getElementById('pw-force-notice');
+        const cancelBtn=document.getElementById('pw-cancel-btn');
+        if(notice) notice.style.display='block';
+        if(cancelBtn) cancelBtn.style.display='none';
+        openSheet('sh-pw');
+      },700);
+    }
   }
   seedIfEmpty();
   renderHome();
@@ -3328,7 +3354,8 @@ async function _syncToSupabase(){
         meter_start: String(l.meterStart||''),
         meter_end:   String(l.meterEnd||''),
         off_reason:  l.offReason||'',
-        created_at:  l.createdAt ? new Date(l.createdAt).toISOString() : new Date(l.ts||Date.now()).toISOString()
+        created_at:  l.createdAt ? new Date(l.createdAt).toISOString() : new Date(l.ts||Date.now()).toISOString(),
+        updated_at:  l.updatedAt  ? new Date(l.updatedAt).toISOString()  : new Date(l.ts||Date.now()).toISOString()
       }));
       await sbBatchUpsert('logs', rows);
       await IDB.markSynced('logs', unsyncLogs.map(l=>l.id)).catch(()=>{});
@@ -3355,7 +3382,8 @@ async function _syncToSupabase(){
         note:             t.note||'',
         status:           t.cancelled?'취소':(t.done?'완료':'대기'),
         messages:         JSON.stringify(t.ajMsgs||[]),
-        created_at:       t.createdAt ? new Date(t.createdAt).toISOString() : new Date().toISOString()
+        created_at:       t.createdAt ? new Date(t.createdAt).toISOString() : new Date().toISOString(),
+        updated_at:       t.updatedAt  ? new Date(t.updatedAt).toISOString()  : new Date(t.createdAt||Date.now()).toISOString()
       }));
       await sbBatchUpsert('transit', rows);
       await IDB.markSynced('transit', unsyncTr.map(t=>t.id)).catch(()=>{});
@@ -3383,7 +3411,8 @@ async function _syncToSupabase(){
         resolve_note:  a.resolvedNote||'',
         material_at:   a.materialAt ? new Date(a.materialAt).toISOString() : null,
         requested_at:  a.requestedAt ? new Date(a.requestedAt).toISOString() : null,
-        created_at:    a.createdAt ? new Date(a.createdAt).toISOString() : new Date().toISOString()
+        created_at:    a.createdAt ? new Date(a.createdAt).toISOString() : new Date().toISOString(),
+        updated_at:    a.updatedAt  ? new Date(a.updatedAt).toISOString()  : new Date(a.createdAt||Date.now()).toISOString()
       }));
       await sbBatchUpsert('as_requests', rows);
       await IDB.markSynced('as_requests', unsyncAS.map(a=>a.id)).catch(()=>{});
@@ -3434,6 +3463,60 @@ async function _syncToSupabase(){
     } catch(err) {
       console.warn('[sync] equipment 동기화 실패:', err);
     }
+  }
+
+  // ── 다른 기기 변경사항 pull (충돌 방지) ─────────────────
+  // 마지막 동기화 이후 서버에서 변경된 transit / AS 데이터를 내려받아 로컬 병합
+  // updated_at 기준 비교: 서버 버전이 더 새로우면 로컬을 덮어씀
+  await _pullRecentFromSupabase().catch(e => console.warn('[pull] 실패:', e));
+}
+
+async function _pullRecentFromSupabase(){
+  const lastSync = DB.g('last_sync', null);
+  if(!lastSync) return; // 첫 동기화 전이면 스킵
+  const since = new Date(new Date(lastSync).getTime() - 60000).toISOString(); // 1분 여유
+  // transit 최근 변경분
+  const trRows = await sbReq('transit','GET',null,`?updated_at=gte.${encodeURIComponent(since)}&order=updated_at.desc&limit=100`).catch(()=>[]);
+  if(Array.isArray(trRows) && trRows.length){
+    const localTr = getTransit();
+    let merged = false;
+    for(const sr of trRows){
+      const idx = localTr.findIndex(r => r.id === sr.record_id);
+      const serverTs = new Date(sr.updated_at||sr.created_at||0).getTime();
+      if(idx >= 0){
+        const localTs = localTr[idx].updatedAt || localTr[idx].createdAt || 0;
+        if(serverTs > localTs){
+          // 서버가 더 최신 → 로컬 status/messages 갱신 (핵심 필드만)
+          localTr[idx] = {...localTr[idx], done: sr.status==='완료', cancelled: sr.status==='취소',
+            ajMsgs: (() => { try{ return JSON.parse(sr.messages||'[]'); }catch{ return localTr[idx].ajMsgs||[]; } })(),
+            updatedAt: serverTs, synced: true };
+          merged = true;
+        }
+      }
+    }
+    if(merged){ await saveTransit(localTr); _cache.transit=null; }
+  }
+  // AS 최근 변경분
+  const asRows = await sbReq('as_requests','GET',null,`?updated_at=gte.${encodeURIComponent(since)}&order=updated_at.desc&limit=100`).catch(()=>[]);
+  if(Array.isArray(asRows) && asRows.length){
+    const localAs = getAsReqs();
+    let merged = false;
+    for(const sr of asRows){
+      const idx = localAs.findIndex(r => r.id === sr.record_id);
+      const serverTs = new Date(sr.updated_at||sr.created_at||0).getTime();
+      if(idx >= 0){
+        const localTs = localAs[idx].updatedAt || localAs[idx].createdAt || 0;
+        if(serverTs > localTs){
+          localAs[idx] = {...localAs[idx], status: sr.status||localAs[idx].status,
+            techName: sr.tech_name||localAs[idx].techName,
+            resolvedNote: sr.resolve_note||localAs[idx].resolvedNote,
+            resolvedAt: sr.resolved_at ? new Date(sr.resolved_at).getTime() : localAs[idx].resolvedAt,
+            updatedAt: serverTs, synced: true };
+          merged = true;
+        }
+      }
+    }
+    if(merged){ await saveAsReqs(localAs); _cache.asReqs=null; }
   }
 }
 
@@ -3603,7 +3686,14 @@ async function _renderHomeAsync(){
   coRows.sort((a,b)=>(b.rate||0)-(a.rate||0));
 
   const coListEl = document.getElementById('coList');
-  if(!coRows.length){ coListEl.innerHTML='<div class="empty"><div class="empty-ico">📋</div><div class="empty-txt">오늘 입력된 현황이 없습니다</div></div>'; }
+  if(!coRows.length){
+    const _emptyHint = S.role==='tech'
+      ? '<div class="empty-sub">가동현황 탭에서 오늘 작업 상태를 입력해 주세요</div>'
+      : S.role==='sub'
+        ? '<div class="empty-sub">기술인에게 오늘 가동현황 입력을 요청하세요</div>'
+        : '<div class="empty-sub">업체 등록 후 현황 입력 시 여기에 표시됩니다</div>';
+    coListEl.innerHTML=`<div class="empty"><div class="empty-ico">📋</div><div class="empty-txt">오늘 입력된 현황이 없습니다</div>${_emptyHint}</div>`;
+  }
   else coListEl.innerHTML=coRows.slice(0,8).map(co=>{
     const col=rCol(co.rate);
     return `<div class="co-card">
@@ -5438,13 +5528,13 @@ function setPeriod(p,el){ anaP=p; document.querySelectorAll('.ptab').forEach(t=>
 
 function renderAnalysis(){
   if(!S||S.role==='tech'){
-    document.getElementById('ana-content').innerHTML=`<div class="locked-page"><div class="lp-ico"></div><div class="lp-title">협력사관리자 이상 접근 가능</div><div class="lp-desc">AI 분석은 협력사관리자 또는<br>AJ관리자만 이용할 수 있습니다.</div></div>`;
+    document.getElementById('ana-content').innerHTML=`<div class="locked-page"><div class="lp-ico"></div><div class="lp-title">협력사관리자 이상 접근 가능</div><div class="lp-desc">자동 분석은 협력사관리자 또는<br>AJ관리자만 이용할 수 있습니다.</div></div>`;
     return;
   }
   document.getElementById('ana-content').innerHTML=`
     <div style="padding:14px 14px 0">
     <div class="ai-panel">
-      <div class="ai-hd"><div class="ai-tag">AI 분석</div><div style="font-size:12px;font-weight:700;margin-left:2px">가동률 인사이트</div></div>
+      <div class="ai-hd"><div class="ai-tag">자동 분석</div><div style="font-size:12px;font-weight:700;margin-left:2px">가동률 인사이트</div></div>
       <div class="ai-text" id="ai-text"><div style="display:flex;align-items:center;gap:7px;color:var(--tx3);font-size:11px"><div style="width:14px;height:14px;border:2px solid var(--br);border-top-color:var(--purple);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0"></div>분석 중...</div></div>
       <div class="ai-ft"><div class="ai-time" id="ai-time">—</div><div class="ai-re" onclick="runAI()">다시 분석</div></div>
     </div>
@@ -5582,7 +5672,7 @@ async function _renderHeatmapAsync(){
 
 async function runAI(){
   const el=document.getElementById('ai-text'); if(!el) return;
-  el.innerHTML=`<div style="display:flex;align-items:center;gap:7px;color:var(--tx3);font-size:11px"><div style="width:14px;height:14px;border:2px solid var(--br);border-top-color:var(--purple);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0"></div>AI 분석 중...</div>`;
+  el.innerHTML=`<div style="display:flex;align-items:center;gap:7px;color:var(--tx3);font-size:11px"><div style="width:14px;height:14px;border:2px solid var(--br);border-top-color:var(--purple);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0"></div>분석 중...</div>`;
 
   const siteId=S.siteId==='all'?null:S.siteId;
   const allLogs=getLogs().filter(l=>siteId?l.siteId===siteId:true);
@@ -6256,7 +6346,12 @@ function changePw(){
   if(nw.length<6){ toast('6자 이상 입력하세요','err'); return; }
   if(nw!==cf){ toast('비밀번호가 일치하지 않습니다','err'); return; }
   creds.pw=nw; DB.s(K.CREDS,creds);
-  closeSheet('sh-pw'); toast('✅ 비밀번호 변경 완료','ok');
+  window._forcePwChange=false;
+  const notice=document.getElementById('pw-force-notice');
+  const cancelBtn=document.getElementById('pw-cancel-btn');
+  if(notice) notice.style.display='none';
+  if(cancelBtn) cancelBtn.style.display='';
+  closeSheet('sh-pw'); toast('비밀번호 변경 완료','ok');
   ['pw-cur','pw-new','pw-cfm'].forEach(id=>document.getElementById(id).value='');
 }
 
