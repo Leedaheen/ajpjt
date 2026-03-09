@@ -1884,7 +1884,7 @@ const IDB = (() => {
           s.createIndex('status',  'status',  { unique: false });
           s.createIndex('company', 'company', { unique: false });
           // 복합 인덱스: [siteId, date] — 현장별 날짜 조회
-          s.createIndex('siteDate','[siteId+date]', { unique: false });
+          s.createIndex('siteDate', ['siteId', 'date'], { unique: false });
         }
         // TRANSIT
         if (!db.objectStoreNames.contains('transit')) {
@@ -1914,7 +1914,7 @@ const IDB = (() => {
           const s = db.createObjectStore('equipment', { keyPath: 'id' });
           s.createIndex('siteId',  'siteId',  { unique: false });
           s.createIndex('company', 'company', { unique: false });
-          s.createIndex('siteComp','[siteId+company]', { unique: false });
+          s.createIndex('siteComp', ['siteId', 'company'], { unique: false });
           s.createIndex('status',  'status',  { unique: false });
         }
       };
@@ -1930,6 +1930,12 @@ const IDB = (() => {
       };
       req.onerror = e => {
         const err = e.target.error;
+        // SyntaxError 등 재시도해도 의미없는 에러는 즉시 reject
+        if (err?.name === 'SyntaxError' || err?.name === 'TypeError') {
+          console.error('[IDB] 스키마 오류 — 재시도 불가:', err);
+          rej(err);
+          return;
+        }
         // AbortError(upgradeneeded 충돌) 시 DB 삭제 후 재시도
         if (err?.name === 'AbortError' || err?.name === 'VersionError') {
           console.warn('[IDB] 버전 충돌 — DB 삭제 후 재시도');
@@ -6281,6 +6287,7 @@ function updateLogBadge(){
   const logs=getLogs();
   const c=logs.filter(l=>!l.synced).length;
   const b=document.getElementById('nb-log');
+  if(!b) return;
   if(c>0){b.textContent=c;b.classList.add('on');}else b.classList.remove('on');
 }
 
