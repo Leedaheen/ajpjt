@@ -1462,6 +1462,7 @@ function doGet(e){
       <span id="idb-stats" style="color:var(--tx)">로드 중...</span>
     </div>
 
+    <div id="sb-credentials-block">
     <div class="lg">
       <label class="fg-lbl">Project URL</label>
       <input type="url" class="lg-input" id="sb-url-input" placeholder="https://xxxxxxxxxxxx.supabase.co" style="font-size:12px;font-family:'JetBrains Mono',monospace">
@@ -1474,6 +1475,7 @@ function doGet(e){
       <button class="btn-full" onclick="saveSupabaseConfig()">연동 저장</button>
     </div>
     <button onclick="testSupabaseConnection()" style="width:100%;margin-top:8px;padding:10px;font-size:12px;font-weight:700;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:var(--rs);color:var(--green);cursor:pointer">연결 테스트</button>
+    </div>
 
     <div style="border-top:1px solid var(--br);margin:16px 0 12px"></div>
     <div style="font-size:13px;font-weight:800;margin-bottom:10px">📋 Supabase 설정 방법</div>
@@ -1491,7 +1493,7 @@ function doGet(e){
     </div>
 
     <!-- Step 2 -->
-    <div style="display:flex;gap:10px;margin-bottom:12px;align-items:flex-start">
+    <div id="sb-sql-block" style="display:flex;gap:10px;margin-bottom:12px;align-items:flex-start">
       <div style="width:24px;height:24px;border-radius:50%;background:#22c55e;color:#111;font-size:11px;font-weight:900;display:flex;align-items:center;justify-content:center;flex-shrink:0">2</div>
       <div style="flex:1">
         <div style="font-size:12px;font-weight:700;margin-bottom:5px">SQL Editor에서 테이블 생성</div>
@@ -1635,7 +1637,7 @@ alter table equipment disable row level security;</pre>
       </div>
     </div>
 
-    <div style="padding:10px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:8px;font-size:10px;color:var(--tx3);line-height:1.6;margin-bottom:12px">
+    <div id="sb-warn-block" style="padding:10px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:8px;font-size:10px;color:var(--tx3);line-height:1.6;margin-bottom:12px">
       ⚠️ anon key는 테이블 접근용 공개키입니다. service_role key는 절대 사용하지 마세요.
     </div>
 
@@ -2099,7 +2101,7 @@ async function _migrateFromLocalStorage() {
       if (data.length) {
         await IDB.putAll(idbStore, data);
         total += data.length;
-        localStorage.removeItem(lsKey); // 마이그레이션 후 제거
+        // localStorage.removeItem(lsKey) 제거 — getTransit() 등이 캐시 무효화 후 LS fallback으로 사용
       }
     }
     localStorage.setItem(migKey, '1');
@@ -2244,10 +2246,8 @@ async function saveLogs(logs, _newEntry){
   _cache.logs = logs;
   if(_newEntry && _cache.logsByDate) _addToIndex(_newEntry);
   else _buildLogIndex(logs);
-  // IDB에 배치 저장
+  DB.s(K.LOGS, logs.slice(0,200)); // LS 먼저 저장 (캐시 무효화 경합 방지)
   try { await IDB.putAll('logs', logs); } catch {}
-  DB.s(K.LOGS, logs.slice(0,200)); // LS는 최신 200건만
-  // 오늘 캐시 무효화
   _cache.todayLogs = null;
 }
 
@@ -2285,8 +2285,8 @@ function getTransitBySite(siteId){
 async function saveTransit(arr){
   _cache.transit = arr;
   _cache.transitBySite = null;
+  DB.s(K.TRANSIT, arr.slice(0,100)); // LS 먼저 저장 (캐시 무효화 경합 방지)
   try { await IDB.putAll('transit', arr); } catch {}
-  DB.s(K.TRANSIT, arr.slice(0,100));
 }
 
 // ── AS_REQS ────────────────────────────────────────────
@@ -2314,8 +2314,8 @@ function getAsBySite(siteId){
 async function saveAsReqs(arr){
   _cache.asReqs = arr;
   _cache.asBySite = null;
+  DB.s(K.AS_REQS, arr.slice(0,100)); // LS 먼저 저장 (캐시 무효화 경합 방지)
   try { await IDB.putAll('as_requests', arr); } catch {}
-  DB.s(K.AS_REQS, arr.slice(0,100));
 }
 
 // ── MEMBERS ────────────────────────────────────────────
@@ -2325,8 +2325,8 @@ function getMembers(){
 }
 async function saveMembers(arr){
   _cache.members = arr;
+  DB.s(K.MEMBERS, arr); // LS 먼저 저장 (캐시 무효화 경합 방지)
   try { await IDB.putAll('members', arr); } catch {}
-  DB.s(K.MEMBERS, arr);
 }
 
 // Supabase 응답 → 로컬 로그 형식 변환
@@ -2773,7 +2773,7 @@ let S = null; // current session
 /* ═══════════════════════════════════════════
    UTILS
 ═══════════════════════════════════════════ */
-const today  = ()=>new Date().toISOString().split('T')[0];
+const today  = ()=>{const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
 const nowHM  = ()=>{ const n=new Date(); return `${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`; };
 const fPct   = v=>(v*100).toFixed(1)+'%';
 const fH = h => {
@@ -2805,6 +2805,11 @@ function onSheetOpen(id){
   if(id==='sh-supabase'){
     document.getElementById('sb-url-input').value=DB.g(K.SB_URL,'')||SB_DEFAULT_URL||'';
     document.getElementById('sb-key-input').value=DB.g(K.SB_KEY,'')||SB_DEFAULT_KEY||'';
+    // AJ관리자만 민감 정보 블록 표시
+    const _isAJ = S?.role==='aj';
+    ['sb-credentials-block','sb-sql-block','sb-warn-block'].forEach(bid=>{
+      const el=document.getElementById(bid); if(el) el.style.display=_isAJ?'':'none';
+    });
     // IDB 통계 비동기 표시
     const statsEl=document.getElementById('idb-stats');
     if(statsEl){
@@ -5591,7 +5596,7 @@ function renderAdmin(){
       <div style="background:linear-gradient(135deg,rgba(34,197,94,.12),rgba(16,185,129,.06));border:1px solid rgba(34,197,94,.25);border-radius:var(--r);padding:12px;margin-bottom:8px;display:flex;align-items:center;gap:12px;">
         <div style="font-size:24px;flex-shrink:0">🗄</div>
         <div style="flex:1">
-          <div style="font-size:13px;font-weight:900">Supabase DB <span style="font-size:10px;font-weight:600;color:var(--green);background:rgba(34,197,94,.15);padding:2px 6px;border-radius:4px;margin-left:4px">권장</span></div>
+          <div style="font-size:13px;font-weight:900">데이터동기화 <span style="font-size:10px;font-weight:600;color:var(--green);background:rgba(34,197,94,.15);padding:2px 6px;border-radius:4px;margin-left:4px">권장</span></div>
           <div style="font-size:10px;color:var(--tx2);margin-top:2px">${DB.g(K.SB_URL,'')?'연동됨 ✓':'미설정 — 데이터 영구 보관 불가'}</div>
         </div>
         <div onclick="openSheet('sh-supabase')" style="padding:6px 12px;border-radius:var(--rs);background:rgba(34,197,94,.2);border:1px solid rgba(34,197,94,.3);color:var(--green);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">${DB.g(K.SB_URL,'')?'설정 변경':'연동 설정'}</div>
@@ -5695,7 +5700,7 @@ function renderAdmin(){
         + getAsReqs().filter(a=>!a.synced).length;
       return `<div style="margin-top:10px;padding:12px;background:var(--card);border:1px solid ${connected?'rgba(34,197,94,.3)':'rgba(239,68,68,.25)'};border-radius:12px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
-          <div style="font-size:12px;font-weight:800">🗄 Supabase DB</div>
+          <div style="font-size:12px;font-weight:800">🗄 데이터동기화</div>
           <span style="font-size:11px;font-weight:700;color:${connected?'var(--green)':'#f87171'}">${connected?'연결됨':'미연결'}</span>
         </div>
         <div style="font-size:10px;color:var(--tx3);margin-bottom:8px">
