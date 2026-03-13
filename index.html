@@ -339,6 +339,8 @@ input,select,button,textarea{font-family:inherit;}
 .login-btn.sub {background:linear-gradient(135deg,var(--teal),#0f766e);box-shadow:0 4px 16px rgba(20,184,166,.3);}
 .login-btn.aj  {background:linear-gradient(135deg,var(--aj),#92400e);  box-shadow:0 4px 16px rgba(245,158,11,.3);}
 
+.aj-tab{flex:1;padding:6px 4px;font-size:11px;font-weight:600;background:transparent;border:1px solid rgba(251,191,36,.3);border-radius:6px;color:var(--tx3);cursor:pointer;transition:.15s}
+.aj-tab.on{background:rgba(251,191,36,.18);color:#fbbf24;border-color:#fbbf24}
 .quick-login{text-align:center;margin-top:10px;font-size:11px;color:var(--tx3);}
 .quick-login b{color:var(--blue);cursor:pointer;text-decoration:underline;}
 
@@ -1185,6 +1187,13 @@ textarea.fg-input{height:72px;line-height:1.5;}
       <div class="role-notice aj">
         <div class="rn-txt">AJ관리자 계정으로 로그인합니다. 현장 추가, 업체 관리, 초대코드 설정 등 <b>모든 기능</b>을 이용할 수 있습니다.</div>
       </div>
+      <!-- 탭 -->
+      <div style="display:flex;gap:4px;margin-bottom:12px">
+        <button id="aj-tab-login" class="aj-tab on" onclick="switchAjTab('login')">로그인</button>
+        <button id="aj-tab-register" class="aj-tab" onclick="switchAjTab('register')">회원가입</button>
+        <button id="aj-tab-changepw" class="aj-tab" onclick="switchAjTab('changepw')">비밀번호 변경</button>
+      </div>
+      <!-- 역할 구분 (공통) -->
       <div class="lg">
         <label class="lg-label">역할 구분</label>
         <div class="chips" id="aj-role-chips" style="margin-top:4px">
@@ -1192,19 +1201,72 @@ textarea.fg-input{height:72px;line-height:1.5;}
           <div class="chip" onclick="selectOne(this,'aj-role-chips')">정비기사</div>
         </div>
       </div>
-      <div class="lg">
-        <label class="lg-label">이름 <span class="req">*</span></label>
-        <input type="text" class="lg-input" id="ajName" placeholder="본인 이름 입력" autocomplete="off">
+      <!-- 로그인 탭 -->
+      <div id="aj-pane-login">
+        <div class="lg">
+          <label class="lg-label">사번 <span class="req">*</span></label>
+          <input type="text" class="lg-input" id="ajEmpNo" placeholder="사번 입력" autocomplete="off" inputmode="numeric">
+        </div>
+        <div class="lg">
+          <label class="lg-label">비밀번호 <span class="req">*</span></label>
+          <input type="password" class="lg-input" id="ajPw" placeholder="비밀번호" onkeydown="if(event.key==='Enter')doLogin('aj')">
+        </div>
+        <button class="login-btn aj" onclick="doLogin('aj')">AJ 관리자로 로그인</button>
       </div>
-      <div class="lg">
-        <label class="lg-label">관리자 ID <span class="req">*</span></label>
-        <input type="text" class="lg-input" id="ajId" placeholder="관리자 아이디" autocomplete="off">
+      <!-- 회원가입 탭 -->
+      <div id="aj-pane-register" style="display:none">
+        <div class="lg">
+          <label class="lg-label">사번 <span class="req">*</span></label>
+          <input type="text" class="lg-input" id="regEmpNo" placeholder="사번 입력" autocomplete="off" inputmode="numeric">
+        </div>
+        <div class="lg">
+          <label class="lg-label">이름 <span class="req">*</span></label>
+          <input type="text" class="lg-input" id="regName" placeholder="본인 이름" autocomplete="off">
+        </div>
+        <div class="lg">
+          <label class="lg-label">연락처 <span class="req">*</span></label>
+          <div style="display:flex;gap:6px">
+            <input type="tel" class="lg-input" id="regPhone" placeholder="010-0000-0000" style="flex:1" oninput="_ajCodeSent=false;_ajCodeVerified=false">
+            <button class="btn-ghost" style="font-size:11px;padding:5px 10px;white-space:nowrap" onclick="doAjSendCode()">인증번호 발송</button>
+          </div>
+        </div>
+        <div class="lg">
+          <label class="lg-label">인증번호</label>
+          <div style="display:flex;gap:6px">
+            <input type="text" class="lg-input" id="regCode" placeholder="6자리 인증번호" style="flex:1" inputmode="numeric" maxlength="6">
+            <button class="btn-ghost" style="font-size:11px;padding:5px 10px;white-space:nowrap" onclick="doAjVerifyCode()">확인</button>
+          </div>
+        </div>
+        <div class="lg">
+          <label class="lg-label">비밀번호 <span class="req">*</span></label>
+          <input type="password" class="lg-input" id="regPw" placeholder="6자 이상">
+        </div>
+        <div class="lg">
+          <label class="lg-label">비밀번호 확인 <span class="req">*</span></label>
+          <input type="password" class="lg-input" id="regPw2" placeholder="비밀번호 재입력" onkeydown="if(event.key==='Enter')doAjRegister()">
+        </div>
+        <button class="login-btn aj" onclick="doAjRegister()">가입하기</button>
       </div>
-      <div class="lg">
-        <label class="lg-label">비밀번호 <span class="req">*</span></label>
-        <input type="password" class="lg-input" id="ajPw" placeholder="비밀번호" onkeydown="if(event.key==='Enter')doLogin('aj')">
+      <!-- 비밀번호 변경 탭 -->
+      <div id="aj-pane-changepw" style="display:none">
+        <div class="lg">
+          <label class="lg-label">사번 <span class="req">*</span></label>
+          <input type="text" class="lg-input" id="cpEmpNo" placeholder="사번 입력" autocomplete="off" inputmode="numeric">
+        </div>
+        <div class="lg">
+          <label class="lg-label">이름 <span class="req">*</span></label>
+          <input type="text" class="lg-input" id="cpName" placeholder="본인 이름 (본인 확인)" autocomplete="off">
+        </div>
+        <div class="lg">
+          <label class="lg-label">새 비밀번호 <span class="req">*</span></label>
+          <input type="password" class="lg-input" id="cpPw" placeholder="6자 이상">
+        </div>
+        <div class="lg">
+          <label class="lg-label">새 비밀번호 확인 <span class="req">*</span></label>
+          <input type="password" class="lg-input" id="cpPw2" placeholder="비밀번호 재입력" onkeydown="if(event.key==='Enter')doAjChangePwLogin()">
+        </div>
+        <button class="login-btn aj" onclick="doAjChangePwLogin()">비밀번호 변경</button>
       </div>
-      <button class="login-btn aj" onclick="doLogin('aj')">AJ 관리자로 로그인</button>
     </div>
 
   </div><!-- /login-body -->
@@ -1859,6 +1921,7 @@ const K = {
   SB_URL:  'sb_url',        // Supabase Project URL
   SB_KEY:  'sb_anon_key',   // Supabase anon/public key
   CREDS:   'aj_creds',
+  AJ_MEMBER: 'aj_member_cache',  // AJ 멤버 로컬 캐시 (오프라인 폴백)
   INVITE:  'invite_code',        // 전체 기본 (deprecated)
   INVITE_SITE: 'invite_site_',  // prefix: invite_site_{siteId}
   NOTIFS:  'notifs',
@@ -2898,8 +2961,8 @@ function onSheetOpen(id){
           <button class="btn-ghost" style="flex:1;font-size:10px;padding:5px" onclick="shareInviteCodeSite('${s.id}','${s.name}')">공유</button>
         </div>
         <div style="display:flex;gap:6px">
-          <input type="text" class="lg-input" id="new-code-${s.id}" placeholder="새 코드 (6자+)" style="flex:1;padding:5px 8px;font-size:11px">
-          <button class="btn-ghost" style="font-size:10px;padding:5px 10px;white-space:nowrap" onclick="saveInviteCodeSite('${s.id}')">변경</button>
+          <input type="text" class="lg-input" id="new-code-${s.id}" placeholder="직접 입력" style="flex:1;padding:5px 8px;font-size:11px">
+          <button class="btn-ghost" style="flex:1;font-size:10px;padding:5px" onclick="saveInviteCodeSite('${s.id}')">변경</button>
         </div>
       </div>`;
     }).join('');
@@ -2978,7 +3041,82 @@ function updatePAll(){
   if(hd) hd.textContent=req?'개인정보 수집·이용 동의 (전체 동의됨)':'개인정보 수집·이용 동의 ⚠️ 필수항목 미동의';
 }
 
-function doLogin(role){
+/* ── AJ 관리자 로그인 전용 헬퍼 ── */
+let _ajCodeSent=false, _ajVerifCode='', _ajCodeVerified=false;
+
+async function sha256(str){
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function switchAjTab(tab){
+  ['login','register','changepw'].forEach(t=>{
+    const pane=document.getElementById('aj-pane-'+t);
+    const btn=document.getElementById('aj-tab-'+t);
+    if(pane) pane.style.display=t===tab?'':'none';
+    if(btn) btn.classList.toggle('on',t===tab);
+  });
+}
+function doAjSendCode(){
+  const phone=document.getElementById('regPhone').value.trim();
+  if(!phone){ toast('연락처를 먼저 입력하세요','err'); return; }
+  _ajVerifCode=String(Math.floor(100000+Math.random()*900000));
+  _ajCodeSent=true; _ajCodeVerified=false;
+  // SMS 서비스 미연동 — 개발/임시: 인증번호를 토스트로 표시
+  toast('인증번호: '+_ajVerifCode+' (SMS 연동 전 임시)','warn',8000);
+}
+function doAjVerifyCode(){
+  const input=document.getElementById('regCode').value.trim();
+  if(!_ajCodeSent){ toast('먼저 인증번호를 발송하세요','err'); return; }
+  if(input===_ajVerifCode){ _ajCodeVerified=true; toast('인증 완료','ok'); }
+  else { toast('인증번호가 틀렸습니다','err'); }
+}
+async function doAjRegister(){
+  const empNo=document.getElementById('regEmpNo').value.trim();
+  const name=document.getElementById('regName').value.trim();
+  const phone=document.getElementById('regPhone').value.trim();
+  const pw=document.getElementById('regPw').value;
+  const pw2=document.getElementById('regPw2').value;
+  const ajType=(document.querySelector('#aj-role-chips .chip.on')?.textContent)||'관리자';
+  if(!empNo||!name||!phone||!pw){ toast('필수 항목을 모두 입력하세요','err'); return; }
+  if(pw.length<6){ toast('비밀번호는 6자 이상이어야 합니다','err'); return; }
+  if(pw!==pw2){ toast('비밀번호가 일치하지 않습니다','err'); return; }
+  // 중복 사번 확인
+  try {
+    const existing=await sbReq('aj_members','GET',null,`?emp_no=eq.${encodeURIComponent(empNo)}&select=emp_no`);
+    if(existing&&existing.length){ toast('이미 가입된 사번입니다','err'); return; }
+  } catch(e){ toast('서버 연결 실패: '+e.message,'err'); return; }
+  const pwHash=await sha256(pw);
+  try {
+    await sbReq('aj_members','POST',[{emp_no:empNo,name,phone,pw_hash:pwHash,aj_type:ajType}],'');
+    toast('가입 완료! 로그인하세요','ok');
+    switchAjTab('login');
+    document.getElementById('ajEmpNo').value=empNo;
+    document.getElementById('ajPw').focus();
+  } catch(e){ toast('가입 실패: '+e.message,'err'); }
+}
+async function doAjChangePwLogin(){
+  const empNo=document.getElementById('cpEmpNo').value.trim();
+  const name=document.getElementById('cpName').value.trim();
+  const pw=document.getElementById('cpPw').value;
+  const pw2=document.getElementById('cpPw2').value;
+  if(!empNo||!name||!pw){ toast('모든 항목을 입력하세요','err'); return; }
+  if(pw.length<6){ toast('비밀번호는 6자 이상이어야 합니다','err'); return; }
+  if(pw!==pw2){ toast('비밀번호가 일치하지 않습니다','err'); return; }
+  try {
+    const rows=await sbReq('aj_members','GET',null,`?emp_no=eq.${encodeURIComponent(empNo)}&name=eq.${encodeURIComponent(name)}`);
+    if(!rows||!rows.length){ toast('사번 또는 이름이 일치하지 않습니다','err'); return; }
+    const pwHash=await sha256(pw);
+    await sbReq('aj_members','PATCH',{pw_hash:pwHash},`?emp_no=eq.${encodeURIComponent(empNo)}`);
+    // 로컬 캐시도 갱신
+    const cached=DB.g(K.AJ_MEMBER,null);
+    if(cached&&cached.emp_no===empNo){ cached.pw_hash=pwHash; DB.s(K.AJ_MEMBER,cached); }
+    toast('비밀번호 변경 완료','ok');
+    switchAjTab('login');
+    document.getElementById('ajEmpNo').value=empNo;
+  } catch(e){ toast('변경 실패: '+e.message,'err'); }
+}
+
+async function doLogin(role){
   if(role==='tech'){
     const site=document.getElementById('techSite').value;
     const co=document.getElementById('techCompany').value;
@@ -3008,15 +3146,31 @@ function doLogin(role){
         desc:`${co} 업체 관리자 ${name}님이 가입하였습니다`});
     }
   } else {
-    const id=document.getElementById('ajId').value.trim();
-    const pw=document.getElementById('ajPw').value.trim();
-    const ajName=document.getElementById('ajName')?.value.trim()||'AJ관리자';
-    const ajRoleChip=document.querySelector('#aj-role-chips .chip.on');
-    const ajRoleType=ajRoleChip?.textContent||'관리자'; // 관리자 or 정비기사
-    if(!ajName){ toast('이름을 입력하세요','err'); return; }
-    const creds=DB.g(K.CREDS, {id:'admin', pw:'aj2025!'});
-    if(id!==creds.id || pw!==creds.pw){ toast('아이디 또는 비밀번호가 틀렸습니다','err'); const el=document.getElementById('ajPw'); el.classList.add('shake'); setTimeout(()=>el.classList.remove('shake'),500); el.value=''; return; }
-    S={role:'aj',name:ajName,ajType:ajRoleType,company:'AJ네트웍스',siteId:'all',siteName:'전체 현장',loginAt:Date.now()};
+    // AJ 관리자 로그인 — Supabase aj_members 테이블 기반
+    const empNo = document.getElementById('ajEmpNo').value.trim();
+    const pw    = document.getElementById('ajPw').value.trim();
+    const ajRoleChip = document.querySelector('#aj-role-chips .chip.on');
+    const ajType = ajRoleChip?.textContent||'관리자';
+    if(!empNo||!pw){ toast('사번과 비밀번호를 입력하세요','err'); return; }
+    const pwHash = await sha256(pw);
+    let member = null;
+    try {
+      const rows = await sbReq('aj_members','GET',null,`?emp_no=eq.${encodeURIComponent(empNo)}`);
+      if(!rows||!rows.length){ toast('등록되지 않은 사번입니다','err'); const el=document.getElementById('ajPw'); el.classList.add('shake'); setTimeout(()=>el.classList.remove('shake'),500); el.value=''; return; }
+      member = rows[0];
+      if(member.pw_hash !== pwHash){ toast('비밀번호가 틀렸습니다','err'); const el=document.getElementById('ajPw'); el.classList.add('shake'); setTimeout(()=>el.classList.remove('shake'),500); el.value=''; return; }
+      DB.s(K.AJ_MEMBER, member); // 오프라인 캐시 갱신
+    } catch(e){
+      // Supabase 오류 → 로컬 캐시로 폴백
+      const cached = DB.g(K.AJ_MEMBER, null);
+      if(cached && cached.emp_no===empNo && cached.pw_hash===pwHash){
+        member = cached;
+        toast('오프라인 모드로 로그인됨','warn');
+      } else {
+        toast('로그인 실패: '+e.message,'err'); return;
+      }
+    }
+    S={role:'aj',name:member.name,ajType:member.aj_type||ajType,company:'AJ네트웍스',siteId:'all',siteName:'전체 현장',loginAt:Date.now(),empNo:member.emp_no};
   }
   DB.s(K.SESSION,S);
   enterApp();
@@ -3038,18 +3192,6 @@ function enterApp(){
   if(S.role==='aj'){
     const sel=document.getElementById('ajSiteSelect');
     if(sel && S.siteId) sel.value=S.siteId;
-    // 초기 비밀번호 감지 시 강제 변경
-    const _creds=DB.g(K.CREDS,{id:'admin',pw:'aj2025!'});
-    if(_creds.pw==='aj2025!'){
-      window._forcePwChange=true;
-      setTimeout(()=>{
-        const notice=document.getElementById('pw-force-notice');
-        const cancelBtn=document.getElementById('pw-cancel-btn');
-        if(notice) notice.style.display='block';
-        if(cancelBtn) cancelBtn.style.display='none';
-        openSheet('sh-pw');
-      },700);
-    }
   }
   seedIfEmpty();
   renderHome();
@@ -3926,10 +4068,20 @@ function copyInviteCodeSite(siteId){
 }
 function shareInviteCodeSite(siteId, siteName){
   const el = document.getElementById('invite-code-'+siteId);
-  const code = el?.textContent||'';
+  const code = el?.textContent?.trim()||'';
   const txt = `[${siteName}] AJ네트웍스 가동현황 앱 초대코드: ${code}`;
-  if(navigator.share){ navigator.share({title:'초대코드', text:txt}).catch(()=>{}); }
-  else { navigator.clipboard?.writeText(txt).then(()=>toast('공유 텍스트 복사됨','ok')); }
+  const fallback = ()=>{
+    if(navigator.clipboard){
+      navigator.clipboard.writeText(txt).then(()=>toast('공유 텍스트 복사됨','ok')).catch(()=>{});
+    } else {
+      try{ const t=document.createElement('textarea'); t.value=txt; document.body.appendChild(t); t.select(); document.execCommand('copy'); document.body.removeChild(t); toast('공유 텍스트 복사됨','ok'); }catch{}
+    }
+  };
+  if(navigator.share && (typeof navigator.canShare!=='function' || navigator.canShare({text:txt}))){
+    navigator.share({title:'초대코드', text:txt}).catch(fallback);
+  } else {
+    fallback();
+  }
 }
 function saveInviteCodeSite(siteId){
   const inp = document.getElementById('new-code-'+siteId);
@@ -6370,22 +6522,29 @@ async function testSupabaseConnection(){
     toast('연결 실패: ' + e.message,'err');
   }
 }
-function changePw(){
+async function changePw(){
   const cur=document.getElementById('pw-cur').value;
   const nw=document.getElementById('pw-new').value;
   const cf=document.getElementById('pw-cfm').value;
-  const creds=DB.g(K.CREDS,{id:'admin',pw:'aj2025!'});
-  if(cur!==creds.pw){ toast('현재 비밀번호가 틀렸습니다','err'); return; }
   if(nw.length<6){ toast('6자 이상 입력하세요','err'); return; }
   if(nw!==cf){ toast('비밀번호가 일치하지 않습니다','err'); return; }
-  creds.pw=nw; DB.s(K.CREDS,creds);
-  window._forcePwChange=false;
-  const notice=document.getElementById('pw-force-notice');
-  const cancelBtn=document.getElementById('pw-cancel-btn');
-  if(notice) notice.style.display='none';
-  if(cancelBtn) cancelBtn.style.display='';
-  closeSheet('sh-pw'); toast('비밀번호 변경 완료','ok');
-  ['pw-cur','pw-new','pw-cfm'].forEach(id=>document.getElementById(id).value='');
+  const empNo=S?.empNo;
+  if(!empNo){ toast('사번 정보 없음. 재로그인 후 시도하세요','err'); return; }
+  const curHash=await sha256(cur);
+  const cached=DB.g(K.AJ_MEMBER,null);
+  if(cached && cached.pw_hash!==curHash){ toast('현재 비밀번호가 틀렸습니다','err'); return; }
+  const newHash=await sha256(nw);
+  try {
+    await sbReq('aj_members','PATCH',{pw_hash:newHash},`?emp_no=eq.${encodeURIComponent(empNo)}`);
+    if(cached){ cached.pw_hash=newHash; DB.s(K.AJ_MEMBER,cached); }
+    window._forcePwChange=false;
+    const notice=document.getElementById('pw-force-notice');
+    const cancelBtn=document.getElementById('pw-cancel-btn');
+    if(notice) notice.style.display='none';
+    if(cancelBtn) cancelBtn.style.display='';
+    closeSheet('sh-pw'); toast('비밀번호 변경 완료','ok');
+    ['pw-cur','pw-new','pw-cfm'].forEach(id=>document.getElementById(id).value='');
+  } catch(e){ toast('변경 실패: '+e.message,'err'); }
 }
 
 /* ═══════════════════════════════════════════
