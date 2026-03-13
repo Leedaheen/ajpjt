@@ -4182,14 +4182,16 @@ function renderASPage(){
     '처리완료': getAsReqs().filter(r=>(siteId?r.siteId===siteId:true)&&r.status==='처리완료').length,
   };
 
-  // sticky 검색/필터 영역
+  // sticky 검색/필터 영역 — input이 이미 있으면 재렌더 생략 (포커스 유지)
   const stickyEl = document.getElementById('as-sticky-header');
-  if(stickyEl) stickyEl.innerHTML=`
+  if(stickyEl && !stickyEl.querySelector('input')) {
+    stickyEl.innerHTML=`
   <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
     <input class="log-search" placeholder="장비번호·업체명·내용 검색..." value="${_asSearchQ}"
       oninput="_asSearchQ=this.value; renderASPage()" style="flex:1;margin:0">
     ${!isGuest?`<button onclick="openASSheet()" style="font-size:11px;font-weight:800;padding:7px 12px;border-radius:8px;background:linear-gradient(135deg,#dc2626,#b91c1c);color:white;border:none;cursor:pointer;white-space:nowrap">+ AS</button>`:''}
   </div>`;
+  }
 
   el.innerHTML=`<div style="padding:10px 14px 80px">
 
@@ -4487,6 +4489,14 @@ function _trCard(r, _unused, canEdit, canMsg){
     ? `<span style="font-size:9px;font-weight:800;padding:2px 7px;border-radius:8px;background:rgba(34,197,94,.2);color:#22c55e;margin-left:4px">${r.status}</span>`
     : '';
 
+  // 반입 제원+장비번호 복사 버튼
+  let inCopyHtml = '';
+  if (isIn && specs.length) {
+    inCopyHtml = `<div style="display:flex;justify-content:flex-end;margin-bottom:6px">`
+      + `<button onclick="copyInInfo('${r.id}')" style="padding:3px 10px;font-size:10px;background:rgba(96,165,250,.15);border:1px solid rgba(96,165,250,.3);border-radius:6px;color:#60a5fa;cursor:pointer;font-weight:700">제원·장비번호 복사</button>`
+      + `</div>`;
+  }
+
   // AJ 장비번호 영역
   let ajEquipHtml = '';
   if (r.ajEquip) {
@@ -4591,6 +4601,7 @@ function _trCard(r, _unused, canEdit, canMsg){
     + '<div style="padding:10px 12px">'
     +   _renderSpecBlock(r, isIn && isAJ)
     +   ((!isAJ || !isIn) ? ajEquipHtml : '')
+    +   inCopyHtml
     +   '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:10px;color:var(--tx3)">' + contactHtml + '</div>'
     +   ajMsgHtml
     +   ajInputHtml
@@ -4627,6 +4638,25 @@ function copyAjEquip(btn){
   } else {
     const t = document.createElement('textarea');
     t.value = equip; document.body.appendChild(t); t.select();
+    document.execCommand('copy'); document.body.removeChild(t);
+    toast('복사됨','ok');
+  }
+}
+
+function copyInInfo(recId){
+  const r = getTransit().find(x=>x.id===recId);
+  if(!r) return;
+  const lines = (r.specs||[]).map(s=>{
+    let line = s.spec + (s.model?' ('+s.model+')':'') + ' ×'+s.qty;
+    if(s.equipNos && s.equipNos.length) line += '  장비번호: '+s.equipNos.join(', ');
+    return line;
+  });
+  const txt = '[반입] '+r.company+' · '+r.date+'\n'+(lines.length?lines.join('\n'):'(제원 없음)');
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(txt).then(()=>toast('복사됨','ok'));
+  } else {
+    const t=document.createElement('textarea');
+    t.value=txt; document.body.appendChild(t); t.select();
     document.execCommand('copy'); document.body.removeChild(t);
     toast('복사됨','ok');
   }
@@ -5736,7 +5766,7 @@ function renderAdmin(){
   const isSub=role==='sub';
   const isAJ =role==='aj';
   const logs=getLogs(); const sites=getSites();
-  const siteId=isAJ?null:S.siteId;
+  const siteId=S.siteId==='all'?null:S.siteId;
   const siteLogs=siteId?logs.filter(l=>l.siteId===siteId):logs;
   const td=today();
   const tl=getLogsByDate(td).filter(l=>siteId?l.siteId===siteId:true);
@@ -5830,7 +5860,7 @@ function renderAdmin(){
       </div>
       <div class="mrow" onclick="openASList()">
         <div class="mrow-ico" style="background:rgba(220,38,38,.12);color:rgb(220,38,38)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg></div>
-        <div class="mrow-inf"><div class="mrow-title">AS 요청 목록</div><div class="mrow-desc">${getAsReqs().filter(r=>r.status==='대기').length}건 대기 중</div></div>
+        <div class="mrow-inf"><div class="mrow-title">AS 요청 목록</div><div class="mrow-desc">${getAsReqs().filter(r=>(!siteId||r.siteId===siteId)&&r.status==='대기').length}건 대기 중</div></div>
         <div class="mrow-arr">›</div>
       </div>
       `:''}
@@ -6104,7 +6134,9 @@ async function _equipMasterDel(id) {
   if (sh) _renderEquipMasterSheet(sh);
 }
 
-function openMemberMgr(){  const members=getMembers();
+function openMemberMgr(){
+  const siteId=S?.siteId==='all'?null:S?.siteId;
+  const members=getMembers().filter(m=>!siteId||m.siteId===siteId);
   let html=`<div style="padding:14px">
     <div class="shd"><span class="shd-title">협력사 관리자 목록 (${members.length}명)</span></div>
     ${members.length===0?'<div class="empty"><div class="empty-txt">가입된 관리자 없음</div></div>':
@@ -6140,7 +6172,8 @@ function deleteMember(idx){
 }
 
 function openASList(){
-  const reqs=getAsReqs();
+  const siteId=S?.siteId==='all'?null:S?.siteId;
+  const reqs=getAsReqs().filter(r=>!siteId||r.siteId===siteId);
   document.getElementById('adm-content').innerHTML=`
     <div style="display:flex;align-items:center;gap:8px;padding:14px 14px 0">
       <button class="btn-ghost" style="padding:6px 12px;font-size:11px" onclick="renderAdmin()">← 뒤로</button>
