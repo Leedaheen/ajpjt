@@ -1105,6 +1105,10 @@ textarea.fg-input{height:72px;line-height:1.5;}
         <label class="lg-label">이름 <span class="req">*</span></label>
         <input type="text" class="lg-input" id="techName" placeholder="성명 입력" maxlength="20">
       </div>
+      <div class="lg">
+        <label class="lg-label">연락처 <span class="req">*</span></label>
+        <input type="tel" class="lg-input phone-input" id="techPhone" placeholder="숫자만 입력" maxlength="11">
+      </div>
 
       <!-- Privacy (collapsible) -->
       <div class="privacy-wrap" style="padding:10px 14px">
@@ -2991,6 +2995,7 @@ function initLogin(){
   const saved=DB.g(K.SESSION,null);
   if(saved?.name){
     if(document.getElementById('techName')) document.getElementById('techName').value=saved.name;
+    if(saved.phone && document.getElementById('techPhone')) document.getElementById('techPhone').value=saved.phone;
     if(saved.siteId && document.getElementById('techSite')) document.getElementById('techSite').value=saved.siteId;
     if(saved.siteId) syncCoList('techSite');
     if(saved.company && document.getElementById('techCompany')) document.getElementById('techCompany').value=saved.company;
@@ -3096,9 +3101,10 @@ async function doLogin(role){
     const site=document.getElementById('techSite').value;
     const co=document.getElementById('techCompany').value;
     const name=document.getElementById('techName').value.trim();
-    if(!site||!co||!name){ toast('모든 항목을 입력해주세요','err'); return; }
+    const phone=document.getElementById('techPhone')?.value.trim()||'';
+    if(!site||!co||!name||!phone){ toast('모든 항목을 입력해주세요','err'); return; }
     if(!privState.p1||!privState.p2){ toast('필수 동의 항목에 체크해주세요','err'); return; }
-    S={role:'tech',name,company:co,siteId:site,siteName:getSites().find(s=>s.id===site)?.name||site,loginAt:Date.now()};
+    S={role:'tech',name,phone,company:co,siteId:site,siteName:getSites().find(s=>s.id===site)?.name||site,loginAt:Date.now()};
   } else if(role==='sub'){
     const site=document.getElementById('subSite').value;
     const co=document.getElementById('subCompany').value;
