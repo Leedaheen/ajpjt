@@ -3,7 +3,7 @@
    - 정적 자산 캐시 (오프라인 지원)
    - 외부 API (Supabase, Anthropic, Google) 제외
 ═══════════════════════════════════════ */
-const CACHE_NAME = 'ajpjt-v1';
+const CACHE_NAME = 'ajpjt-v2';
 const SHELL = ['/', '/index.html', '/manifest.json', '/sw.js'];
 
 const BYPASS = [
