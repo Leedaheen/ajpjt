@@ -4639,6 +4639,10 @@ function _trCard(r, _unused, canEdit, canMsg){
   const doneBadge = isDone
     ? `<span style="font-size:9px;font-weight:800;padding:2px 7px;border-radius:8px;background:rgba(34,197,94,.2);color:#22c55e;margin-left:4px">${r.status}</span>`
     : '';
+  // 프로젝트 뱃지
+  const projectBadge = r.project
+    ? `<span style="font-size:9px;font-weight:800;padding:2px 6px;border-radius:6px;background:rgba(20,184,166,.2);color:#14b8a6">${r.project}</span>`
+    : '';
 
   // 반입 제원+장비번호 복사 버튼
   let inCopyHtml = '';
@@ -4742,6 +4746,7 @@ function _trCard(r, _unused, canEdit, canMsg){
     +   '<div style="display:flex;align-items:center;gap:8px">'
     +     '<span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px;background:' + (isIn?'rgba(96,165,250,.2)':'rgba(251,146,60,.2)') + ';color:' + typeColor + '">' + typeLabel + '</span>'
     +     doneBadge
+    +     projectBadge
     +     '<span style="font-weight:800;font-size:13px">' + r.company + '</span>'
     +   '</div>'
     +   '<div style="text-align:right">'
@@ -5141,6 +5146,8 @@ function openTransitForm(){
     }
   }
   openSheet('sh-transit-form');
+  // 프로젝트 칩 초기 렌더링 (반입 선택 후 자동 갱신됨)
+  _updateProjectChips();
   // 자동완성은 반출 선택 시 _updateSpecModelVisibility에서 설정됨
 }
 
@@ -5168,9 +5175,27 @@ function _resetTransitForm(){
   if(mhl) mhl.style.display='none';
   const ter = document.getElementById('tr-equip-row');
   if(ter) ter.style.display = 'none';
+  // 프로젝트 칩 선택 초기화
+  document.querySelectorAll('#tr-project-chips .chip.on').forEach(c=>c.classList.remove('on'));
   _trAddSpecRow(); // 기본 1행
 }
 
+function _updateProjectChips(){
+  const siteId = S?.siteId==='all'
+    ? (document.getElementById('tr-site-sel')?.value || getSites()[0]?.id || '')
+    : S?.siteId;
+  const site = getSites().find(s=>s.id===siteId);
+  const projects = site?.projects||[];
+  const row = document.getElementById('tr-project-row');
+  const chipsEl = document.getElementById('tr-project-chips');
+  const isIn = document.querySelector('#tr-type-chips .chip.on')?.textContent==='반입';
+  if(row) row.style.display = (isIn && projects.length) ? '' : 'none';
+  if(chipsEl){
+    chipsEl.innerHTML = projects.map(p=>
+      `<div class="chip" onclick="selectOne(this,'tr-project-chips')">${p}</div>`
+    ).join('');
+  }
+}
 function _updateSpecModelVisibility(){
   const type = document.querySelector('#tr-type-chips .chip.on')?.textContent;
   const isOut = type === '반출';
@@ -5186,6 +5211,7 @@ function _updateSpecModelVisibility(){
     list.innerHTML = '';
     existing.forEach(r => _trAddSpecRow(r.spec, r.model, r.qty, r.equipNos));
   }
+  _updateProjectChips();
 }
 
 function _trAddSpecRow(spec='', model='', qty=1, equipNos=''){
@@ -5415,6 +5441,7 @@ function submitTransit(){
   const siteId = S.siteId === 'all'
     ? (document.getElementById('tr-site-sel')?.value || getSites()[0]?.id || '')
     : S.siteId;
+  const project = document.querySelector('#tr-project-chips .chip.on')?.textContent || '';
   const rec = {
     id: 'tr-' + Date.now().toString(36),
     type: typeVal,
@@ -5422,6 +5449,7 @@ function submitTransit(){
     siteName: getSites().find(s=>s.id===siteId)?.name || siteId,
     date, company, specs, note,
     equip: typeVal === 'out' ? equipVal : '',
+    project,
     recorder: reporterName,
     reporterPhone,
     managerName, managerTitle, managerPhone, managerLocation,
@@ -6378,18 +6406,41 @@ function openSubEquipSheet(){
 /* Sites/Companies management */
 function renderSiteMgr(){
   const sites=getSites();
-  document.getElementById('site-mgr-list').innerHTML=sites.map((s,i)=>`
-    <div class="site-row">
-      <div class="site-row-info"><div class="site-row-name">${s.name}</div><div class="site-row-meta">ID: ${s.id} · 업체 ${getCos(s.id).length}개</div></div>
-      <div class="site-del" onclick="deleteSite('${s.id}')">×</div>
-    </div>`).join('');
+  document.getElementById('site-mgr-list').innerHTML=sites.map((s)=>{
+    const projStr=(s.projects||[]).join(', ');
+    return `
+    <div class="site-row" style="flex-direction:column;align-items:stretch;gap:6px;padding:10px 12px">
+      <div style="display:flex;align-items:center">
+        <div class="site-row-info" style="flex:1"><div class="site-row-name">${s.name}</div><div class="site-row-meta">업체 ${getCos(s.id).length}개</div></div>
+        <div class="site-del" onclick="deleteSite('${s.id}')">×</div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input type="text" class="lg-input" id="proj-input-${s.id}" value="${projStr}"
+          placeholder="프로젝트 (쉼표 구분: Ph.2, Ph.4)"
+          style="flex:1;font-size:11px;padding:5px 8px">
+        <button class="btn-ghost" style="font-size:10px;padding:5px 10px;white-space:nowrap"
+          onclick="saveProjects('${s.id}')">저장</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function saveProjects(siteId){
+  const val=document.getElementById('proj-input-'+siteId)?.value||'';
+  const projects=val.split(',').map(p=>p.trim()).filter(Boolean);
+  const sites=getSites();
+  const idx=sites.findIndex(s=>s.id===siteId);
+  if(idx===-1) return;
+  sites[idx].projects=projects;
+  saveSites(sites);
+  renderSiteMgr();
+  toast('프로젝트 저장됨','ok');
 }
 function addSite(){
   const name=document.getElementById('new-site-name').value.trim();
   if(!name){ toast('현장명을 입력하세요','err'); return; }
   const sites=getSites();
   const id='site'+Date.now().toString(36);
-  sites.push({id,name,active:true});
+  sites.push({id,name,active:true,projects:[]});
   saveSites(sites);
   document.getElementById('new-site-name').value='';
   renderSiteMgr(); toast(`${name} 추가됨`,'ok');
@@ -6804,6 +6855,13 @@ initLogin();
       <div style="font-size:10px;color:var(--tx3);margin-top:4px">반출 선택 시 제원별 장비번호 입력이 필요합니다</div>
     </div>
 
+    <!-- 프로젝트 구분 (반입 시에만 표시) -->
+    <div class="fg" id="tr-project-row" style="display:none">
+      <label class="fg-lbl">프로젝트 구분</label>
+      <div class="chips" id="tr-project-chips" style="flex-wrap:wrap"></div>
+      <div style="font-size:10px;color:var(--tx3);margin-top:4px">해당 없으면 선택하지 않아도 됩니다</div>
+    </div>
+
     <!-- 반입/반출 요청일 -->
     <div class="fg">
       <label class="fg-lbl">반입/반출 요청일 <span class="req">*</span></label>
@@ -6813,7 +6871,7 @@ initLogin();
     <!-- 현장 선택 (AJ 전체 현장 모드 시 표시) -->
     <div class="fg" id="tr-site-row" style="display:none">
       <label class="fg-lbl">현장 선택 <span class="req">*</span></label>
-      <div class="site-select-wrap"><select class="fg-select" id="tr-site-sel"></select></div>
+      <div class="site-select-wrap"><select class="fg-select" id="tr-site-sel" onchange="_updateProjectChips()"></select></div>
     </div>
 
     <!-- 업체명 -->
