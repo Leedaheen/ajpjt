@@ -1916,7 +1916,8 @@ const K = {
   SB_URL:  'sb_url',        // Supabase Project URL
   SB_KEY:  'sb_anon_key',   // Supabase anon/public key
   CREDS:   'aj_creds',
-  AJ_MEMBER: 'aj_member_cache',  // AJ 멤버 로컬 캐시 (오프라인 폴백)
+  AJ_MEMBER:  'aj_member_cache',   // 현재 로그인한 AJ 멤버 캐시
+  AJ_MEMBERS: 'aj_members_local',  // 등록된 AJ 멤버 목록 (로컬 주 저장소)
   INVITE:  'invite_code',        // 전체 기본 (deprecated)
   INVITE_SITE: 'invite_site_',  // prefix: invite_site_{siteId}
   NOTIFS:  'notifs',
@@ -3050,6 +3051,16 @@ function switchAjTab(tab){
     if(btn) btn.classList.toggle('on',t===tab);
   });
 }
+/* ── AJ 멤버 로컬 저장소 헬퍼 ── */
+function _getAjMembers(){ return DB.g(K.AJ_MEMBERS,[]); }
+function _saveAjMembers(arr){ DB.s(K.AJ_MEMBERS,arr); }
+function _syncAjMemberSb(member){ // Supabase 백그라운드 동기화 (실패 무시)
+  sbReq('aj_members','POST',[member],'').catch(()=>{});
+}
+function _patchAjMemberSb(empNo,patch){ // Supabase 백그라운드 패치 (실패 무시)
+  sbReq('aj_members','PATCH',patch,`?emp_no=eq.${encodeURIComponent(empNo)}`).catch(()=>{});
+}
+
 async function doAjRegister(){
   const empNo=document.getElementById('regEmpNo').value.trim();
   const name=document.getElementById('regName').value.trim();
@@ -3060,19 +3071,20 @@ async function doAjRegister(){
   if(!empNo||!name||!phone||!pw){ toast('필수 항목을 모두 입력하세요','err'); return; }
   if(pw.length<6){ toast('비밀번호는 6자 이상이어야 합니다','err'); return; }
   if(pw!==pw2){ toast('비밀번호가 일치하지 않습니다','err'); return; }
-  // 중복 사번 확인
-  try {
-    const existing=await sbReq('aj_members','GET',null,`?emp_no=eq.${encodeURIComponent(empNo)}&select=emp_no`);
-    if(existing&&existing.length){ toast('이미 가입된 사번입니다','err'); return; }
-  } catch(e){ toast('서버 연결 실패: '+e.message,'err'); return; }
+  // 로컬에서 중복 사번 확인
+  const localList=_getAjMembers();
+  if(localList.some(m=>m.emp_no===empNo)){ toast('이미 가입된 사번입니다','err'); return; }
   const pwHash=await sha256(pw);
-  try {
-    await sbReq('aj_members','POST',[{emp_no:empNo,name,phone,pw_hash:pwHash,aj_type:ajType}],'');
-    toast('가입 완료! 로그인하세요','ok');
-    switchAjTab('login');
-    document.getElementById('ajEmpNo').value=empNo;
-    document.getElementById('ajPw').focus();
-  } catch(e){ toast('가입 실패: '+e.message,'err'); }
+  const member={emp_no:empNo,name,phone,pw_hash:pwHash,aj_type:ajType,created_at:Date.now()};
+  // 로컬 저장 (주 저장소)
+  localList.push(member); _saveAjMembers(localList);
+  DB.s(K.AJ_MEMBER, member);
+  // Supabase 백그라운드 동기화 (실패해도 OK)
+  _syncAjMemberSb(member);
+  toast('가입 완료! 로그인하세요','ok');
+  switchAjTab('login');
+  document.getElementById('ajEmpNo').value=empNo;
+  document.getElementById('ajPw').focus();
 }
 async function doAjChangePwLogin(){
   const empNo=document.getElementById('cpEmpNo').value.trim();
@@ -3082,18 +3094,18 @@ async function doAjChangePwLogin(){
   if(!empNo||!name||!pw){ toast('모든 항목을 입력하세요','err'); return; }
   if(pw.length<6){ toast('비밀번호는 6자 이상이어야 합니다','err'); return; }
   if(pw!==pw2){ toast('비밀번호가 일치하지 않습니다','err'); return; }
-  try {
-    const rows=await sbReq('aj_members','GET',null,`?emp_no=eq.${encodeURIComponent(empNo)}&name=eq.${encodeURIComponent(name)}`);
-    if(!rows||!rows.length){ toast('사번 또는 이름이 일치하지 않습니다','err'); return; }
-    const pwHash=await sha256(pw);
-    await sbReq('aj_members','PATCH',{pw_hash:pwHash},`?emp_no=eq.${encodeURIComponent(empNo)}`);
-    // 로컬 캐시도 갱신
-    const cached=DB.g(K.AJ_MEMBER,null);
-    if(cached&&cached.emp_no===empNo){ cached.pw_hash=pwHash; DB.s(K.AJ_MEMBER,cached); }
-    toast('비밀번호 변경 완료','ok');
-    switchAjTab('login');
-    document.getElementById('ajEmpNo').value=empNo;
-  } catch(e){ toast('변경 실패: '+e.message,'err'); }
+  const localList=_getAjMembers();
+  const idx=localList.findIndex(m=>m.emp_no===empNo&&m.name===name);
+  if(idx===-1){ toast('사번 또는 이름이 일치하지 않습니다','err'); return; }
+  const pwHash=await sha256(pw);
+  localList[idx].pw_hash=pwHash; _saveAjMembers(localList);
+  const cached=DB.g(K.AJ_MEMBER,null);
+  if(cached&&cached.emp_no===empNo){ cached.pw_hash=pwHash; DB.s(K.AJ_MEMBER,cached); }
+  // Supabase 백그라운드 패치 (실패해도 OK)
+  _patchAjMemberSb(empNo,{pw_hash:pwHash});
+  toast('비밀번호 변경 완료','ok');
+  switchAjTab('login');
+  document.getElementById('ajEmpNo').value=empNo;
 }
 
 async function doLogin(role){
@@ -3127,30 +3139,36 @@ async function doLogin(role){
         desc:`${co} 업체 관리자 ${name}님이 가입하였습니다`});
     }
   } else {
-    // AJ 관리자 로그인 — Supabase aj_members 테이블 기반
+    // AJ 관리자 로그인 — 로컬스토리지 주 저장소, Supabase 폴백
     const empNo = document.getElementById('ajEmpNo').value.trim();
     const pw    = document.getElementById('ajPw').value.trim();
     const ajRoleChip = document.querySelector('#aj-role-chips .chip.on');
     const ajType = ajRoleChip?.textContent||'관리자';
     if(!empNo||!pw){ toast('사번과 비밀번호를 입력하세요','err'); return; }
     const pwHash = await sha256(pw);
+    const shake = ()=>{ const el=document.getElementById('ajPw'); el.classList.add('shake'); setTimeout(()=>el.classList.remove('shake'),500); el.value=''; };
     let member = null;
-    try {
-      const rows = await sbReq('aj_members','GET',null,`?emp_no=eq.${encodeURIComponent(empNo)}`);
-      if(!rows||!rows.length){ toast('등록되지 않은 사번입니다','err'); const el=document.getElementById('ajPw'); el.classList.add('shake'); setTimeout(()=>el.classList.remove('shake'),500); el.value=''; return; }
-      member = rows[0];
-      if(member.pw_hash !== pwHash){ toast('비밀번호가 틀렸습니다','err'); const el=document.getElementById('ajPw'); el.classList.add('shake'); setTimeout(()=>el.classList.remove('shake'),500); el.value=''; return; }
-      DB.s(K.AJ_MEMBER, member); // 오프라인 캐시 갱신
-    } catch(e){
-      // Supabase 오류 → 로컬 캐시로 폴백
-      const cached = DB.g(K.AJ_MEMBER, null);
-      if(cached && cached.emp_no===empNo && cached.pw_hash===pwHash){
-        member = cached;
-        toast('오프라인 모드로 로그인됨','warn');
-      } else {
-        toast('로그인 실패: '+e.message,'err'); return;
+    // 1) 로컬 목록에서 확인
+    const localList = _getAjMembers();
+    const local = localList.find(m=>m.emp_no===empNo);
+    if(local){
+      if(local.pw_hash!==pwHash){ toast('비밀번호가 틀렸습니다','err'); shake(); return; }
+      member = local;
+    } else {
+      // 2) Supabase 시도 (로컬에 없을 때만)
+      try {
+        const rows = await sbReq('aj_members','GET',null,`?emp_no=eq.${encodeURIComponent(empNo)}`);
+        if(!rows||!rows.length){ toast('등록되지 않은 사번입니다. 먼저 회원가입하세요','err'); shake(); return; }
+        const remote = rows[0];
+        if(remote.pw_hash!==pwHash){ toast('비밀번호가 틀렸습니다','err'); shake(); return; }
+        // Supabase에서 받은 멤버를 로컬에도 저장
+        localList.push(remote); _saveAjMembers(localList);
+        member = remote;
+      } catch(e){
+        toast('등록되지 않은 사번입니다. 먼저 회원가입하세요','err'); shake(); return;
       }
     }
+    DB.s(K.AJ_MEMBER, member);
     S={role:'aj',name:member.name,ajType:member.aj_type||ajType,company:'AJ네트웍스',siteId:'all',siteName:'전체 현장',loginAt:Date.now(),empNo:member.emp_no};
   }
   DB.s(K.SESSION,S);
@@ -6512,15 +6530,19 @@ async function changePw(){
   const empNo=S?.empNo;
   if(!empNo){ toast('사번 정보 없음. 재로그인 후 시도하세요','err'); return; }
   const curHash=await sha256(cur);
-  const cached=DB.g(K.AJ_MEMBER,null);
-  if(cached && cached.pw_hash!==curHash){ toast('현재 비밀번호가 틀렸습니다','err'); return; }
+  // 로컬 목록에서 현재 비밀번호 확인
+  const localList=_getAjMembers();
+  const idx=localList.findIndex(m=>m.emp_no===empNo);
+  if(idx!==-1 && localList[idx].pw_hash!==curHash){ toast('현재 비밀번호가 틀렸습니다','err'); return; }
   const newHash=await sha256(nw);
-  try {
-    await sbReq('aj_members','PATCH',{pw_hash:newHash},`?emp_no=eq.${encodeURIComponent(empNo)}`);
-    if(cached){ cached.pw_hash=newHash; DB.s(K.AJ_MEMBER,cached); }
-    _closePwSheet();
-    toast('비밀번호 변경 완료','ok');
-  } catch(e){ toast('변경 실패: '+e.message,'err'); }
+  // 로컬 저장 (주 저장소)
+  if(idx!==-1){ localList[idx].pw_hash=newHash; _saveAjMembers(localList); }
+  const cached=DB.g(K.AJ_MEMBER,null);
+  if(cached){ cached.pw_hash=newHash; DB.s(K.AJ_MEMBER,cached); }
+  // Supabase 백그라운드 패치 (실패해도 OK)
+  _patchAjMemberSb(empNo,{pw_hash:newHash});
+  _closePwSheet();
+  toast('비밀번호 변경 완료','ok');
 }
 function _closePwSheet(){
   window._forcePwChange=false;
