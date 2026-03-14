@@ -1225,17 +1225,7 @@ textarea.fg-input{height:72px;line-height:1.5;}
         </div>
         <div class="lg">
           <label class="lg-label">연락처 <span class="req">*</span></label>
-          <div style="display:flex;gap:6px">
-            <input type="tel" class="lg-input" id="regPhone" placeholder="010-0000-0000" style="flex:1" oninput="_ajCodeSent=false;_ajCodeVerified=false">
-            <button class="btn-ghost" style="font-size:11px;padding:5px 10px;white-space:nowrap" onclick="doAjSendCode()">인증번호 발송</button>
-          </div>
-        </div>
-        <div class="lg">
-          <label class="lg-label">인증번호</label>
-          <div style="display:flex;gap:6px">
-            <input type="text" class="lg-input" id="regCode" placeholder="6자리 인증번호" style="flex:1" inputmode="numeric" maxlength="6">
-            <button class="btn-ghost" style="font-size:11px;padding:5px 10px;white-space:nowrap" onclick="doAjVerifyCode()">확인</button>
-          </div>
+          <input type="tel" class="lg-input" id="regPhone" placeholder="010-0000-0000">
         </div>
         <div class="lg">
           <label class="lg-label">비밀번호 <span class="req">*</span></label>
@@ -1863,12 +1853,13 @@ alter table equipment disable row level security;</pre>
   <div class="sheet">
     <div class="sh-handle"></div>
     <div class="sh-title">비밀번호 변경</div>
-    <div id="pw-force-notice" style="display:none;padding:10px 12px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:var(--rs);margin-bottom:12px;font-size:12px;color:var(--red);font-weight:600;line-height:1.6">⚠️ 초기 비밀번호가 감지되었습니다. 보안을 위해 지금 바로 변경해야 합니다. 변경 전에는 계속 이 화면이 표시됩니다.</div>
+    <div id="pw-force-notice" style="display:none;padding:10px 12px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:var(--rs);margin-bottom:12px;font-size:12px;color:var(--red);font-weight:600;line-height:1.6">⚠️ 보안을 위해 비밀번호 변경을 권장합니다.</div>
     <div class="lg"><label class="lg-label">현재 비밀번호</label><input type="password" class="lg-input" id="pw-cur" placeholder="현재 비밀번호"></div>
     <div class="lg"><label class="lg-label">새 비밀번호</label><input type="password" class="lg-input" id="pw-new" placeholder="새 비밀번호 (6자 이상)"></div>
     <div class="lg"><label class="lg-label">새 비밀번호 확인</label><input type="password" class="lg-input" id="pw-cfm" placeholder="재입력"></div>
     <div class="btn-gap">
       <button class="btn-full gold" onclick="changePw()">변경</button>
+      <button class="btn-ghost" id="pw-later-btn" style="display:none" onclick="skipPwChange()">다음에 변경하기</button>
       <button class="btn-ghost" id="pw-cancel-btn" onclick="if(!window._forcePwChange)closeSheet('sh-pw')">취소</button>
     </div>
   </div>
@@ -3042,8 +3033,6 @@ function updatePAll(){
 }
 
 /* ── AJ 관리자 로그인 전용 헬퍼 ── */
-let _ajCodeSent=false, _ajVerifCode='', _ajCodeVerified=false;
-
 async function sha256(str){
   const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
   return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
@@ -3055,20 +3044,6 @@ function switchAjTab(tab){
     if(pane) pane.style.display=t===tab?'':'none';
     if(btn) btn.classList.toggle('on',t===tab);
   });
-}
-function doAjSendCode(){
-  const phone=document.getElementById('regPhone').value.trim();
-  if(!phone){ toast('연락처를 먼저 입력하세요','err'); return; }
-  _ajVerifCode=String(Math.floor(100000+Math.random()*900000));
-  _ajCodeSent=true; _ajCodeVerified=false;
-  // SMS 서비스 미연동 — 개발/임시: 인증번호를 토스트로 표시
-  toast('인증번호: '+_ajVerifCode+' (SMS 연동 전 임시)','warn',8000);
-}
-function doAjVerifyCode(){
-  const input=document.getElementById('regCode').value.trim();
-  if(!_ajCodeSent){ toast('먼저 인증번호를 발송하세요','err'); return; }
-  if(input===_ajVerifCode){ _ajCodeVerified=true; toast('인증 완료','ok'); }
-  else { toast('인증번호가 틀렸습니다','err'); }
 }
 async function doAjRegister(){
   const empNo=document.getElementById('regEmpNo').value.trim();
@@ -6537,14 +6512,27 @@ async function changePw(){
   try {
     await sbReq('aj_members','PATCH',{pw_hash:newHash},`?emp_no=eq.${encodeURIComponent(empNo)}`);
     if(cached){ cached.pw_hash=newHash; DB.s(K.AJ_MEMBER,cached); }
-    window._forcePwChange=false;
-    const notice=document.getElementById('pw-force-notice');
-    const cancelBtn=document.getElementById('pw-cancel-btn');
-    if(notice) notice.style.display='none';
-    if(cancelBtn) cancelBtn.style.display='';
-    closeSheet('sh-pw'); toast('비밀번호 변경 완료','ok');
-    ['pw-cur','pw-new','pw-cfm'].forEach(id=>document.getElementById(id).value='');
+    _closePwSheet();
+    toast('비밀번호 변경 완료','ok');
   } catch(e){ toast('변경 실패: '+e.message,'err'); }
+}
+function _closePwSheet(){
+  window._forcePwChange=false;
+  ['pw-force-notice','pw-later-btn'].forEach(id=>{ const e=document.getElementById(id); if(e) e.style.display='none'; });
+  const cancelBtn=document.getElementById('pw-cancel-btn'); if(cancelBtn) cancelBtn.style.display='';
+  ['pw-cur','pw-new','pw-cfm'].forEach(id=>document.getElementById(id).value='');
+  closeSheet('sh-pw');
+}
+function skipPwChange(){
+  _closePwSheet();
+  toast('나중에 꼭 변경해 주세요','warn');
+}
+function openForcedPwSheet(){
+  window._forcePwChange=true;
+  const notice=document.getElementById('pw-force-notice'); if(notice) notice.style.display='block';
+  const laterBtn=document.getElementById('pw-later-btn'); if(laterBtn) laterBtn.style.display='';
+  const cancelBtn=document.getElementById('pw-cancel-btn'); if(cancelBtn) cancelBtn.style.display='none';
+  openSheet('sh-pw');
 }
 
 /* ═══════════════════════════════════════════
