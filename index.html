@@ -738,6 +738,13 @@ input,select,button,textarea{font-family:inherit;}
 .ai-time{font-size:9px;color:var(--tx3);}
 .ai-re{font-size:10px;color:var(--purple);cursor:pointer;}
 
+/* AI Query buttons */
+.ai-qbtn{font-size:11px;font-weight:700;padding:6px 11px;border-radius:20px;background:rgba(99,102,241,.12);color:#a5b4fc;border:1px solid rgba(99,102,241,.25);cursor:pointer;transition:all .15s;white-space:nowrap;}
+.ai-qbtn:active{background:rgba(99,102,241,.28);transform:scale(.96);}
+.ai-qbox{background:linear-gradient(135deg,rgba(99,102,241,.08),rgba(168,85,247,.06));border:1px solid rgba(99,102,241,.18);border-radius:12px;padding:12px;margin-bottom:12px;}
+.ai-qres{margin-top:10px;padding:12px;background:var(--bg2);border:1px solid var(--br);border-radius:10px;font-size:12px;line-height:1.85;color:var(--tx2);}
+.ai-qres b{color:var(--tx);}
+
 /* Period tabs */
 .ptabs{display:flex;gap:5px;margin-bottom:14px;}
 .ptab{
@@ -1408,6 +1415,9 @@ textarea.fg-input{height:72px;line-height:1.5;}
     </div>
 
   </div><!-- /pages -->
+
+  <!-- Scroll-to-top float button -->
+  <button id="scroll-top-btn" onclick="_scrollTop()" style="display:none;position:fixed;bottom:calc(var(--nav-h) + var(--sfb) + 14px);left:50%;transform:translateX(-50%);z-index:200;background:rgba(20,20,30,.88);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.9);border-radius:999px;padding:7px 18px 7px 14px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 4px 24px rgba(0,0,0,.45);white-space:nowrap;transition:opacity .2s,transform .15s">▲ 맨 위로</button>
 
   <!-- Bottom Nav: 홈/반입반출/가동현황/AS/관리 -->
   <nav class="botnav" style="display:grid;grid-template-columns:repeat(5,1fr)">
@@ -3260,6 +3270,7 @@ function enterApp(){
       syncNow().catch(()=>{});
     });
   setInterval(check3PMAlert, 60000);
+  setTimeout(_initScrollTopBtn, 400);
 }
 
 /* ── 네트워크 오프라인 감지 ──────────────────────────────── */
@@ -3379,7 +3390,39 @@ const PG_NT={
 let curPg='pg-home';
 let curOpsTab='input';
 
+/* ── 스크롤 탑 버튼 ─────────────────────────────────────── */
+function _initScrollTopBtn(){
+  const btn = document.getElementById('scroll-top-btn');
+  if(!btn) return;
+  function _check(){
+    if(!btn) return;
+    const asCont = document.getElementById('as-content');
+    let scrolled = false;
+    if(curPg === 'pg-as' && asCont){
+      scrolled = asCont.scrollTop > 280;
+    } else {
+      const pg = document.getElementById(curPg);
+      if(pg) scrolled = pg.scrollTop > 280;
+    }
+    btn.style.display = scrolled ? '' : 'none';
+  }
+  ['pg-transit','pg-ops'].forEach(id=>{
+    document.getElementById(id)?.addEventListener('scroll', _check, {passive:true});
+  });
+  document.getElementById('as-content')?.addEventListener('scroll', _check, {passive:true});
+  window._checkScrollTop = _check;
+}
+function _scrollTop(){
+  const el = curPg === 'pg-as'
+    ? document.getElementById('as-content')
+    : document.getElementById(curPg);
+  el?.scrollTo({top:0, behavior:'smooth'});
+  const btn = document.getElementById('scroll-top-btn');
+  if(btn) btn.style.display = 'none';
+}
+
 function goTab(pgId){
+  document.getElementById('scroll-top-btn')?.style && (document.getElementById('scroll-top-btn').style.display='none');
   document.getElementById(curPg)?.classList.remove('on');
   document.getElementById(PG_NT[curPg])?.classList.remove('on');
   curPg=pgId;
@@ -4660,10 +4703,10 @@ function renderTransit(){
     ? `<span style="font-size:10px;background:rgba(59,139,255,.2);color:#60a5fa;padding:2px 8px;border-radius:6px">${filtered.length}건</span>`
     : '';
 
-  el.innerHTML=`<div style="padding:14px 14px 80px">
-
-  <!-- KPI (클릭 → 달력 팝업) — 5칸 -->
-  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:10px">
+  el.innerHTML=`
+  <!-- KPI sticky bar -->
+  <div id="tr-kpi-bar" style="position:sticky;top:0;z-index:20;background:var(--bg1);padding:8px 14px 6px;border-bottom:1px solid var(--br)">
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px">
     <div class="kpi" style="text-align:center;padding:8px 4px;cursor:pointer" onclick="openTransitCalendar('in','반입')">
       <div style="font-size:16px;font-weight:900;color:var(--blue)">${kpiIn}</div>
       <div style="font-size:9px;color:var(--tx2)">반입 📅</div>
@@ -4685,6 +4728,8 @@ function renderTransit(){
       <div style="font-size:9px;color:var(--tx2)">완료 📅</div>
     </div>
   </div>
+  </div><!-- /tr-kpi-bar -->
+  <div style="padding:10px 14px 80px">
 
   <!-- 검색 필터 바 -->
   <div style="background:var(--bg2);border:1px solid var(--br);border-radius:10px;padding:10px 12px;margin-bottom:12px">
@@ -6212,8 +6257,40 @@ function renderAnalysis(){
     document.getElementById('ana-content').innerHTML=`<div class="locked-page"><div class="lp-ico"></div><div class="lp-title">협력사관리자 이상 접근 가능</div><div class="lp-desc">자동 분석은 협력사관리자 또는<br>AJ관리자만 이용할 수 있습니다.</div></div>`;
     return;
   }
+  const hasKey = !!DB.g('gemini_key','');
+  const aiQBtns = [
+    {t:'weekly',    l:'📋 주간 운영 리포트'},
+    {t:'top-equip', l:'🏆 이달 많이 쓴 장비'},
+    {t:'as-heavy',  l:'🔧 AS 잦은 장비'},
+    {t:'location',  l:'📍 위치별 배포율'},
+    {t:'overload',  l:'⚡ 과부하 장비'},
+    {t:'shortage',  l:'🚨 장비 부족 분석'},
+    {t:'pattern',   l:'👥 고객사 패턴'},
+    {t:'inefficient',l:'💤 비효율 장비'},
+    {t:'transit',   l:'🚛 반입/반출 데이터'},
+  ].map(q=>`<button class="ai-qbtn" onclick="_askAI('${q.t}')">${q.l}</button>`).join('');
+
   document.getElementById('ana-content').innerHTML=`
     <div style="padding:14px 14px 0">
+    <!-- AI 자연어 분석 박스 -->
+    <div class="ai-qbox">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
+        <span style="font-size:15px">🤖</span>
+        <span style="font-size:13px;font-weight:800;color:var(--tx)">AI 데이터 분석</span>
+        <span style="font-size:9px;background:rgba(99,102,241,.18);color:#818cf8;padding:2px 7px;border-radius:10px;margin-left:auto;font-weight:700">Gemini Flash · 무료</span>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
+        <input type="password" id="gemini-key-input" value="${hasKey?'••••••••':''}" placeholder="🔑 Google AI Studio API Key"
+          style="flex:1;font-size:11px;padding:7px 10px;border:1px solid var(--br);border-radius:8px;background:var(--bg1);color:var(--tx);outline:none">
+        <button onclick="_saveGeminiKey()" style="padding:7px 11px;border-radius:8px;background:rgba(99,102,241,.2);color:#a5b4fc;font-size:11px;font-weight:700;border:1px solid rgba(99,102,241,.3);cursor:pointer;white-space:nowrap">저장</button>
+      </div>
+      <div style="font-size:10px;color:var(--tx3);margin-bottom:10px">
+        <a href="https://aistudio.google.com/apikey" target="_blank" style="color:#818cf8;text-decoration:none">Google AI Studio</a>에서 무료 API 키 발급 후 저장하세요
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px">${aiQBtns}</div>
+      <div id="ai-query-result"></div>
+    </div>
+    <!-- 기존 자동 분석 -->
     <div class="ai-panel">
       <div class="ai-hd"><div class="ai-tag">자동 분석</div><div style="font-size:12px;font-weight:700;margin-left:2px">가동률 인사이트</div></div>
       <div class="ai-text" id="ai-text"><div style="display:flex;align-items:center;gap:7px;color:var(--tx3);font-size:11px"><div style="width:14px;height:14px;border:2px solid var(--br);border-top-color:var(--purple);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0"></div>분석 중...</div></div>
@@ -6349,6 +6426,95 @@ async function _renderHeatmapAsync(){
     html+=`<div class="hm-c" style="background:${col}${ds===td?';outline:2px solid var(--blue);outline-offset:-1px':''}">${dt.getDate()}</div>`;
   }
   hg.innerHTML=html;
+}
+
+/* ── Gemini AI 자연어 분석 ────────────────────────────────── */
+function _saveGeminiKey(){
+  const input = document.getElementById('gemini-key-input');
+  const val = (input?.value||'').trim();
+  if(!val || val === '••••••••'){ toast('API 키를 입력해 주세요','warn'); input?.focus(); return; }
+  DB.s('gemini_key', val);
+  toast('Gemini API 키 저장됨 ✓','ok');
+  if(input) input.value = '••••••••';
+}
+
+async function _askAI(type){
+  const key = DB.g('gemini_key','');
+  if(!key){ toast('먼저 Gemini API 키를 저장해 주세요','warn'); document.getElementById('gemini-key-input')?.focus(); return; }
+  const el = document.getElementById('ai-query-result');
+  if(!el) return;
+  el.innerHTML = `<div class="ai-qres" style="display:flex;align-items:center;gap:8px"><div style="width:13px;height:13px;border:2px solid var(--br);border-top-color:#818cf8;border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0"></div><span style="font-size:11px;color:var(--tx3)">AI 분석 중...</span></div>`;
+
+  const siteId  = S?.siteId==='all' ? null : S?.siteId;
+  const site    = S?.siteName || '현장';
+  const allLogs = getLogs().filter(l => siteId ? l.siteId===siteId : true);
+  const allTr   = getTransit().filter(r => siteId ? r.siteId===siteId : true);
+  const td      = today();
+  const now     = new Date();
+
+  // 공통 통계
+  const logDone   = allLogs.filter(l=>l.status==='end');
+  const rate7d    = (() => {
+    const cut = new Date(now); cut.setDate(cut.getDate()-7);
+    const cutS = cut.toISOString().split('T')[0];
+    const r7 = allLogs.filter(l=>l.date>=cutS);
+    return r7.length ? Math.round(r7.filter(l=>l.status==='end').length/r7.length*100) : 0;
+  })();
+  const hrs = logDone.reduce((s,l)=>s+(+l.duration||0),0).toFixed(1);
+
+  // 업체별 집계
+  const coMap = {};
+  allLogs.forEach(l=>{ if(!l.company) return; if(!coMap[l.company]) coMap[l.company]={tot:0,done:0,hrs:0}; coMap[l.company].tot++; if(l.status==='end'){coMap[l.company].done++;coMap[l.company].hrs+=(+l.duration||0);} });
+  const coSummary = Object.entries(coMap).sort((a,b)=>b[1].done-a[1].done).slice(0,10)
+    .map(([co,v])=>`${co}: ${v.done}/${v.tot}건 (${v.tot?Math.round(v.done/v.tot*100):0}%) ${v.hrs.toFixed(1)}h`).join('\n');
+
+  // 장비별 집계
+  const eqMap = {};
+  allLogs.forEach(l=>{ if(!l.equip) return; if(!eqMap[l.equip]) eqMap[l.equip]={tot:0,done:0,hrs:0,company:l.company}; eqMap[l.equip].tot++; if(l.status==='end'){eqMap[l.equip].done++;eqMap[l.equip].hrs+=(+l.duration||0);} });
+  const eqTop = Object.entries(eqMap).sort((a,b)=>b[1].hrs-a[1].hrs).slice(0,10)
+    .map(([eq,v])=>`${eq}(${v.company}): ${v.hrs.toFixed(1)}h/${v.done}완료`).join('\n');
+
+  // 반입반출 통계
+  const trIn  = allTr.filter(r=>r.type==='in');
+  const trOut = allTr.filter(r=>r.type==='out');
+  const trDone = allTr.filter(r=>['반입완료','반출완료','인계완료'].includes(r.status));
+
+  // 위치별
+  const locMap = {};
+  allLogs.forEach(l=>{ const loc=l.location||l.floor||'미상'; locMap[loc]=(locMap[loc]||0)+1; });
+  const locSummary = Object.entries(locMap).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k}:${v}건`).join(', ');
+
+  // 타입별 프롬프트
+  const prompts = {
+    'weekly':      `현장 "${site}" 주간 운영 리포트를 한국어로 작성해. 핵심지표: 최근7일 가동률${rate7d}%, 누적가동시간${hrs}h, 총기록${allLogs.length}건. 업체별현황:\n${coSummary}\n주요장비:\n${eqTop}\n3~5개 불릿으로 성과·문제·개선사항을 간결하게. 불릿마다 굵게 강조 포함.`,
+    'top-equip':   `현장 "${site}" 이달 가장 많이 사용된 장비 분석. 장비별 데이터:\n${eqTop}\n상위 5개 장비를 순위·사용시간·특이사항 포함해 한국어로 분석해줘.`,
+    'as-heavy':    `현장 "${site}" AS 요청이 많은 장비 분석. 장비별 총기록:\n${eqTop}\n가동률이 낮거나 이상이 의심되는 장비를 찾아 AS 필요성을 한국어로 3~5개 불릿으로 설명해줘.`,
+    'location':    `현장 "${site}" 위치별 장비 배포 현황. 위치별 기록: ${locSummary}. 총반입:${trIn.length}건, 총반출:${trOut.length}건. 위치별 장비 밀집도와 효율을 한국어로 분석해줘.`,
+    'overload':    `현장 "${site}" 장비 과부하 분석. 장비별 가동시간:\n${eqTop}\n가동시간이 집중된 장비, 교체나 점검이 필요한 장비를 한국어로 3~5개 불릿으로 분석해줘.`,
+    'shortage':    `현장 "${site}" 장비 부족 분석. 업체별 현황:\n${coSummary}\n위치별 현황: ${locSummary}. 장비 부족이 의심되는 업체나 위치를 한국어로 구체적으로 분석해줘.`,
+    'pattern':     `현장 "${site}" 고객사(협력업체) 사용 패턴 분석. 업체별 데이터:\n${coSummary}\n각 업체의 사용 특징, 가동 패턴, 개선점을 한국어로 업체별로 간결하게 분석해줘.`,
+    'inefficient': `현장 "${site}" 비효율 장비 분석. 장비별 데이터:\n${eqTop}\n가동률이 낮거나 사용시간이 적은 비효율 장비를 찾아 재배치나 반출 권고와 함께 한국어로 분석해줘.`,
+    'transit':     `현장 "${site}" 반입/반출 데이터 분석. 반입:${trIn.length}건(완료:${trIn.filter(r=>r.status==='반입완료').length}건), 반출:${trOut.length}건(완료:${trOut.filter(r=>r.status==='반출완료').length}건), 완료합계:${trDone.length}건. 업체별 반입반출 패턴을 한국어로 3~5개 불릿으로 분석해줘.`,
+  };
+
+  const prompt = (prompts[type] || prompts['weekly']) + '\n\n답변은 반드시 한국어로, 이모지와 불릿(•) 포함, 5줄 이내로 간결하게.';
+
+  try {
+    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:600,temperature:0.7}})
+    });
+    const data = await resp.json();
+    if(!resp.ok) throw new Error(data?.error?.message || `API 오류 ${resp.status}`);
+    const text = (data?.candidates?.[0]?.content?.parts?.[0]?.text || '결과를 가져오지 못했습니다.')
+      .replace(/\*\*(.*?)\*\*/g,'<b>$1</b>')
+      .replace(/\*(.*?)\*/g,'<i>$1</i>')
+      .replace(/\n/g,'<br>');
+    el.innerHTML = `<div class="ai-qres"><div style="font-size:10px;font-weight:700;color:#818cf8;margin-bottom:7px">🤖 Gemini Flash 분석결과</div>${text}</div>`;
+  } catch(err) {
+    el.innerHTML = `<div class="ai-qres" style="border-color:rgba(239,68,68,.3);color:#f87171"><b>오류:</b> ${err.message}<br><span style="font-size:10px;color:var(--tx3)">API 키를 확인하거나 Google AI Studio에서 키를 재발급해 주세요.</span></div>`;
+  }
 }
 
 async function runAI(){
