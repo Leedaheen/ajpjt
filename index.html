@@ -4561,35 +4561,95 @@ function renderTransit(){
   const siteId=S?.siteId==='all'?null:S?.siteId;
   const allRecs=getTransit().filter(r=>siteId?r.siteId===siteId:true);
 
-  // 진행중 / 완료 분류
-  const active = allRecs.filter(r => trDiff(r.date) >= 0 && r.status !== '취소');
-  const done   = allRecs.filter(r => trDiff(r.date) < 0  && r.status !== '취소');
-  const cancelled = allRecs.filter(r => r.status === '취소');
+  // ── 필터 상태 유지 ──────────────────────────
+  if (!window._trFilter) window._trFilter = {date:'', company:'', spec:''};
+  const fDate    = window._trFilter.date    || '';
+  const fCompany = window._trFilter.company || '';
+  const fSpec    = window._trFilter.spec    || '';
+
+  // ── 유니크 업체 목록 ────────────────────────
+  const coSet = new Set();
+  allRecs.forEach(r => {
+    if(r.company)     coSet.add(r.company);
+    if(r.fromCompany) coSet.add(r.fromCompany);
+    if(r.toCompany)   coSet.add(r.toCompany);
+  });
+  const coList = [...coSet].sort((a,b)=>a.localeCompare(b,'ko'));
+
+  // ── 필터 적용 ───────────────────────────────
+  const filtered = allRecs.filter(r => {
+    if (fDate && r.date !== fDate) return false;
+    if (fCompany) {
+      const m = r.company===fCompany || r.fromCompany===fCompany || r.toCompany===fCompany;
+      if (!m) return false;
+    }
+    if (fSpec) {
+      const s = fSpec.toUpperCase();
+      const inSp = (r.specs||[]).some(x=>(x.spec||'').toUpperCase().includes(s)||(x.model||'').toUpperCase().includes(s));
+      const inEq = (r.ajEquip||'').toUpperCase().includes(s);
+      const inHo = (r.handoverEquips||[]).some(x=>x.toUpperCase().includes(s));
+      if (!inSp && !inEq && !inHo) return false;
+    }
+    return true;
+  });
+
+  // ── KPI는 전체 기준 ─────────────────────────
+  const kpiIn  = allRecs.filter(r=>r.type==='in'&&r.status!=='취소').length;
+  const kpiOut = allRecs.filter(r=>r.type==='out'&&r.status!=='취소').length;
+  const kpiHo  = allRecs.filter(r=>r.type==='handover'&&r.status!=='취소').length;
+  const kpiCan = allRecs.filter(r=>r.status==='취소').length;
+
+  // ── 진행중 / 완료 분류 (필터 적용) ──────────
+  const active    = filtered.filter(r => trDiff(r.date) >= 0 && r.status !== '취소');
+  const done      = filtered.filter(r => trDiff(r.date) < 0  && r.status !== '취소');
+  const cancelled = filtered.filter(r => r.status === '취소');
 
   // 날짜 정렬
   active.sort((a,b)=>a.date.localeCompare(b.date));
   done.sort((a,b)=>b.date.localeCompare(a.date));
 
+  const hasFilter = !!(fDate || fCompany || fSpec);
+  const filterBadge = hasFilter
+    ? `<span style="font-size:10px;background:rgba(59,139,255,.2);color:#60a5fa;padding:2px 8px;border-radius:6px">${filtered.length}건</span>`
+    : '';
+
   el.innerHTML=`<div style="padding:14px 14px 80px">
 
-  <!-- KPI -->
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:14px">
-    <div class="kpi" style="text-align:center;padding:10px">
-      <div style="font-size:18px;font-weight:900;color:var(--blue)">${allRecs.filter(r=>r.type==='in'&&r.status!=='취소').length}</div>
-      <div style="font-size:9px;color:var(--tx2)">반입</div>
+  <!-- KPI (클릭 → 달력 팝업) -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:10px">
+    <div class="kpi" style="text-align:center;padding:10px;cursor:pointer" onclick="openTransitCalendar('in','반입')">
+      <div style="font-size:18px;font-weight:900;color:var(--blue)">${kpiIn}</div>
+      <div style="font-size:9px;color:var(--tx2)">반입 📅</div>
     </div>
-    <div class="kpi" style="text-align:center;padding:10px">
-      <div style="font-size:18px;font-weight:900;color:var(--orange)">${allRecs.filter(r=>r.type==='out'&&r.status!=='취소').length}</div>
-      <div style="font-size:9px;color:var(--tx2)">반출</div>
+    <div class="kpi" style="text-align:center;padding:10px;cursor:pointer" onclick="openTransitCalendar('out','반출')">
+      <div style="font-size:18px;font-weight:900;color:var(--orange)">${kpiOut}</div>
+      <div style="font-size:9px;color:var(--tx2)">반출 📅</div>
     </div>
-    <div class="kpi" style="text-align:center;padding:10px">
-      <div style="font-size:18px;font-weight:900;color:#14b8a6">${allRecs.filter(r=>r.type==='handover'&&r.status!=='취소').length}</div>
-      <div style="font-size:9px;color:var(--tx2)">인수인계</div>
+    <div class="kpi" style="text-align:center;padding:10px;cursor:pointer" onclick="openTransitCalendar('handover','인수인계')">
+      <div style="font-size:18px;font-weight:900;color:#14b8a6">${kpiHo}</div>
+      <div style="font-size:9px;color:var(--tx2)">인수인계 📅</div>
     </div>
-    <div class="kpi" style="text-align:center;padding:10px">
-      <div style="font-size:18px;font-weight:900;color:var(--tx3)">${cancelled.length}</div>
-      <div style="font-size:9px;color:var(--tx2)">취소</div>
+    <div class="kpi" style="text-align:center;padding:10px;cursor:pointer" onclick="openTransitCalendar('cancel','취소')">
+      <div style="font-size:18px;font-weight:900;color:var(--tx3)">${kpiCan}</div>
+      <div style="font-size:9px;color:var(--tx2)">취소 📅</div>
     </div>
+  </div>
+
+  <!-- 검색 필터 바 -->
+  <div style="background:var(--bg2);border:1px solid var(--br);border-radius:10px;padding:10px 12px;margin-bottom:12px">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+      <span style="font-size:11px;font-weight:700;color:var(--tx2)">🔍 검색 필터</span>
+      ${hasFilter?`<button onclick="_clearTransitFilter()" style="font-size:10px;padding:2px 8px;border-radius:6px;background:rgba(239,68,68,.12);color:#f87171;border:1px solid rgba(239,68,68,.25);cursor:pointer">✕ 초기화</button>`:''}
+      ${filterBadge}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+      <input type="date" id="tr-filter-date" value="${fDate}" onchange="_filterTransit()" style="font-size:11px;padding:6px 8px;border:1px solid var(--br);border-radius:8px;background:var(--bg1);color:var(--tx);width:100%;box-sizing:border-box">
+      <select id="tr-filter-company" onchange="_filterTransit()" style="font-size:11px;padding:6px 8px;border:1px solid var(--br);border-radius:8px;background:var(--bg1);color:var(--tx);width:100%;box-sizing:border-box">
+        <option value="">전체 업체</option>
+        ${coList.map(c=>`<option value="${c}"${fCompany===c?' selected':''}>${c}</option>`).join('')}
+      </select>
+    </div>
+    <input type="text" id="tr-filter-spec" value="${fSpec}" oninput="_filterTransit()" placeholder="🔧 장비명 / 장비번호 검색" style="font-size:11px;padding:6px 10px;border:1px solid var(--br);border-radius:8px;background:var(--bg1);color:var(--tx);width:100%;box-sizing:border-box">
   </div>
 
   <!-- 신규 등록 버튼 -->
@@ -4600,18 +4660,131 @@ function renderTransit(){
   ${active.length===0?'<div class="empty" style="margin-bottom:10px"><div class="empty-txt">예정 없음</div></div>':
     active.map(r=>_trCard(r, r.id, isAJ, isSub)).join('')}
 
-  <!-- 반입/반출 완료 -->
+  <!-- 완료 -->
   ${done.length>0?`<div class="shd" style="margin-top:10px"><span class="shd-title">완료 (${done.length}건)</span></div>
-  ${done.slice(0,20).map(r=>_trCard(r, r.id, false, false)).join('')}`:''}
+  ${done.slice(0,50).map(r=>_trCard(r, r.id, false, false)).join('')}`:''}
 
   ${cancelled.length>0?`<div class="shd" style="margin-top:8px"><span class="shd-title" style="color:var(--tx3)">취소 (${cancelled.length}건)</span></div>
-  <div style="opacity:.5">${cancelled.slice(0,10).map(r=>_trCard(r, r.id, false, false)).join('')}</div>`:''}
+  <div style="opacity:.5">${cancelled.slice(0,20).map(r=>_trCard(r, r.id, false, false)).join('')}</div>`:''}
   </div>`;
 
   // AJ 관리자 — 반입 예정 카드의 인라인 장비번호 자동완성 초기화
   if (isAJ) {
     active.filter(r => r.type === 'in').forEach(r => _initInlineEquipAC(r.id, r.siteId));
   }
+}
+
+function _filterTransit(){
+  if (!window._trFilter) window._trFilter = {};
+  window._trFilter.date    = document.getElementById('tr-filter-date')?.value    || '';
+  window._trFilter.company = document.getElementById('tr-filter-company')?.value || '';
+  window._trFilter.spec    = document.getElementById('tr-filter-spec')?.value    || '';
+  renderTransit();
+}
+
+function _clearTransitFilter(){
+  window._trFilter = {date:'', company:'', spec:''};
+  renderTransit();
+}
+
+// ── KPI 달력 팝업 ─────────────────────────────────────────────
+function openTransitCalendar(type, label){
+  const siteId  = S?.siteId==='all' ? null : S?.siteId;
+  const allRecs = getTransit().filter(r => siteId ? r.siteId===siteId : true);
+  const d = new Date();
+  window._calState = { type, label, year: d.getFullYear(), month: d.getMonth(), allRecs };
+  _renderTransitCalendar();
+}
+
+function _renderTransitCalendar(){
+  const {type, label, year, month, allRecs} = window._calState;
+
+  // 타입별 레코드 필터
+  const typeRecs = type === 'cancel'
+    ? allRecs.filter(r => r.status === '취소')
+    : allRecs.filter(r => r.type === type && r.status !== '취소');
+
+  // 날짜별 건수 집계
+  const dateCnt = {};
+  typeRecs.forEach(r => { dateCnt[r.date] = (dateCnt[r.date]||0)+1; });
+
+  const firstDay    = new Date(year, month, 1).getDay();   // 0=일
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const todayStr    = today();
+  const MON = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  const typeColor   = type==='in'?'var(--blue)':type==='out'?'var(--orange)':type==='handover'?'#14b8a6':'var(--tx3)';
+
+  // 요일 헤더
+  let cellHtml = ['일','월','화','수','목','금','토'].map((d,i)=>
+    `<div style="text-align:center;font-size:10px;font-weight:700;padding:4px 0;color:${i===0?'#f87171':i===6?'#93c5fd':'var(--tx2)'}">${d}</div>`
+  ).join('');
+
+  // 빈 칸
+  for(let i=0;i<firstDay;i++) cellHtml += '<div></div>';
+
+  // 날짜 칸
+  for(let d=1;d<=daysInMonth;d++){
+    const mm = String(month+1).padStart(2,'0');
+    const dd = String(d).padStart(2,'0');
+    const ds = `${year}-${mm}-${dd}`;
+    const cnt = dateCnt[ds] || 0;
+    const isToday = ds === todayStr;
+    const dow = (firstDay + d - 1) % 7;
+    const tx  = isToday ? '#fff' : dow===0 ? '#f87171' : dow===6 ? '#93c5fd' : 'var(--tx)';
+    const bg  = isToday ? 'background:var(--blue);border-radius:8px;' : '';
+    const click = cnt ? `onclick="_calSelectDate('${ds}')"` : '';
+    cellHtml += `<div ${click} style="text-align:center;padding:3px 1px;${bg}${cnt?'cursor:pointer;':''}border-radius:8px;transition:.1s"
+      ${cnt?`onmouseenter="this.style.background='rgba(255,255,255,.1)'" onmouseleave="this.style.background='${isToday?'var(--blue)':'transparent'}'"`:''}>
+      <div style="font-size:12px;font-weight:${isToday||cnt?700:400};color:${tx}">${d}</div>
+      ${cnt
+        ? `<div style="font-size:9px;font-weight:800;color:${typeColor}">${cnt}건</div>`
+        : '<div style="height:14px"></div>'}
+    </div>`;
+  }
+
+  document.getElementById('transit-cal-popup')?.remove();
+  const ov = document.createElement('div');
+  ov.id = 'transit-cal-popup';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:3000;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box';
+  ov.onclick = e => { if(e.target===ov) _closeTransitCalendar(); };
+  ov.innerHTML = `
+    <div style="background:var(--bg1);border-radius:16px;width:100%;max-width:360px;padding:16px;box-shadow:0 8px 48px rgba(0,0,0,.7)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <span style="font-size:14px;font-weight:800;color:${typeColor}">📅 ${label} 달력</span>
+        <button onclick="_closeTransitCalendar()" style="font-size:18px;background:none;border:none;color:var(--tx2);cursor:pointer;line-height:1">✕</button>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <button onclick="_calNavMonth(-1)" style="font-size:20px;background:none;border:none;color:var(--tx2);cursor:pointer;padding:4px 10px;border-radius:8px;transition:.1s" onmouseenter="this.style.background='rgba(255,255,255,.08)'" onmouseleave="this.style.background='none'">‹</button>
+        <span style="font-size:14px;font-weight:700">${year}년 ${MON[month]}</span>
+        <button onclick="_calNavMonth(1)"  style="font-size:20px;background:none;border:none;color:var(--tx2);cursor:pointer;padding:4px 10px;border-radius:8px;transition:.1s" onmouseenter="this.style.background='rgba(255,255,255,.08)'" onmouseleave="this.style.background='none'">›</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px">${cellHtml}</div>
+      <div style="margin-top:10px;font-size:10px;color:var(--tx3);text-align:center">건수 표시된 날짜를 클릭하면 해당 일 목록이 검색됩니다</div>
+    </div>`;
+  document.body.appendChild(ov);
+}
+
+function _calNavMonth(delta){
+  if(!window._calState) return;
+  let {year,month} = window._calState;
+  month += delta;
+  if(month>11){month=0;year++;}
+  if(month<0) {month=11;year--;}
+  window._calState.year  = year;
+  window._calState.month = month;
+  _renderTransitCalendar();
+}
+
+function _calSelectDate(ds){
+  if(!window._trFilter) window._trFilter={};
+  window._trFilter.date = ds;
+  _closeTransitCalendar();
+  renderTransit();
+}
+
+function _closeTransitCalendar(){
+  document.getElementById('transit-cal-popup')?.remove();
+  window._calState = null;
 }
 
 function _trHandoverCard(r, canEdit) {
@@ -5313,6 +5486,7 @@ function _updateSpecModelVisibility(){
     // 반입 전용 프로젝트 칩 숨기기
     const pr = document.getElementById('tr-project-row');
     if (pr) pr.style.display = 'none';
+    _populateHandoverCompanies();
     _updateHandoverProjChips();
     return;
   }
@@ -5334,6 +5508,21 @@ function _updateSpecModelVisibility(){
 }
 
 // ── 인수인계 헬퍼 ────────────────────────────────────────────
+function _populateHandoverCompanies(){
+  // transit 기록 + 장비마스터에서 유니크 업체명 수집
+  const companies = new Set();
+  getTransit().forEach(r => {
+    if (r.company)     companies.add(r.company);
+    if (r.fromCompany) companies.add(r.fromCompany);
+    if (r.toCompany)   companies.add(r.toCompany);
+  });
+  getEquipMaster().forEach(e => { if (e.company) companies.add(e.company); });
+  const dl = document.getElementById('handover-company-datalist');
+  if (!dl) return;
+  dl.innerHTML = [...companies].sort((a,b)=>a.localeCompare(b,'ko'))
+    .map(c=>`<option value="${c}">`).join('');
+}
+
 function _updateHandoverEquipList(){
   const fromCo = document.getElementById('tr-from-co')?.value.trim();
   const chipsEl = document.getElementById('tr-handover-equip-chips');
@@ -7207,15 +7396,18 @@ initLogin();
     <!-- ─── 인수인계 전용 섹션 ─── -->
     <div id="tr-handover-section" style="display:none">
 
+      <!-- 업체 datalist (동적으로 채워짐) -->
+      <datalist id="handover-company-datalist"></datalist>
+
       <!-- 인계업체 / 인수업체 -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         <div class="fg">
           <label class="fg-lbl">인계업체 <span class="req">*</span></label>
-          <input type="text" class="fg-input" id="tr-from-co" placeholder="인계 업체명" oninput="_updateHandoverEquipList()">
+          <input type="text" class="fg-input" id="tr-from-co" list="handover-company-datalist" placeholder="인계 업체명" oninput="_updateHandoverEquipList()" autocomplete="off">
         </div>
         <div class="fg">
           <label class="fg-lbl">인수업체 <span class="req">*</span></label>
-          <input type="text" class="fg-input" id="tr-to-co" placeholder="인수 업체명">
+          <input type="text" class="fg-input" id="tr-to-co" list="handover-company-datalist" placeholder="인수 업체명" autocomplete="off">
         </div>
       </div>
 
@@ -7258,10 +7450,18 @@ initLogin();
       <!-- 사용 위치 -->
       <div class="fg">
         <label class="fg-lbl">사용 위치</label>
-        <div class="chips" id="tr-handover-location-chips" style="flex-wrap:wrap">
+        <div class="chips" id="tr-handover-location-chips" style="flex-wrap:wrap;gap:5px">
           <div class="chip" onclick="selectOne(this,'tr-handover-location-chips')">모듈동</div>
           <div class="chip" onclick="selectOne(this,'tr-handover-location-chips')">외곽</div>
-          <div class="chip" onclick="selectOne(this,'tr-handover-location-chips')">내부</div>
+          <div class="chip" onclick="selectOne(this,'tr-handover-location-chips')">1F</div>
+          <div class="chip" onclick="selectOne(this,'tr-handover-location-chips')">2F</div>
+          <div class="chip" onclick="selectOne(this,'tr-handover-location-chips')">3F</div>
+          <div class="chip" onclick="selectOne(this,'tr-handover-location-chips')">4F</div>
+          <div class="chip" onclick="selectOne(this,'tr-handover-location-chips')">5F</div>
+          <div class="chip" onclick="selectOne(this,'tr-handover-location-chips')">6F</div>
+          <div class="chip" onclick="selectOne(this,'tr-handover-location-chips')">7F</div>
+          <div class="chip" onclick="selectOne(this,'tr-handover-location-chips')">8F</div>
+          <div class="chip" onclick="selectOne(this,'tr-handover-location-chips')">9F</div>
           <div class="chip" onclick="selectOne(this,'tr-handover-location-chips')">기타</div>
         </div>
       </div>
