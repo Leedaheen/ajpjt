@@ -1149,6 +1149,10 @@ textarea.fg-input{height:72px;line-height:1.5;}
         </div>
       </div>
 
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--tx2);padding:6px 0;margin-bottom:4px">
+        <input type="checkbox" id="chk-auto-login-tech" checked style="width:16px;height:16px;accent-color:var(--blue);cursor:pointer;flex-shrink:0">
+        자동 로그인 <span style="font-size:10px;color:var(--tx3)">(7일간 유지)</span>
+      </label>
       <button class="login-btn tech" onclick="doLogin('tech')">기술인으로 시작하기</button>
       <div class="quick-login">이전에 로그인하셨나요? <b onclick="loadSession()">저장된 정보로 계속하기</b></div>
       <div class="quick-login" style="margin-top:6px"><b onclick="startBrowse()" style="color:var(--tx3)">데이터 없이 둘러보기</b></div>
@@ -1183,6 +1187,10 @@ textarea.fg-input{height:72px;line-height:1.5;}
         <label class="lg-label">초대코드 <span class="req">*</span></label>
         <input type="password" class="lg-input" id="subCode" placeholder="AJ관리자에게 발급받은 코드">
       </div>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--tx2);padding:6px 0;margin-bottom:4px">
+        <input type="checkbox" id="chk-auto-login-sub" checked style="width:16px;height:16px;accent-color:var(--teal);cursor:pointer;flex-shrink:0">
+        자동 로그인 <span style="font-size:10px;color:var(--tx3)">(7일간 유지)</span>
+      </label>
       <button class="login-btn sub" onclick="doLogin('sub')">협력사 관리자로 로그인</button>
     </div>
 
@@ -1215,6 +1223,10 @@ textarea.fg-input{height:72px;line-height:1.5;}
           <label class="lg-label">비밀번호 <span class="req">*</span></label>
           <input type="password" class="lg-input" id="ajPw" placeholder="비밀번호" onkeydown="if(event.key==='Enter')doLogin('aj')">
         </div>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--tx2);padding:6px 0;margin-bottom:4px">
+          <input type="checkbox" id="chk-auto-login-aj" checked style="width:16px;height:16px;accent-color:var(--yellow);cursor:pointer;flex-shrink:0">
+          자동 로그인 <span style="font-size:10px;color:var(--tx3)">(7일간 유지)</span>
+        </label>
         <button class="login-btn aj" onclick="doLogin('aj')">AJ 관리자로 로그인</button>
       </div>
       <!-- 회원가입 탭 -->
@@ -2977,6 +2989,18 @@ let curRole='tech';
 const priv={p1:true,p2:true,p3:false};
 
 function initLogin(){
+  // ── 자동 로그인 처리 ────────────────────────────────────
+  const autoLoginPref = DB.g('auto_login', null); // null = 아직 설정 안 됨 (=true 로 간주)
+  const saved = DB.g(K.SESSION, null);
+  if (autoLoginPref !== false && saved && (Date.now() - saved.loginAt) <= 7*24*60*60*1000) {
+    S = saved; enterApp(); return;
+  }
+  // 체크박스 상태 복원 (기본값 true)
+  const isAutoOn = autoLoginPref !== false;
+  ['chk-auto-login-tech','chk-auto-login-sub','chk-auto-login-aj'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.checked=isAutoOn;
+  });
+
   const sites=getSites();
   ['techSite','subSite'].forEach(id=>{
     const el=document.getElementById(id);
@@ -2995,8 +3019,7 @@ function initLogin(){
   }
   syncCoList('techSite');
   syncCoList('subSite');
-  // restore saved info
-  const saved=DB.g(K.SESSION,null);
+  // restore saved info (상단에서 이미 선언된 saved 재사용)
   if(saved?.name){
     if(document.getElementById('techName')) document.getElementById('techName').value=saved.name;
     if(saved.phone && document.getElementById('techPhone')) document.getElementById('techPhone').value=saved.phone;
@@ -3082,9 +3105,18 @@ async function doAjRegister(){
   // 로컬 저장 (주 저장소)
   localList.push(member); _saveAjMembers(localList);
   DB.s(K.AJ_MEMBER, member);
-  // Supabase 백그라운드 동기화 (실패해도 OK)
-  _syncAjMemberSb(member);
-  toast('가입 완료! 로그인하세요','ok');
+  // Supabase 동기화 (await — 서버 저장 여부 사용자에게 피드백)
+  try {
+    await sbReq('aj_members','POST',[member],'');
+    toast('가입 완료! 서버에 저장되었습니다','ok');
+  } catch(sbErr) {
+    if (sbErr?.message === 'NO_SB_URL') {
+      toast('가입 완료 (Supabase 미설정 — 이 기기에서만 로그인 가능)','warn');
+    } else {
+      console.warn('[AJ Register] Supabase 저장 실패:', sbErr?.message);
+      toast('가입 완료! 단, 서버 저장 실패 — 다른 기기에서는 로그인이 안 될 수 있습니다. 관리자에게 문의하세요.','warn');
+    }
+  }
   switchAjTab('login');
   document.getElementById('ajEmpNo').value=empNo;
   document.getElementById('ajPw').focus();
@@ -3175,6 +3207,9 @@ async function doLogin(role){
     S={role:'aj',name:member.name,ajType:member.aj_type||ajType,company:'AJ네트웍스',siteId:'all',siteName:'전체 현장',loginAt:Date.now(),empNo:member.emp_no};
   }
   DB.s(K.SESSION,S);
+  // 자동 로그인 설정 저장
+  const _autoChkId = role==='tech'?'chk-auto-login-tech':role==='sub'?'chk-auto-login-sub':'chk-auto-login-aj';
+  DB.s('auto_login', document.getElementById(_autoChkId)?.checked !== false);
   enterApp();
 }
 
@@ -3258,7 +3293,7 @@ if('serviceWorker' in navigator && !_swSkip){
 
 function doLogout(){
   if(!confirm('로그아웃 하시겠습니까?')) return;
-  S=null; DB.s(K.SESSION,null); location.reload();
+  S=null; DB.s(K.SESSION,null); DB.s('auto_login',false); location.reload();
 }
 
 /* ═══════════════════════════════════════════
