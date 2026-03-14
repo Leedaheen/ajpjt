@@ -44,7 +44,7 @@
   --purple: #8b5cf6;
 
   /* Role colors */
-  --aj:     #f59e0b;
+  --aj:     #DE1F23;
   --sub:    #14b8a6;
   --tech:   #3b8bff;
 
@@ -117,7 +117,7 @@
     --purple: #7c3aed;
 
     /* Role colors */
-    --aj:     #d97706;
+    --aj:     #b91c1c;
     --sub:    #0d9488;
     --tech:   #2563eb;
 
@@ -251,7 +251,7 @@ input,select,button,textarea{font-family:inherit;}
 }
 .role-tab.active-tech  {background:rgba(59,139,255,.2); color:var(--blue); box-shadow:0 2px 8px rgba(59,139,255,.2);}
 .role-tab.active-sub   {background:rgba(20,184,166,.2); color:var(--teal); box-shadow:0 2px 8px rgba(20,184,166,.2);}
-.role-tab.active-aj    {background:rgba(245,158,11,.2);  color:var(--aj);   box-shadow:0 2px 8px rgba(245,158,11,.2);}
+.role-tab.active-aj    {background:rgba(222,31,35,.2);   color:var(--aj);   box-shadow:0 2px 8px rgba(222,31,35,.2);}
 
 /* Login form body */
 .login-body{flex:1;padding:12px 20px 80px;overflow-y:auto;}
@@ -297,7 +297,7 @@ input,select,button,textarea{font-family:inherit;}
   display:flex;gap:10px;align-items:flex-start;
 }
 .role-notice.sub{background:rgba(20,184,166,.07);border:1px solid rgba(20,184,166,.2);}
-.role-notice.aj {background:rgba(245,158,11,.07); border:1px solid rgba(245,158,11,.2);}
+.role-notice.aj {background:rgba(222,31,35,.07);  border:1px solid rgba(222,31,35,.2);}
 .rn-ico{font-size:18px;flex-shrink:0;margin-top:1px;}
 .rn-txt{font-size:12px;color:var(--tx2);line-height:1.7;}
 .rn-txt b{color:var(--tx);}
@@ -337,10 +337,10 @@ input,select,button,textarea{font-family:inherit;}
 .login-btn:disabled{opacity:.4;cursor:not-allowed;transform:none!important;}
 .login-btn.tech{background:linear-gradient(135deg,var(--blue),#1e3a8a);box-shadow:0 4px 16px rgba(59,139,255,.3);}
 .login-btn.sub {background:linear-gradient(135deg,var(--teal),#0f766e);box-shadow:0 4px 16px rgba(20,184,166,.3);}
-.login-btn.aj  {background:linear-gradient(135deg,var(--aj),#92400e);  box-shadow:0 4px 16px rgba(245,158,11,.3);}
+.login-btn.aj  {background:linear-gradient(135deg,var(--aj),#7f1d1d);  box-shadow:0 4px 16px rgba(222,31,35,.3);}
 
-.aj-tab{flex:1;padding:6px 4px;font-size:11px;font-weight:600;background:transparent;border:1px solid rgba(251,191,36,.3);border-radius:6px;color:var(--tx3);cursor:pointer;transition:.15s}
-.aj-tab.on{background:rgba(251,191,36,.18);color:#fbbf24;border-color:#fbbf24}
+.aj-tab{flex:1;padding:6px 4px;font-size:11px;font-weight:600;background:transparent;border:1px solid rgba(222,31,35,.3);border-radius:6px;color:var(--tx3);cursor:pointer;transition:.15s}
+.aj-tab.on{background:rgba(222,31,35,.18);color:#DE1F23;border-color:#DE1F23}
 .quick-login{text-align:center;margin-top:10px;font-size:11px;color:var(--tx3);}
 .quick-login b{color:var(--blue);cursor:pointer;text-decoration:underline;}
 
@@ -412,7 +412,7 @@ input,select,button,textarea{font-family:inherit;}
 }
 .rbadge.tech{background:rgba(59,139,255,.15); color:var(--blue);}
 .rbadge.sub {background:rgba(20,184,166,.15); color:var(--teal);}
-.rbadge.aj  {background:rgba(245,158,11,.15); color:var(--aj);}
+.rbadge.aj  {background:rgba(222,31,35,.15);  color:var(--aj);}
 
 /* Site indicator */
 .site-pill{
@@ -783,13 +783,13 @@ input,select,button,textarea{font-family:inherit;}
   border-radius:var(--r);padding:14px;margin-bottom:14px;
   display:flex;align-items:center;gap:13px;
 }
-.admin-profile.aj {background:linear-gradient(135deg,rgba(245,158,11,.1),rgba(245,158,11,.04));border:1px solid rgba(245,158,11,.2);}
+.admin-profile.aj {background:linear-gradient(135deg,rgba(222,31,35,.1),rgba(222,31,35,.04));border:1px solid rgba(222,31,35,.2);}
 .admin-profile.sub{background:linear-gradient(135deg,rgba(20,184,166,.1),rgba(20,184,166,.04));border:1px solid rgba(20,184,166,.2);}
 .ap-avi{
   width:44px;height:44px;border-radius:50%;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;color:white;
 }
-.ap-avi.aj {background:linear-gradient(135deg,var(--aj),#92400e);}
+.ap-avi.aj {background:linear-gradient(135deg,var(--aj),#7f1d1d);}
 .ap-avi.sub{background:linear-gradient(135deg,var(--teal),#0f766e);}
 .ap-name{font-size:14px;font-weight:900;}
 .ap-role{font-size:10px;font-weight:700;margin-top:2px;}
@@ -865,7 +865,7 @@ input,select,button,textarea{font-family:inherit;}
 .btn-full.green{background:linear-gradient(135deg,var(--green),#15803d);box-shadow:0 4px 14px rgba(34,197,94,.2);}
 .btn-full.teal {background:linear-gradient(135deg,var(--teal),#0f766e); box-shadow:0 4px 14px rgba(20,184,166,.2);}
 .btn-full.red  {background:linear-gradient(135deg,var(--red),#991b1b);  box-shadow:0 4px 14px rgba(239,68,68,.2);}
-.btn-full.gold {background:linear-gradient(135deg,var(--aj),#92400e);  box-shadow:0 4px 14px rgba(245,158,11,.2);}
+.btn-full.gold {background:linear-gradient(135deg,var(--aj),#7f1d1d);  box-shadow:0 4px 14px rgba(222,31,35,.2);}
 .btn-ghost{
   width:100%;padding:13px;background:var(--bg2);border:1px solid var(--br);
   border-radius:var(--r);color:var(--tx2);font-size:14px;cursor:pointer;margin-top:7px;
@@ -1028,7 +1028,7 @@ textarea.fg-input{height:72px;line-height:1.5;}
   /* 역할 탭 active 색상 (라이트에서 더 진하게) */
   .role-tab.active-tech { background: rgba(37,99,235,.15); color: var(--blue); }
   .role-tab.active-sub  { background: rgba(13,148,136,.15); color: var(--teal); }
-  .role-tab.active-aj   { background: rgba(217,119,6,.15);  color: var(--yellow); }
+  .role-tab.active-aj   { background: rgba(185,28,28,.15);  color: var(--aj); }
 
   /* botnav 탭 active */
   .ntab.on .ni { color: var(--blue); }
@@ -4565,20 +4565,25 @@ function updateASBadge(){
 // ── 제원 목록 ──
 const TR_SPECS = ['6M','8M','10M','12M','14M','16M','18M','16M굴절','기타'];
 
-// 반입반출 상태 라벨
+// 영업일 기준 다음 날 (주말 건너뜀)
+function nextBizDay(dateStr){
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() + 1);
+  while(d.getDay()===0||d.getDay()===6) d.setDate(d.getDate()+1);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+// 반입반출 상태 라벨 (영업일 기준)
 function trStatusLabel(date, type){
   const td = today();
-  const ymd = d => d.replace(/-/g,'');
-  const tStr = ymd(td);
-  const dStr = ymd(date);
-  const diff = (new Date(date) - new Date(td)) / 86400000;
   const verb = type==='in' ? ['반입','금일반입','명일반입','반입완료']
              : type==='handover' ? ['인수인계','금일인계','명일인계','인계완료']
              : ['반출','금일반출','명일반출','반출완료'];
-  if(diff > 1)  return {label: verb[2], color:'#f59e0b', bg:'rgba(245,158,11,.15)', done:false};
-  if(diff === 1) return {label: verb[2], color:'#f59e0b', bg:'rgba(245,158,11,.15)', done:false};
-  if(diff === 0) return {label: verb[1], color:'#3b82f6', bg:'rgba(59,130,246,.15)', done:false};
-  return {label: verb[3], color:'#6b7280', bg:'rgba(107,114,128,.15)', done:true};
+  const diff = (new Date(date) - new Date(td)) / 86400000;
+  if(diff < 0)                  return {label: verb[3], color:'#22c55e',      bg:'rgba(34,197,94,.15)',   done:true};
+  if(date === td)               return {label: verb[1], color:'#3b82f6',      bg:'rgba(59,130,246,.15)',  done:false};
+  if(date === nextBizDay(td))   return {label: verb[2], color:'var(--orange)', bg:'rgba(249,115,22,.15)', done:false};
+  return {label: verb[0], color:'var(--tx2)', bg:'rgba(255,255,255,.05)', done:false};
 }
 
 // 날짜 차이 정밀 계산
@@ -4629,14 +4634,19 @@ function renderTransit(){
   });
 
   // ── KPI는 전체 기준 ─────────────────────────
-  const kpiIn  = allRecs.filter(r=>r.type==='in'&&r.status!=='취소').length;
-  const kpiOut = allRecs.filter(r=>r.type==='out'&&r.status!=='취소').length;
-  const kpiHo  = allRecs.filter(r=>r.type==='handover'&&r.status!=='취소').length;
-  const kpiCan = allRecs.filter(r=>r.status==='취소').length;
+  const DONE_ST = ['반입완료','반출완료','인계완료'];
+  const kpiIn   = allRecs.filter(r=>r.type==='in'&&r.status!=='취소').length;
+  const kpiOut  = allRecs.filter(r=>r.type==='out'&&r.status!=='취소').length;
+  const kpiHo   = allRecs.filter(r=>r.type==='handover'&&r.status!=='취소').length;
+  const kpiCan  = allRecs.filter(r=>r.status==='취소').length;
+  const kpiDone = allRecs.filter(r=>DONE_ST.includes(r.status)).length;
 
-  // ── 진행중 / 완료 분류 (필터 적용) ──────────
-  const active    = filtered.filter(r => trDiff(r.date) >= 0 && r.status !== '취소');
-  const done      = filtered.filter(r => trDiff(r.date) < 0  && r.status !== '취소');
+  // ── 섹션 분류 (상태 기준) ──────────────────
+  // 진행 예정: 아직 완료/취소 안된 것
+  const active    = filtered.filter(r => r.status === '예정');
+  // 완료: 완료 버튼이 눌러진 것
+  const done      = filtered.filter(r => DONE_ST.includes(r.status));
+  // 취소
   const cancelled = filtered.filter(r => r.status === '취소');
 
   // 날짜 정렬
@@ -4650,23 +4660,27 @@ function renderTransit(){
 
   el.innerHTML=`<div style="padding:14px 14px 80px">
 
-  <!-- KPI (클릭 → 달력 팝업) -->
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:10px">
-    <div class="kpi" style="text-align:center;padding:10px;cursor:pointer" onclick="openTransitCalendar('in','반입')">
-      <div style="font-size:18px;font-weight:900;color:var(--blue)">${kpiIn}</div>
+  <!-- KPI (클릭 → 달력 팝업) — 5칸 -->
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:10px">
+    <div class="kpi" style="text-align:center;padding:8px 4px;cursor:pointer" onclick="openTransitCalendar('in','반입')">
+      <div style="font-size:16px;font-weight:900;color:var(--blue)">${kpiIn}</div>
       <div style="font-size:9px;color:var(--tx2)">반입 📅</div>
     </div>
-    <div class="kpi" style="text-align:center;padding:10px;cursor:pointer" onclick="openTransitCalendar('out','반출')">
-      <div style="font-size:18px;font-weight:900;color:var(--orange)">${kpiOut}</div>
+    <div class="kpi" style="text-align:center;padding:8px 4px;cursor:pointer" onclick="openTransitCalendar('out','반출')">
+      <div style="font-size:16px;font-weight:900;color:var(--orange)">${kpiOut}</div>
       <div style="font-size:9px;color:var(--tx2)">반출 📅</div>
     </div>
-    <div class="kpi" style="text-align:center;padding:10px;cursor:pointer" onclick="openTransitCalendar('handover','인수인계')">
-      <div style="font-size:18px;font-weight:900;color:#14b8a6">${kpiHo}</div>
+    <div class="kpi" style="text-align:center;padding:8px 4px;cursor:pointer" onclick="openTransitCalendar('handover','인수인계')">
+      <div style="font-size:16px;font-weight:900;color:#14b8a6">${kpiHo}</div>
       <div style="font-size:9px;color:var(--tx2)">인수인계 📅</div>
     </div>
-    <div class="kpi" style="text-align:center;padding:10px;cursor:pointer" onclick="openTransitCalendar('cancel','취소')">
-      <div style="font-size:18px;font-weight:900;color:var(--tx3)">${kpiCan}</div>
+    <div class="kpi" style="text-align:center;padding:8px 4px;cursor:pointer" onclick="openTransitCalendar('cancel','취소')">
+      <div style="font-size:16px;font-weight:900;color:var(--tx3)">${kpiCan}</div>
       <div style="font-size:9px;color:var(--tx2)">취소 📅</div>
+    </div>
+    <div class="kpi" style="text-align:center;padding:8px 4px;cursor:pointer" onclick="openTransitCalendar('done','완료')">
+      <div style="font-size:16px;font-weight:900;color:#22c55e">${kpiDone}</div>
+      <div style="font-size:9px;color:var(--tx2)">완료 📅</div>
     </div>
   </div>
 
@@ -4695,10 +4709,11 @@ function renderTransit(){
   ${active.length===0?'<div class="empty" style="margin-bottom:10px"><div class="empty-txt">예정 없음</div></div>':
     active.map(r=>_trCard(r, r.id, isAJ, isSub)).join('')}
 
-  <!-- 완료 -->
-  ${done.length>0?`<div class="shd" style="margin-top:10px"><span class="shd-title">완료 (${done.length}건)</span></div>
+  <!-- 완료 (상태 기준 — 완료 버튼 누른 것) -->
+  ${done.length>0?`<div class="shd" style="margin-top:10px"><span class="shd-title" style="color:#22c55e">✅ 완료 (${done.length}건)</span></div>
   ${done.slice(0,50).map(r=>_trCard(r, r.id, false, false)).join('')}`:''}
 
+  <!-- 취소 -->
   ${cancelled.length>0?`<div class="shd" style="margin-top:8px"><span class="shd-title" style="color:var(--tx3)">취소 (${cancelled.length}건)</span></div>
   <div style="opacity:.5">${cancelled.slice(0,20).map(r=>_trCard(r, r.id, false, false)).join('')}</div>`:''}
   </div>`;
@@ -4735,8 +4750,11 @@ function _renderTransitCalendar(){
   const {type, label, year, month, allRecs} = window._calState;
 
   // 타입별 레코드 필터
+  const _DONE_ST = ['반입완료','반출완료','인계완료'];
   const typeRecs = type === 'cancel'
     ? allRecs.filter(r => r.status === '취소')
+    : type === 'done'
+    ? allRecs.filter(r => _DONE_ST.includes(r.status))
     : allRecs.filter(r => r.type === type && r.status !== '취소');
 
   // 날짜별 건수 집계
@@ -4747,7 +4765,7 @@ function _renderTransitCalendar(){
   const daysInMonth = new Date(year, month+1, 0).getDate();
   const todayStr    = today();
   const MON = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
-  const typeColor   = type==='in'?'var(--blue)':type==='out'?'var(--orange)':type==='handover'?'#14b8a6':'var(--tx3)';
+  const typeColor   = type==='in'?'var(--blue)':type==='out'?'var(--orange)':type==='handover'?'#14b8a6':type==='done'?'#22c55e':'var(--tx3)';
 
   // 요일 헤더
   let cellHtml = ['일','월','화','수','목','금','토'].map((d,i)=>
@@ -4953,13 +4971,15 @@ function _trCard(r, _unused, canEdit, canMsg){
     const _delBtn = canEdit
       ? '<button data-rid="'+r.id+'" data-idx="'+i+'" onclick="var b=this;_delTransitMsg(b.dataset.rid,+b.dataset.idx)" style="margin-left:auto;background:none;border:none;color:var(--tx3);font-size:12px;cursor:pointer;padding:0 4px;line-height:1">×</button>'
       : '';
-    const _isAJMsg = m.role === 'aj' || (!m.role && (m.author === 'AJ' || (S?.role==='aj')));
-    const _avatarBg = _isAJMsg ? 'linear-gradient(135deg,#f59e0b,#d97706)' : 'linear-gradient(135deg,#60a5fa,#2563eb)';
-    const _nameCol = _isAJMsg ? 'var(--orange)' : '#60a5fa';
-    const _msgBg = _isAJMsg ? 'rgba(245,158,11,.07)' : 'rgba(96,165,250,.07)';
-    const _msgBdr = _isAJMsg ? 'rgba(245,158,11,.15)' : 'rgba(96,165,250,.15)';
+    const _isAJMsg = m.role === 'aj' || (!m.role && (m.author === 'AJ' || m.company === 'AJ네트웍스' || (S?.role==='aj')));
+    const _avatarBg = _isAJMsg ? 'linear-gradient(135deg,#DE1F23,#9f1214)' : 'linear-gradient(135deg,#60a5fa,#2563eb)';
+    const _nameCol = _isAJMsg ? '#DE1F23' : '#60a5fa';
+    const _msgBg = _isAJMsg ? 'rgba(222,31,35,.06)' : 'rgba(96,165,250,.07)';
+    const _msgBdr = _isAJMsg ? 'rgba(222,31,35,.15)' : 'rgba(96,165,250,.15)';
+    // 아바타: 업체명 앞 두글자 (없으면 이름 앞 두글자)
+    const _avatarLabel = (m.company || (m.role==='aj'?'AJ네트웍스':m.author) || 'AJ').slice(0,2);
     return '<div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-start">'
-      + '<div style="width:28px;height:28px;border-radius:50%;background:'+_avatarBg+';display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:900;color:white;flex-shrink:0">'+(m.author||'AJ').slice(0,2)+'</div>'
+      + '<div style="width:28px;height:28px;border-radius:50%;background:'+_avatarBg+';display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:900;color:white;flex-shrink:0">'+_avatarLabel+'</div>'
       + '<div style="flex:1;min-width:0">'
       + '<div style="display:flex;align-items:baseline;gap:5px;margin-bottom:3px">'
       + '<span style="font-size:11px;font-weight:800;color:'+_nameCol+'">'+(m.author||'AJ')+'</span>'
@@ -4972,26 +4992,26 @@ function _trCard(r, _unused, canEdit, canMsg){
   // 최대 15개, 최신 3개만 기본 표시 — 나머지는 아코디언
   const _MAX_MSGS = 15, _SHOW_MSGS = 3;
   const _canAddMsg = (canEdit || canMsg) && _msgs.length < _MAX_MSGS;
-  const _myInitials = (S?.name||'AJ').slice(0,2);
+  const _myInitials = (S?.company||(S?.role==='aj'?'AJ네트웍스':S?.name)||'AJ').slice(0,2);
   const _olderCnt  = Math.max(0, _allMsgHtmls.length - _SHOW_MSGS);
   const _olderHtml = _allMsgHtmls.slice(0, _olderCnt).join('');
   const _recentHtml= _allMsgHtmls.slice(_olderCnt).join('');
   const _accordId  = 'tr-more-' + r.id;
   const _moreBtn   = _olderCnt > 0
-    ? '<button onclick="var d=document.getElementById(\''+_accordId+'\');var o=d.style.display!==\'none\';d.style.display=o?\'none\':\'\';this.innerHTML=o?\'▼ 댓글 더보기 ('+_olderCnt+'개)\':\'▲ 댓글 접기\';" style="display:block;width:100%;text-align:left;padding:4px 8px 7px;font-size:10px;font-weight:600;color:var(--tx3);background:none;border:none;border-bottom:1px dashed rgba(245,158,11,.2);cursor:pointer;margin-bottom:6px">▼ 댓글 더보기 ('+_olderCnt+'개)</button>'
+    ? '<button onclick="var d=document.getElementById(\''+_accordId+'\');var o=d.style.display!==\'none\';d.style.display=o?\'none\':\'\';this.innerHTML=o?\'▼ 댓글 더보기 ('+_olderCnt+'개)\':\'▲ 댓글 접기\';" style="display:block;width:100%;text-align:left;padding:4px 8px 7px;font-size:10px;font-weight:600;color:var(--tx3);background:none;border:none;border-bottom:1px dashed rgba(222,31,35,.2);cursor:pointer;margin-bottom:6px">▼ 댓글 더보기 ('+_olderCnt+'개)</button>'
     : '';
   const _olderBlock = _olderCnt > 0
     ? '<div id="'+_accordId+'" style="display:none">'+_olderHtml+'</div>'
     : '';
   const _commentBox = _canAddMsg
-    ? '<div style="display:flex;gap:8px;align-items:center;padding-top:8px;border-top:1px solid rgba(245,158,11,.15)">'
+    ? '<div style="display:flex;gap:8px;align-items:center;padding-top:8px;border-top:1px solid rgba(222,31,35,.15)">'
       + '<div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--blue),#1d4ed8);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:900;color:white;flex-shrink:0">'+_myInitials+'</div>'
       + '<input type="text" id="tr-cmt-'+r.id+'" data-rid="'+r.id+'" placeholder="메시지 입력... (Enter)" onkeydown="if(event.keyCode===13){_addTransitMsg(this.dataset.rid);this.blur();}" style="flex:1;padding:7px 12px;font-size:11px;background:var(--bg2);border:1px solid var(--br);border-radius:20px;color:var(--tx);outline:none">'
-      + '<button data-rid="'+r.id+'" onclick="_addTransitMsg(this.dataset.rid)" style="width:30px;height:30px;border-radius:50%;background:#f59e0b;border:none;cursor:pointer;font-size:14px;color:white;flex-shrink:0">↑</button>'
+      + '<button data-rid="'+r.id+'" onclick="_addTransitMsg(this.dataset.rid)" style="width:30px;height:30px;border-radius:50%;background:#DE1F23;border:none;cursor:pointer;font-size:14px;color:white;flex-shrink:0">↑</button>'
       + '</div>'
     : (_msgs.length >= _MAX_MSGS ? '<div style="font-size:10px;color:var(--tx3);text-align:center;padding-top:6px">최대 15개 댓글</div>' : '');
   const threadBlock = (_msgs.length > 0 || _canAddMsg)
-    ? '<div style="margin-top:10px;padding:10px;background:rgba(245,158,11,.03);border:1px solid rgba(245,158,11,.12);border-radius:10px">'
+    ? '<div style="margin-top:10px;padding:10px;background:rgba(222,31,35,.03);border:1px solid rgba(222,31,35,.12);border-radius:10px">'
       + _moreBtn
       + _olderBlock
       + (_msgs.length > 0 ? _recentHtml : '')
@@ -5114,7 +5134,7 @@ function _addTransitMsg(id){
   if(!rec){ toast('레코드 없음','err'); return; }
   const msgs = rec.ajMsgs && rec.ajMsgs.length ? rec.ajMsgs : (rec.ajMsg ? [{text:rec.ajMsg, author:S?.name||'AJ', ts:0, role:'aj'}] : []);
   if(msgs.length >= 15){ toast('최대 15개 댓글','warn'); return; }
-  msgs.push({text, author:S?.name||'AJ', ts:Date.now(), role: S?.role||'aj'});
+  msgs.push({text, author:S?.name||'AJ', company:S?.company||(S?.role==='aj'?'AJ네트웍스':''), ts:Date.now(), role: S?.role||'aj'});
   rec.ajMsgs = msgs;
   rec.ajMsg = msgs[0]?.text||'';
   saveTransit(recs);
