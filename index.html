@@ -2530,6 +2530,7 @@ async function loadEquipFromSupabase() {
       company:   row.company  || '',
       spec:      row.spec     || '',
       model:     row.model    || '',
+      project:   row.project  || '',
       transitId: row.transit_id || '',
       status:    row.status   || 'active',
       inDate:    row.in_date  || '',
@@ -2583,6 +2584,7 @@ async function registerEquipFromTransit(transitRec) {
           company:   transitRec.company  || '',
           spec:      sp.spec || '',
           model:     sp.model || '',
+          project:   transitRec.project  || '',
           transitId: transitRec.id,
           status:    'active',
           inDate:    transitRec.date,
@@ -2614,6 +2616,7 @@ async function registerEquipFromTransit(transitRec) {
           company:   transitRec.company  || '',
           spec:      '',
           model:     '',
+          project:   transitRec.project  || '',
           transitId: transitRec.id,
           status:    'active',
           inDate:    transitRec.date,
@@ -4534,7 +4537,9 @@ function trStatusLabel(date, type){
   const tStr = ymd(td);
   const dStr = ymd(date);
   const diff = (new Date(date) - new Date(td)) / 86400000;
-  const verb = type==='in' ? ['반입','금일반입','명일반입','반입완료'] : ['반출','금일반출','명일반출','반출완료'];
+  const verb = type==='in' ? ['반입','금일반입','명일반입','반입완료']
+             : type==='handover' ? ['인수인계','금일인계','명일인계','인계완료']
+             : ['반출','금일반출','명일반출','반출완료'];
   if(diff > 1)  return {label: verb[2], color:'#f59e0b', bg:'rgba(245,158,11,.15)', done:false};
   if(diff === 1) return {label: verb[2], color:'#f59e0b', bg:'rgba(245,158,11,.15)', done:false};
   if(diff === 0) return {label: verb[1], color:'#3b82f6', bg:'rgba(59,130,246,.15)', done:false};
@@ -4568,7 +4573,7 @@ function renderTransit(){
   el.innerHTML=`<div style="padding:14px 14px 80px">
 
   <!-- KPI -->
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:14px">
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:14px">
     <div class="kpi" style="text-align:center;padding:10px">
       <div style="font-size:18px;font-weight:900;color:var(--blue)">${allRecs.filter(r=>r.type==='in'&&r.status!=='취소').length}</div>
       <div style="font-size:9px;color:var(--tx2)">반입</div>
@@ -4576,6 +4581,10 @@ function renderTransit(){
     <div class="kpi" style="text-align:center;padding:10px">
       <div style="font-size:18px;font-weight:900;color:var(--orange)">${allRecs.filter(r=>r.type==='out'&&r.status!=='취소').length}</div>
       <div style="font-size:9px;color:var(--tx2)">반출</div>
+    </div>
+    <div class="kpi" style="text-align:center;padding:10px">
+      <div style="font-size:18px;font-weight:900;color:#14b8a6">${allRecs.filter(r=>r.type==='handover'&&r.status!=='취소').length}</div>
+      <div style="font-size:9px;color:var(--tx2)">인수인계</div>
     </div>
     <div class="kpi" style="text-align:center;padding:10px">
       <div style="font-size:18px;font-weight:900;color:var(--tx3)">${cancelled.length}</div>
@@ -4605,7 +4614,61 @@ function renderTransit(){
   }
 }
 
+function _trHandoverCard(r, canEdit) {
+  const st   = trStatusLabel(r.date, r.type);
+  const diff = trDiff(r.date);
+  const dDayStr = diff===0?' ★D-DAY':diff===1?' (내일)':'';
+  let border = 'border:1px solid var(--br)';
+  let headerBg = 'background:var(--bg2)';
+  if (!st.done && diff===0){ border='border:2px solid #14b8a6;box-shadow:0 0 0 3px rgba(20,184,166,.15)'; headerBg='background:linear-gradient(135deg,#042f2e,#0f766e)'; }
+  else if (!st.done && diff===1){ border='border:2px solid #f59e0b;box-shadow:0 0 0 3px rgba(245,158,11,.12)'; headerBg='background:linear-gradient(135deg,#451a03,#92400e)'; }
+  const isDone = r.status==='인계완료';
+  const doneBadge = isDone ? '<span style="font-size:9px;font-weight:800;padding:2px 7px;border-radius:8px;background:rgba(34,197,94,.2);color:#22c55e;margin-left:4px">완료</span>' : '';
+  const equipStr = (r.handoverEquips||[]).join(', ') || '—';
+  const projHtml = (r.projChange && (r.fromProject||r.toProject))
+    ? '<div style="grid-column:1/-1;display:flex;align-items:center;gap:5px;font-size:10px"><span style="color:var(--tx3)">프로젝트 변경</span><span style="color:var(--tx3)">'+(r.fromProject||'—')+'</span><span style="color:#14b8a6">→</span><span style="font-weight:800;color:#14b8a6">'+(r.toProject||'—')+'</span></div>'
+    : '';
+  const locationBadge = r.location ? '<span style="font-size:9px;padding:2px 7px;border-radius:6px;background:rgba(139,92,246,.15);color:#a78bfa">'+r.location+'</span>' : '';
+  let actionHtml = '';
+  if (canEdit && r.status==='예정') {
+    actionHtml = '<div style="display:flex;gap:6px;margin-top:6px;border-top:1px solid var(--br);padding-top:8px">'
+      +'<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:#14b8a6;border-color:rgba(20,184,166,.4);font-weight:700" onclick="completeTransit(\''+r.id+'\')">✅ 인계완료</button>'
+      +'<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px" onclick="editTransitDate(\''+r.id+'\')">날짜변경</button>'
+      +'<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:#f87171;border-color:rgba(248,113,113,.3)" onclick="cancelTransit(\''+r.id+'\')">취소</button>'
+      +'</div>';
+  }
+  return '<div class="lcard" style="margin-bottom:10px;border-radius:12px;overflow:hidden;'+border+(r.status==='취소'?';opacity:.4':'')+'">'
+    +'<div style="'+headerBg+';padding:10px 12px;display:flex;align-items:center;justify-content:space-between">'
+    +  '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
+    +    '<span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px;background:rgba(20,184,166,.2);color:#14b8a6">인수인계</span>'
+    +    doneBadge
+    +    '<span style="font-weight:800;font-size:12px">'+(r.fromCompany||r.company||'—')+'</span>'
+    +    '<span style="color:#14b8a6;font-weight:900">→</span>'
+    +    '<span style="font-weight:800;font-size:12px">'+(r.toCompany||'—')+'</span>'
+    +  '</div>'
+    +  '<div style="text-align:right">'
+    +    '<div style="font-size:14px;font-weight:900;color:'+(!st.done&&diff<=1?st.color:'var(--tx)')+';cursor:pointer" onclick="editTransitDate('+JSON.stringify(r.id)+')" title="날짜 변경">'+r.date+' 📅</div>'
+    +    '<div style="font-size:10px;font-weight:800;color:'+st.color+';margin-top:1px">'+st.label+dDayStr+'</div>'
+    +  '</div>'
+    +'</div>'
+    +'<div style="padding:10px 12px">'
+    +  '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap">'
+    +    '<span style="font-size:10px;color:var(--tx3)">장비</span>'
+    +    '<span style="font-family:monospace;font-weight:700;font-size:11px;color:#60a5fa">'+equipStr+'</span>'
+    +    locationBadge
+    +  '</div>'
+    +  '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:10px;color:var(--tx3)">'
+    +    projHtml
+    +    (r.recorder?'<div style="grid-column:1/-1;display:flex;align-items:center;gap:5px"><span>기록자</span><b>'+r.recorder+'</b>'+(r.reporterPhone?'· <a href="tel:'+r.reporterPhone+'" style="color:#60a5fa;font-weight:600;text-decoration:none">'+r.reporterPhone+'</a>':'')+'</div>':'')
+    +    (r.note?'<div style="grid-column:1/-1;color:var(--tx3);font-size:10px">비고: '+r.note+'</div>':'')
+    +  '</div>'
+    +  actionHtml
+    +'</div>'
+    +'</div>';
+}
+
 function _trCard(r, _unused, canEdit, canMsg){
+  if (r.type === 'handover') return _trHandoverCard(r, canEdit);
   const st = trStatusLabel(r.date, r.type);
   const diff = trDiff(r.date);
   const isIn = r.type === 'in';
@@ -4678,7 +4741,7 @@ function _trCard(r, _unused, canEdit, canMsg){
   // ── 댓글 스레드 (최대 5개) ──
   const _msgs = r.ajMsgs && r.ajMsgs.length ? r.ajMsgs : (r.ajMsg ? [{text:r.ajMsg,author:S?.name||'AJ',ts:0}] : []);
   function _fmtTs(ts){ if(!ts) return ''; const d=new Date(ts); return (d.getMonth()+1)+'/'+(d.getDate())+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
-  const _threadMsgs = _msgs.map((m,i) => {
+  const _allMsgHtmls = _msgs.map((m,i) => {
     const _delBtn = canEdit
       ? '<button data-rid="'+r.id+'" data-idx="'+i+'" onclick="var b=this;_delTransitMsg(b.dataset.rid,+b.dataset.idx)" style="margin-left:auto;background:none;border:none;color:var(--tx3);font-size:12px;cursor:pointer;padding:0 4px;line-height:1">×</button>'
       : '';
@@ -4697,20 +4760,33 @@ function _trCard(r, _unused, canEdit, canMsg){
       + '</div>'
       + '<div style="font-size:11px;color:var(--tx);line-height:1.5;background:'+_msgBg+';padding:6px 10px;border-radius:0 8px 8px 8px;border:1px solid '+_msgBdr+'">'+m.text+'</div>'
       + '</div></div>';
-  }).join('');
-  // AJ(canEdit): 최대 3개, 협력사/기사(canMsg): 최대 3개
-  const _canAddMsg = (canEdit || canMsg) && _msgs.length < 3;
+  });
+  // 최대 15개, 최신 3개만 기본 표시 — 나머지는 아코디언
+  const _MAX_MSGS = 15, _SHOW_MSGS = 3;
+  const _canAddMsg = (canEdit || canMsg) && _msgs.length < _MAX_MSGS;
   const _myInitials = (S?.name||'AJ').slice(0,2);
+  const _olderCnt  = Math.max(0, _allMsgHtmls.length - _SHOW_MSGS);
+  const _olderHtml = _allMsgHtmls.slice(0, _olderCnt).join('');
+  const _recentHtml= _allMsgHtmls.slice(_olderCnt).join('');
+  const _accordId  = 'tr-more-' + r.id;
+  const _moreBtn   = _olderCnt > 0
+    ? '<button onclick="var d=document.getElementById(\''+_accordId+'\');var o=d.style.display!==\'none\';d.style.display=o?\'none\':\'\';this.innerHTML=o?\'▼ 댓글 더보기 ('+_olderCnt+'개)\':\'▲ 댓글 접기\';" style="display:block;width:100%;text-align:left;padding:4px 8px 7px;font-size:10px;font-weight:600;color:var(--tx3);background:none;border:none;border-bottom:1px dashed rgba(245,158,11,.2);cursor:pointer;margin-bottom:6px">▼ 댓글 더보기 ('+_olderCnt+'개)</button>'
+    : '';
+  const _olderBlock = _olderCnt > 0
+    ? '<div id="'+_accordId+'" style="display:none">'+_olderHtml+'</div>'
+    : '';
   const _commentBox = _canAddMsg
     ? '<div style="display:flex;gap:8px;align-items:center;padding-top:8px;border-top:1px solid rgba(245,158,11,.15)">'
       + '<div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--blue),#1d4ed8);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:900;color:white;flex-shrink:0">'+_myInitials+'</div>'
       + '<input type="text" id="tr-cmt-'+r.id+'" data-rid="'+r.id+'" placeholder="메시지 입력... (Enter)" onkeydown="if(event.keyCode===13){_addTransitMsg(this.dataset.rid);this.blur();}" style="flex:1;padding:7px 12px;font-size:11px;background:var(--bg2);border:1px solid var(--br);border-radius:20px;color:var(--tx);outline:none">'
       + '<button data-rid="'+r.id+'" onclick="_addTransitMsg(this.dataset.rid)" style="width:30px;height:30px;border-radius:50%;background:#f59e0b;border:none;cursor:pointer;font-size:14px;color:white;flex-shrink:0">↑</button>'
       + '</div>'
-    : (_msgs.length >= 3 ? '<div style="font-size:10px;color:var(--tx3);text-align:center;padding-top:6px">최대 3개 댓글</div>' : '');
+    : (_msgs.length >= _MAX_MSGS ? '<div style="font-size:10px;color:var(--tx3);text-align:center;padding-top:6px">최대 15개 댓글</div>' : '');
   const threadBlock = (_msgs.length > 0 || _canAddMsg)
     ? '<div style="margin-top:10px;padding:10px;background:rgba(245,158,11,.03);border:1px solid rgba(245,158,11,.12);border-radius:10px">'
-      + (_msgs.length > 0 ? _threadMsgs : '')
+      + _moreBtn
+      + _olderBlock
+      + (_msgs.length > 0 ? _recentHtml : '')
       + _commentBox
       + '</div>'
     : '';
@@ -4829,7 +4905,7 @@ function _addTransitMsg(id){
   const rec = recs.find(r=>r.id===id);
   if(!rec){ toast('레코드 없음','err'); return; }
   const msgs = rec.ajMsgs && rec.ajMsgs.length ? rec.ajMsgs : (rec.ajMsg ? [{text:rec.ajMsg, author:S?.name||'AJ', ts:0, role:'aj'}] : []);
-  if(msgs.length >= 3){ toast('최대 3개 댓글','warn'); return; }
+  if(msgs.length >= 15){ toast('최대 15개 댓글','warn'); return; }
   msgs.push({text, author:S?.name||'AJ', ts:Date.now(), role: S?.role||'aj'});
   rec.ajMsgs = msgs;
   rec.ajMsg = msgs[0]?.text||'';
@@ -4973,10 +5049,10 @@ async function _saveAllSpecEquip(recordId) {
   } else {
     toast('저장됨', 'ok');
   }
-  // 버튼 텍스트 변경
+  // 버튼 텍스트 변경 (1.5초 후 카드 재렌더)
   if (btn) { btn.innerHTML = '✅ 저장완료'; btn.style.background = 'rgba(34,197,94,.15)'; btn.style.borderColor = 'rgba(34,197,94,.35)'; btn.style.color = '#4ade80'; btn.disabled = false; }
   // 카드 re-render (입력란 border 색 갱신 위해)
-  setTimeout(() => renderTransit(), 300);
+  setTimeout(() => renderTransit(), 1500);
 }
 
 // 제원별 장비번호 저장 → 마스터 자동 등록 (개별, 하위호환 유지)
@@ -5060,6 +5136,15 @@ async function completeTransit(id) {
   const rec  = recs.find(r => r.id === id);
   if (!rec) { toast('레코드를 찾을 수 없습니다', 'err'); return; }
 
+  // 인수인계 완료 처리
+  if (rec.type === 'handover') {
+    if (!confirm('인계완료 처리하시겠습니까?\n' + (rec.fromCompany||'') + ' → ' + (rec.toCompany||'') + '\n장비: ' + (rec.handoverEquips||[]).join(', '))) return;
+    rec.status = '인계완료'; rec.doneAt = Date.now(); rec.synced = false;
+    await saveTransit(recs);
+    await _applyHandoverToEquipMaster(rec).catch(()=>{});
+    toast('인계완료 처리 완료', 'ok'); renderTransit(); return;
+  }
+
   // 반입완료 전 카드 인라인 장비번호 읽기
   if (rec.type === 'in') {
     const inlineInp = document.getElementById('inline-equip-' + id);
@@ -5072,7 +5157,7 @@ async function completeTransit(id) {
     }
   }
 
-  const verb = rec.type === 'in' ? '반입완료' : '반출완료';
+  const verb = rec.type === 'in' ? '반입완료' : rec.type === 'handover' ? '인계완료' : '반출완료';
   if (!confirm(`${verb} 처리하시겠습니까?\n업체: ${rec.company}\n날짜: ${rec.date}${rec.ajEquip ? '\n장비번호: ' + rec.ajEquip : ''}`)) return;
 
   rec.status   = verb;
@@ -5177,6 +5262,24 @@ function _resetTransitForm(){
   if(ter) ter.style.display = 'none';
   // 프로젝트 칩 선택 초기화
   document.querySelectorAll('#tr-project-chips .chip.on').forEach(c=>c.classList.remove('on'));
+  // 인수인계 필드 초기화
+  const fco=document.getElementById('tr-from-co'); if(fco) fco.value='';
+  const tco=document.getElementById('tr-to-co');   if(tco) tco.value='';
+  const hem=document.getElementById('tr-handover-equip-manual'); if(hem) hem.value='';
+  const hec=document.getElementById('tr-handover-equip-chips');
+  if(hec) hec.innerHTML='<span id="tr-handover-equip-placeholder" style="font-size:10px;color:var(--tx3)">인계업체 입력 후 장비 선택</span>';
+  // 프로젝트 변경: 아니오 기본 선택
+  document.querySelectorAll('#tr-proj-change-chips .chip.on').forEach(c=>c.classList.remove('on'));
+  const noBtn=document.querySelector('#tr-proj-change-chips .chip:last-child'); if(noBtn) noBtn.classList.add('on');
+  const pcd=document.getElementById('tr-proj-change-detail'); if(pcd) pcd.style.display='none';
+  document.querySelectorAll('#tr-from-proj-chips .chip.on,#tr-to-proj-chips .chip.on').forEach(c=>c.classList.remove('on'));
+  document.querySelectorAll('#tr-handover-location-chips .chip.on').forEach(c=>c.classList.remove('on'));
+  const hrc=document.getElementById('tr-handover-recorder'); if(hrc) hrc.value=S?.name||'';
+  const hp=document.getElementById('tr-handover-phone'); if(hp) hp.value=S?.phone||'';
+  const hn=document.getElementById('tr-handover-note'); if(hn) hn.value='';
+  // 섹션: 기본 반입/반출 표시
+  const bs=document.getElementById('tr-basic-section');    if(bs) bs.style.display='';
+  const hs=document.getElementById('tr-handover-section'); if(hs) hs.style.display='none';
   _trAddSpecRow(); // 기본 1행
 }
 
@@ -5198,8 +5301,24 @@ function _updateProjectChips(){
 }
 function _updateSpecModelVisibility(){
   const type = document.querySelector('#tr-type-chips .chip.on')?.textContent;
+  const isHandover = type === '인수인계';
+
+  // 인수인계 ↔ 반입/반출 섹션 전환
+  const basicSec    = document.getElementById('tr-basic-section');
+  const handoverSec = document.getElementById('tr-handover-section');
+  if (basicSec)    basicSec.style.display    = isHandover ? 'none' : '';
+  if (handoverSec) handoverSec.style.display = isHandover ? '' : 'none';
+
+  if (isHandover) {
+    // 반입 전용 프로젝트 칩 숨기기
+    const pr = document.getElementById('tr-project-row');
+    if (pr) pr.style.display = 'none';
+    _updateHandoverProjChips();
+    return;
+  }
+
+  // 반입/반출 기존 로직
   const isOut = type === '반출';
-  // 기존 spec 행 데이터 수집 후 재빌드 (반입↔반출 전환 시 장비번호 라벨 변경)
   const list = document.getElementById('tr-specs-list');
   if (list && list.children.length) {
     const existing = [...list.children].map(row => ({
@@ -5213,6 +5332,110 @@ function _updateSpecModelVisibility(){
   }
   _updateProjectChips();
 }
+
+// ── 인수인계 헬퍼 ────────────────────────────────────────────
+function _updateHandoverEquipList(){
+  const fromCo = document.getElementById('tr-from-co')?.value.trim();
+  const chipsEl = document.getElementById('tr-handover-equip-chips');
+  if (!chipsEl) return;
+  if (!fromCo) {
+    chipsEl.innerHTML = '<span style="font-size:10px;color:var(--tx3)">인계업체 입력 후 장비 선택</span>';
+    return;
+  }
+  const siteId = S?.siteId==='all'
+    ? (document.getElementById('tr-site-sel')?.value || null)
+    : S?.siteId;
+  const equips = getEquipByCompany(siteId, fromCo);
+  if (!equips.length) {
+    chipsEl.innerHTML = '<span style="font-size:10px;color:var(--tx3)">등록된 장비 없음 — 직접 입력</span>';
+    return;
+  }
+  chipsEl.innerHTML = equips.map(e =>
+    `<div class="chip" style="font-family:monospace;font-size:11px;font-weight:700" onclick="this.classList.toggle('on')">${e.equipNo}</div>`
+  ).join('');
+}
+
+function _updateHandoverProjSection(){
+  const isYes = document.querySelector('#tr-proj-change-chips .chip.on')?.textContent === '예';
+  const detail = document.getElementById('tr-proj-change-detail');
+  if (detail) detail.style.display = isYes ? '' : 'none';
+  if (isYes) _updateHandoverProjChips();
+}
+
+function _updateHandoverProjChips(){
+  const siteId = S?.siteId==='all'
+    ? (document.getElementById('tr-site-sel')?.value || getSites()[0]?.id || '')
+    : S?.siteId;
+  const projects = getSites().find(s=>s.id===siteId)?.projects || [];
+  const fromEl = document.getElementById('tr-from-proj-chips');
+  const toEl   = document.getElementById('tr-to-proj-chips');
+  const placeholder = '<span style="font-size:10px;color:var(--tx3)">설정된 프로젝트 없음</span>';
+  if (fromEl) fromEl.innerHTML = projects.length
+    ? projects.map(p=>`<div class="chip" onclick="selectOne(this,'tr-from-proj-chips')">${p}</div>`).join('')
+    : placeholder;
+  if (toEl)   toEl.innerHTML   = projects.length
+    ? projects.map(p=>`<div class="chip" onclick="selectOne(this,'tr-to-proj-chips')">${p}</div>`).join('')
+    : placeholder;
+}
+
+function _submitHandover(date) {
+  const siteId = S.siteId==='all'
+    ? (document.getElementById('tr-site-sel')?.value || getSites()[0]?.id || '')
+    : S.siteId;
+  const fromCo = document.getElementById('tr-from-co')?.value.trim();
+  const toCo   = document.getElementById('tr-to-co')?.value.trim();
+  if (!fromCo) { toast('인계업체를 입력하세요','err'); return; }
+  if (!toCo)   { toast('인수업체를 입력하세요','err'); return; }
+
+  // 장비번호 수집 (chip 선택 + 직접 입력)
+  const selectedNos = [...document.querySelectorAll('#tr-handover-equip-chips .chip.on')].map(c=>c.textContent.trim());
+  const manualRaw   = document.getElementById('tr-handover-equip-manual')?.value.toUpperCase().trim() || '';
+  const manualNos   = manualRaw ? manualRaw.split(/[,，\s]+/).map(e=>e.trim()).filter(Boolean) : [];
+  const handoverEquips = [...new Set([...selectedNos, ...manualNos])];
+  if (!handoverEquips.length) { toast('이동 장비번호를 선택하거나 입력하세요','err'); return; }
+
+  const projChange  = document.querySelector('#tr-proj-change-chips .chip.on')?.textContent === '예';
+  const fromProject = projChange ? (document.querySelector('#tr-from-proj-chips .chip.on')?.textContent || '') : '';
+  const toProject   = projChange ? (document.querySelector('#tr-to-proj-chips .chip.on')?.textContent  || '') : '';
+  const location    = document.querySelector('#tr-handover-location-chips .chip.on')?.textContent || '';
+  const note        = document.getElementById('tr-handover-note')?.value.trim() || '';
+  const recorder    = document.getElementById('tr-handover-recorder')?.value.trim() || S?.name || '';
+  const phoneRaw    = document.getElementById('tr-handover-phone')?.value || '';
+  const reporterPhone = fmtPhone(phoneRaw);
+
+  const rec = {
+    id: 'tr-' + Date.now().toString(36),
+    type: 'handover', siteId,
+    siteName: getSites().find(s=>s.id===siteId)?.name || siteId,
+    date, company: fromCo, fromCompany: fromCo, toCompany: toCo,
+    handoverEquips, projChange, fromProject, toProject, location,
+    note, recorder, reporterPhone,
+    specs: [], ajEquip: '', ts: Date.now(), synced: false, status: '예정',
+  };
+  const records = getTransit();
+  records.unshift(rec);
+  saveTransit(records);
+  _applyHandoverToEquipMaster(rec).catch(()=>{});
+  toast('인수인계 등록 완료', 'ok');
+  closeSheet('sh-transit-form');
+  renderTransit();
+}
+
+async function _applyHandoverToEquipMaster(rec) {
+  if (rec.type !== 'handover' || !rec.handoverEquips?.length) return;
+  const arr = getEquipMaster();
+  let changed = false;
+  for (const eNo of rec.handoverEquips) {
+    const e = arr.find(x => x.equipNo === eNo && x.siteId === rec.siteId);
+    if (e) {
+      e.company = rec.toCompany;
+      if (rec.projChange && rec.toProject) e.project = rec.toProject;
+      changed = true;
+    }
+  }
+  if (changed) await saveEquipMaster(arr);
+}
+// ────────────────────────────────────────────────────────────
 
 function _trAddSpecRow(spec='', model='', qty=1, equipNos=''){
   const list=document.getElementById('tr-specs-list');
@@ -5369,9 +5592,12 @@ function submitTransit(){
   if(!S) return;
   const date = document.getElementById('tr-date').value || today();
   const typeChip = document.querySelector('#tr-type-chips .chip.on');
+  if(!typeChip){ toast('구분을 선택하세요','err'); return; }
+  // 인수인계 분기
+  if(typeChip.textContent === '인수인계') return _submitHandover(date);
+
   const company  = document.getElementById('tr-company').value.trim();
   const note     = document.getElementById('tr-note')?.value.trim() || '';
-  if(!typeChip){ toast('반입/반출 구분을 선택하세요','err'); return; }
   if(!company){  toast('업체명을 입력하세요','err'); return; }
   const typeVal = typeChip.textContent === '반입' ? 'in' : 'out';
 
@@ -6111,6 +6337,10 @@ function _renderEquipMasterSheet(sh) {
   const active   = allEquip.filter(e => e.status === 'active' && (!siteId || e.siteId === siteId));
   const outed    = allEquip.filter(e => e.status === 'out'    && (!siteId || e.siteId === siteId));
   const sites    = getSites();
+  // 현장 프로젝트 목록 (수동 등록 폼 용)
+  const siteProjects = siteId
+    ? (sites.find(s=>s.id===siteId)?.projects || [])
+    : [...new Set(sites.flatMap(s=>s.projects||[]))];
 
   // 업체별 그룹
   const byCompany = {};
@@ -6122,16 +6352,22 @@ function _renderEquipMasterSheet(sh) {
   const coHtml = Object.entries(byCompany).map(([co, list]) => `
     <div style="margin-bottom:10px">
       <div style="font-size:11px;font-weight:800;color:var(--blue);margin-bottom:4px;padding:4px 8px;background:rgba(59,130,246,.08);border-radius:6px">${co} (${list.length}대)</div>
-      ${list.map(e => `
-        <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid var(--br)">
+      ${list.map(e => {
+        const _eProjs = getSites().find(s=>s.id===e.siteId)?.projects||[];
+        const _projEl = _eProjs.length
+          ? `<select style="font-size:9px;padding:2px 5px;max-width:72px;border-radius:4px;border:1px solid var(--br);background:var(--bg2);color:${e.project?'#14b8a6':'var(--tx3)'}" onchange="_equipSetProject('${e.id}',this.value)"><option value="">구분없음</option>${_eProjs.map(p=>`<option value="${p}"${e.project===p?' selected':''}>${p}</option>`).join('')}</select>`
+          : (e.project?`<span style="font-size:9px;padding:2px 5px;background:rgba(20,184,166,.1);border-radius:4px;color:#14b8a6">${e.project}</span>`:'');
+        return `<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid var(--br)">
           <div style="flex:1;min-width:0">
             <span style="font-family:monospace;font-weight:700;font-size:12px;color:#60a5fa">${e.equipNo}</span>
             ${e.spec?`<span style="font-size:10px;color:var(--tx3);margin-left:5px">${e.spec}${e.model?' ('+e.model+')':''}</span>`:''}
           </div>
+          ${_projEl}
           <span style="font-size:10px;color:var(--tx3)">${e.inDate||''}</span>
           <button onclick="_equipMasterOut('${e.id}')" style="font-size:9px;padding:2px 8px;border-radius:4px;background:rgba(251,146,60,.12);border:1px solid rgba(251,146,60,.3);color:#fb923c;cursor:pointer">반출처리</button>
           <button onclick="_equipMasterDel('${e.id}')" style="font-size:9px;padding:2px 8px;border-radius:4px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.2);color:#f87171;cursor:pointer">삭제</button>
-        </div>`).join('')}
+        </div>`;
+      }).join('')}
     </div>`).join('') || '<div style="color:var(--tx3);font-size:12px;padding:8px">등록된 반입 장비 없음</div>';
 
   sh.innerHTML = `<div class="sheet">
@@ -6163,7 +6399,8 @@ function _renderEquipMasterSheet(sh) {
         ${S?.siteId === 'all' ? `<select id="eq-add-site" style="width:100%;margin-bottom:6px;padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)">
           ${sites.map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}
         </select>` : `<input type="hidden" id="eq-add-site" value="${siteId||''}">`}
-        <button onclick="_equipMasterAdd()" style="width:100%;padding:8px;font-size:12px;font-weight:700;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);border-radius:6px;color:#60a5fa;cursor:pointer">등록</button>
+        ${siteProjects.length ? `<select id="eq-add-proj" style="width:100%;margin-bottom:6px;padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)"><option value="">프로젝트 구분 (선택)</option>${siteProjects.map(p=>`<option value="${p}">${p}</option>`).join('')}</select>` : `<input type="hidden" id="eq-add-proj" value="">`}
+        <button id="eq-add-btn" onclick="_equipMasterAdd()" style="width:100%;padding:8px;font-size:12px;font-weight:700;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);border-radius:6px;color:#60a5fa;cursor:pointer">등록</button>
       </div>
 
       <!-- 현재 반입 장비 목록 -->
@@ -6246,9 +6483,10 @@ async function _equipMasterBulkAdd() {
 }
 
 async function _equipMasterAdd() {
-  const no = document.getElementById('eq-add-no')?.value.toUpperCase().trim();
-  const co = document.getElementById('eq-add-co')?.value.trim();
-  const si = document.getElementById('eq-add-site')?.value || (S?.siteId === 'all' ? '' : S?.siteId);
+  const no   = document.getElementById('eq-add-no')?.value.toUpperCase().trim();
+  const co   = document.getElementById('eq-add-co')?.value.trim();
+  const si   = document.getElementById('eq-add-site')?.value || (S?.siteId === 'all' ? '' : S?.siteId);
+  const proj = document.getElementById('eq-add-proj')?.value || '';
   if (!no) { toast('장비번호를 입력하세요', 'err'); return; }
   if (!co) { toast('업체명을 입력하세요', 'err'); return; }
   const arr = getEquipMaster();
@@ -6258,24 +6496,46 @@ async function _equipMasterAdd() {
       exists.status  = 'active';
       exists.inDate  = today();
       exists.outDate = null;
+      if (proj) exists.project = proj;
       await saveEquipMaster(arr);
       toast(`${no} 재반입 처리됨`, 'ok');
     } else {
       toast(`${no} 이미 등록되어 있습니다`, 'warn');
+      return;
     }
   } else {
     arr.push({
       id: 'eq-' + Date.now().toString(36),
       equipNo: no, siteId: si,
       siteName: getSites().find(s=>s.id===si)?.name || si,
-      company: co, specs: [], transitId: null,
+      company: co, project: proj, specs: [], transitId: null,
       status: 'active', inDate: today(), outDate: null,
     });
     await saveEquipMaster(arr);
     toast(`${no} 등록 완료`, 'ok');
   }
-  const sh = document.getElementById('sh-equip-master');
-  if (sh) _renderEquipMasterSheet(sh);
+  // 저장완료 버튼 상태 표시 후 1.2초 뒤 재렌더
+  const btn = document.getElementById('eq-add-btn');
+  if (btn) {
+    btn.textContent = '✅ 저장완료';
+    btn.style.background = 'rgba(34,197,94,.15)';
+    btn.style.borderColor = 'rgba(34,197,94,.3)';
+    btn.style.color = '#4ade80';
+    btn.disabled = true;
+  }
+  setTimeout(() => {
+    const sh = document.getElementById('sh-equip-master');
+    if (sh) _renderEquipMasterSheet(sh);
+  }, 1200);
+}
+
+async function _equipSetProject(id, project) {
+  const arr = getEquipMaster();
+  const e = arr.find(x => x.id === id);
+  if (!e) return;
+  e.project = project;
+  await saveEquipMaster(arr);
+  toast(e.equipNo + ' 프로젝트: ' + (project || '없음'), 'ok');
 }
 
 async function _equipMasterOut(id) {
@@ -6851,6 +7111,7 @@ initLogin();
       <div class="chips" id="tr-type-chips">
         <div class="chip" onclick="selectOne(this,'tr-type-chips');_updateSpecModelVisibility()">반입</div>
         <div class="chip" onclick="selectOne(this,'tr-type-chips');_updateSpecModelVisibility()">반출</div>
+        <div class="chip" onclick="selectOne(this,'tr-type-chips');_updateSpecModelVisibility()">인수인계</div>
       </div>
       <div style="font-size:10px;color:var(--tx3);margin-top:4px">반출 선택 시 제원별 장비번호 입력이 필요합니다</div>
     </div>
@@ -6874,6 +7135,8 @@ initLogin();
       <div class="site-select-wrap"><select class="fg-select" id="tr-site-sel" onchange="_updateProjectChips()"></select></div>
     </div>
 
+    <!-- ─── 반입/반출 전용 섹션 ─── -->
+    <div id="tr-basic-section">
     <!-- 업체명 -->
     <div class="fg">
       <label class="fg-lbl">업체명 <span class="req">*</span></label>
@@ -6939,6 +7202,89 @@ initLogin();
       <label class="fg-lbl">비고</label>
       <textarea class="fg-input" id="tr-note" placeholder="기타 특이사항" rows="2" style="resize:none"></textarea>
     </div>
+    </div><!-- /tr-basic-section -->
+
+    <!-- ─── 인수인계 전용 섹션 ─── -->
+    <div id="tr-handover-section" style="display:none">
+
+      <!-- 인계업체 / 인수업체 -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="fg">
+          <label class="fg-lbl">인계업체 <span class="req">*</span></label>
+          <input type="text" class="fg-input" id="tr-from-co" placeholder="인계 업체명" oninput="_updateHandoverEquipList()">
+        </div>
+        <div class="fg">
+          <label class="fg-lbl">인수업체 <span class="req">*</span></label>
+          <input type="text" class="fg-input" id="tr-to-co" placeholder="인수 업체명">
+        </div>
+      </div>
+
+      <!-- 이동 장비번호 -->
+      <div class="fg">
+        <label class="fg-lbl">이동 장비번호 <span class="req">*</span></label>
+        <div id="tr-handover-equip-chips" style="display:flex;flex-wrap:wrap;gap:6px;min-height:36px;padding:8px;background:var(--bg2);border:1px solid var(--br);border-radius:8px;align-items:center;margin-bottom:5px">
+          <span style="font-size:10px;color:var(--tx3)">인계업체 입력 후 장비 선택</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:10px;color:var(--tx3);flex-shrink:0">직접 입력:</span>
+          <input type="text" id="tr-handover-equip-manual" placeholder="장비번호 (쉼표 구분)" style="flex:1;font-size:11px;padding:5px 8px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx);font-family:monospace;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">
+        </div>
+        <div style="font-size:10px;color:var(--tx3);margin-top:4px">장비 칩 클릭으로 복수 선택 가능</div>
+      </div>
+
+      <!-- 프로젝트 변경 여부 -->
+      <div class="fg">
+        <label class="fg-lbl">프로젝트 변경</label>
+        <div class="chips" id="tr-proj-change-chips">
+          <div class="chip" onclick="selectOne(this,'tr-proj-change-chips');_updateHandoverProjSection()">예</div>
+          <div class="chip on" onclick="selectOne(this,'tr-proj-change-chips');_updateHandoverProjSection()">아니오</div>
+        </div>
+      </div>
+
+      <!-- 프로젝트 변경 상세 (아코디언) -->
+      <div id="tr-proj-change-detail" style="display:none;border-left:3px solid rgba(20,184,166,.4);padding-left:10px;margin-bottom:8px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div class="fg" style="margin:0">
+            <label class="fg-lbl" style="font-size:10px">기존 사용 프로젝트</label>
+            <div class="chips" id="tr-from-proj-chips" style="flex-wrap:wrap;gap:4px"></div>
+          </div>
+          <div class="fg" style="margin:0">
+            <label class="fg-lbl" style="font-size:10px">이동 프로젝트</label>
+            <div class="chips" id="tr-to-proj-chips" style="flex-wrap:wrap;gap:4px"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 사용 위치 -->
+      <div class="fg">
+        <label class="fg-lbl">사용 위치</label>
+        <div class="chips" id="tr-handover-location-chips" style="flex-wrap:wrap">
+          <div class="chip" onclick="selectOne(this,'tr-handover-location-chips')">모듈동</div>
+          <div class="chip" onclick="selectOne(this,'tr-handover-location-chips')">외곽</div>
+          <div class="chip" onclick="selectOne(this,'tr-handover-location-chips')">내부</div>
+          <div class="chip" onclick="selectOne(this,'tr-handover-location-chips')">기타</div>
+        </div>
+      </div>
+
+      <!-- 기록자 -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="fg">
+          <label class="fg-lbl">기록자 이름</label>
+          <input type="text" class="fg-input" id="tr-handover-recorder" placeholder="이름">
+        </div>
+        <div class="fg">
+          <label class="fg-lbl">기록자 연락처</label>
+          <input type="tel" class="fg-input phone-input" id="tr-handover-phone" placeholder="숫자만 입력" maxlength="11">
+        </div>
+      </div>
+
+      <!-- 비고 -->
+      <div class="fg">
+        <label class="fg-lbl">비고</label>
+        <textarea class="fg-input" id="tr-handover-note" placeholder="기타 특이사항" rows="2" style="resize:none"></textarea>
+      </div>
+
+    </div><!-- /tr-handover-section -->
 
     <div class="btn-gap">
       <button class="btn-full teal" onclick="submitTransit()">신청 등록</button>
