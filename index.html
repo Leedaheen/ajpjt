@@ -1828,26 +1828,64 @@ alter table equipment disable row level security;</pre>
 
 <!-- Alert settings sheet -->
 <div class="soverlay" id="sh-alert" onclick="if(event.target===this)closeSheet('sh-alert')">
-  <div class="sheet">
+  <div class="sheet" style="max-height:90vh;overflow-y:auto">
     <div class="sh-handle"></div>
     <div class="sh-title">알림 설정</div>
-    <div style="background:var(--bg2);border-radius:var(--rs);padding:14px;margin-bottom:16px;font-size:13px;color:var(--tx2);line-height:1.7">
-      매일 <b style="color:var(--yellow)">오후 3시</b>까지 해당 현장에 가동현황 입력이 없는 업체를 알림 배너로 표시합니다.<br>
-      이메일 알림은 Code.gs에서 담당자 이메일을 설정하면 자동 발송됩니다.
-    </div>
-    <div class="lg">
-      <label class="lg-label">알림 기준 시간</label>
-      <input type="time" class="lg-input" id="alert-time" value="15:00">
-    </div>
-    <div class="lg">
-      <label class="lg-label" style="margin-bottom:8px">알림 대상</label>
-      <div class="chips">
-        <div class="chip on" id="ac-noinput" onclick="this.classList.toggle('on')">미입력 업체</div>
-        <div class="chip on" id="ac-noend"   onclick="this.classList.toggle('on')">미종료 장비</div>
+
+    <!-- 기본 알림 설정 -->
+    <div style="background:var(--bg2);border:1px solid var(--br);border-radius:10px;padding:14px;margin-bottom:14px">
+      <div style="font-size:12px;font-weight:800;margin-bottom:10px">기본 알림</div>
+      <div class="lg" style="margin-bottom:10px">
+        <label class="lg-label">알림 기준 시간</label>
+        <input type="time" class="lg-input" id="alert-time" value="15:00">
+      </div>
+      <div class="lg" style="margin-bottom:0">
+        <label class="lg-label" style="margin-bottom:8px">알림 대상</label>
+        <div class="chips">
+          <div class="chip on" id="ac-noinput" onclick="this.classList.toggle('on')">미입력 업체</div>
+          <div class="chip on" id="ac-noend"   onclick="this.classList.toggle('on')">미종료 장비</div>
+        </div>
       </div>
     </div>
+
+    <!-- 추가 알림 목록 -->
+    <div style="margin-bottom:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="font-size:12px;font-weight:800">추가 알림</div>
+        <button onclick="openAddAlertForm()" style="font-size:11px;padding:4px 12px;border-radius:6px;background:rgba(59,139,255,.15);border:1px solid rgba(59,139,255,.3);color:#60a5fa;cursor:pointer;font-weight:700">+ 알림 추가</button>
+      </div>
+      <div id="custom-alert-list"></div>
+
+      <!-- 추가 알림 입력 폼 (기본 숨김) -->
+      <div id="add-alert-form" style="display:none;background:var(--bg2);border:1px solid var(--br);border-radius:10px;padding:12px;margin-top:8px">
+        <div style="font-size:12px;font-weight:700;margin-bottom:10px">새 알림 추가</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div>
+            <label style="font-size:10px;color:var(--tx3);display:block;margin-bottom:4px">알림 시간</label>
+            <input type="time" id="new-alert-time" style="width:100%;padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:7px;background:var(--bg1);color:var(--tx);outline:none;box-sizing:border-box">
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--tx3);display:block;margin-bottom:4px">반복</label>
+            <select id="new-alert-repeat" style="width:100%;padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:7px;background:var(--bg1);color:var(--tx);outline:none;box-sizing:border-box">
+              <option value="daily">매일</option>
+              <option value="weekday">평일만</option>
+              <option value="weekly">매주</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-bottom:8px">
+          <label style="font-size:10px;color:var(--tx3);display:block;margin-bottom:4px">알림 내용</label>
+          <input type="text" id="new-alert-label" placeholder="예: 오전 점검 알림" style="width:100%;padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:7px;background:var(--bg1);color:var(--tx);outline:none;box-sizing:border-box">
+        </div>
+        <div style="display:flex;gap:8px">
+          <button onclick="closeAddAlertForm()" style="flex:1;padding:8px;font-size:12px;background:var(--bg3);border:1px solid var(--br);border-radius:7px;color:var(--tx2);cursor:pointer">취소</button>
+          <button onclick="addCustomAlert()" style="flex:1;padding:8px;font-size:12px;font-weight:700;background:rgba(59,139,255,.2);border:1px solid rgba(59,139,255,.3);border-radius:7px;color:#60a5fa;cursor:pointer">추가</button>
+        </div>
+      </div>
+    </div>
+
     <div class="btn-gap">
-      <button class="btn-full" onclick="saveAlertSettings()">저장</button>
+      <button class="btn-full" onclick="saveAlertSettings()">기본 알림 저장</button>
       <button class="btn-ghost" onclick="closeSheet('sh-alert')">닫기</button>
     </div>
   </div>
@@ -7070,7 +7108,6 @@ function renderAnalysis(){
     document.getElementById('ana-content').innerHTML=`<div class="locked-page"><div class="lp-ico"></div><div class="lp-title">협력사관리자 이상 접근 가능</div><div class="lp-desc">자동 분석은 협력사관리자 또는<br>AJ관리자만 이용할 수 있습니다.</div></div>`;
     return;
   }
-  const hasKey = !!DB.g('gemini_key','');
   const aiQBtns = [
     {t:'weekly',    l:'📋 주간 운영 리포트'},
     {t:'top-equip', l:'🏆 이달 많이 쓴 장비'},
@@ -7085,27 +7122,11 @@ function renderAnalysis(){
 
   document.getElementById('ana-content').innerHTML=`
     <div style="padding:14px 14px 0">
-    <!-- AI 자연어 분석 박스 -->
-    <div class="ai-qbox">
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
-        <span style="font-size:15px">🤖</span>
-        <span style="font-size:13px;font-weight:800;color:var(--tx)">AI 데이터 분석</span>
-        <span style="font-size:9px;background:rgba(99,102,241,.18);color:#818cf8;padding:2px 7px;border-radius:10px;margin-left:auto;font-weight:700">Gemini Flash · 무료</span>
-      </div>
-      <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
-        <input type="password" id="gemini-key-input" value="${hasKey?'••••••••':''}" placeholder="🔑 Google AI Studio API Key"
-          style="flex:1;font-size:11px;padding:7px 10px;border:1px solid var(--br);border-radius:8px;background:var(--bg1);color:var(--tx);outline:none">
-        <button onclick="_saveGeminiKey()" style="padding:7px 11px;border-radius:8px;background:rgba(99,102,241,.2);color:#a5b4fc;font-size:11px;font-weight:700;border:1px solid rgba(99,102,241,.3);cursor:pointer;white-space:nowrap">저장</button>
-      </div>
-      <div style="font-size:10px;color:var(--tx3);margin-bottom:10px">
-        <a href="https://aistudio.google.com/apikey" target="_blank" style="color:#818cf8;text-decoration:none">Google AI Studio</a>에서 무료 API 키 발급 후 저장하세요
-      </div>
-      <div style="display:flex;flex-wrap:wrap;gap:5px">${aiQBtns}</div>
-      <div id="ai-query-result"></div>
-    </div>
-    <!-- 기존 자동 분석 -->
+    <!-- 가동률 인사이트 + AI 분석 버튼 통합 -->
     <div class="ai-panel">
-      <div class="ai-hd"><div class="ai-tag">자동 분석</div><div style="font-size:12px;font-weight:700;margin-left:2px">가동률 인사이트</div></div>
+      <div class="ai-hd"><div class="ai-tag">자동 분석</div><div style="font-size:12px;font-weight:700;margin-left:2px">가동률 인사이트</div><span style="font-size:9px;background:rgba(99,102,241,.18);color:#818cf8;padding:2px 7px;border-radius:10px;margin-left:auto;font-weight:700">Gemini Flash</span></div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin:8px 0">${aiQBtns}</div>
+      <div id="ai-query-result"></div>
       <div class="ai-text" id="ai-text"><div style="display:flex;align-items:center;gap:7px;color:var(--tx3);font-size:11px"><div style="width:14px;height:14px;border:2px solid var(--br);border-top-color:var(--purple);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0"></div>분석 중...</div></div>
       <div class="ai-ft"><div class="ai-time" id="ai-time">—</div><div class="ai-re" onclick="runAI()">다시 분석</div></div>
     </div>
@@ -7242,18 +7263,10 @@ async function _renderHeatmapAsync(){
 }
 
 /* ── Gemini AI 자연어 분석 ────────────────────────────────── */
-function _saveGeminiKey(){
-  const input = document.getElementById('gemini-key-input');
-  const val = (input?.value||'').trim();
-  if(!val || val === '••••••••'){ toast('API 키를 입력해 주세요','warn'); input?.focus(); return; }
-  DB.s('gemini_key', val);
-  toast('Gemini API 키 저장됨 ✓','ok');
-  if(input) input.value = '••••••••';
-}
+const _GEMINI_KEY = 'AIzaSyCjfXVmoxG3sk6JvZBTrkvwOQltJ_O6K80';
 
 async function _askAI(type){
-  const key = DB.g('gemini_key','');
-  if(!key){ toast('먼저 Gemini API 키를 저장해 주세요','warn'); document.getElementById('gemini-key-input')?.focus(); return; }
+  const key = _GEMINI_KEY;
   const el = document.getElementById('ai-query-result');
   if(!el) return;
   el.innerHTML = `<div class="ai-qres" style="display:flex;align-items:center;gap:8px"><div style="width:13px;height:13px;border:2px solid var(--br);border-top-color:#818cf8;border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0"></div><span style="font-size:11px;color:var(--tx3)">AI 분석 중...</span></div>`;
@@ -7475,7 +7488,7 @@ function renderAdmin(){
     <div class="admin-profile ${role}">
       <div class="ap-avi ${role}">${role==='aj'?'AJ':'담당'}</div>
       <div style="flex:1"><div class="ap-name">${S.name}</div><div class="ap-role ${role}">${role==='aj'?'AJ 관리자 · 전체 현장':'협력사 관리자 · '+S.company+' · '+S.siteName}</div></div>
-      ${isAJ?`<button onclick="openSheet('sh-pw')" style="font-size:9px;padding:3px 8px;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);border-radius:5px;color:#fbbf24;cursor:pointer;font-weight:600;white-space:nowrap;flex-shrink:0">🔐 비번변경</button>`:''}
+      ${isAJ?`<button onclick="openSheet('sh-pw')" style="font-size:9px;padding:3px 8px;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);border-radius:5px;color:#fbbf24;cursor:pointer;font-weight:600;white-space:nowrap;flex-shrink:0">정보수정</button>`:''}
     </div>
 
     ${(isSub||isAJ)?(()=>{
@@ -7531,25 +7544,6 @@ function renderAdmin(){
       <button class="btn-full" onclick="saveMyProfile()">저장</button>
     </div>`:''}
 
-    ${isAJ?`<div style="margin-bottom:14px">
-      <div style="background:linear-gradient(135deg,rgba(34,197,94,.12),rgba(16,185,129,.06));border:1px solid rgba(34,197,94,.25);border-radius:var(--r);padding:12px;margin-bottom:8px;display:flex;align-items:center;gap:12px;">
-        <div style="font-size:24px;flex-shrink:0">🗄</div>
-        <div style="flex:1">
-          <div style="font-size:13px;font-weight:900">데이터동기화 <span style="font-size:10px;font-weight:600;color:var(--green);background:rgba(34,197,94,.15);padding:2px 6px;border-radius:4px;margin-left:4px">권장</span></div>
-          <div style="font-size:10px;color:var(--tx2);margin-top:2px">${DB.g(K.SB_URL,'')?'연동됨 ✓':'미설정 — 데이터 영구 보관 불가'}</div>
-        </div>
-        <div onclick="openSheet('sh-supabase')" style="padding:6px 12px;border-radius:var(--rs);background:rgba(34,197,94,.2);border:1px solid rgba(34,197,94,.3);color:var(--green);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">${DB.g(K.SB_URL,'')?'설정 변경':'연동 설정'}</div>
-      </div>
-      <div style="background:var(--card);border:1px solid var(--bdr);border-radius:var(--r);padding:10px;display:flex;align-items:center;gap:10px;opacity:0.75">
-        <div style="font-size:18px;flex-shrink:0">📊</div>
-        <div style="flex:1">
-          <div style="font-size:11px;font-weight:700">Google Sheets 백업 연동</div>
-          <div style="font-size:10px;color:var(--tx2)">${gsUrl?'연동됨':'미설정'}</div>
-        </div>
-        <div onclick="openSheet('sh-gs')" style="padding:4px 10px;border-radius:var(--rs);background:rgba(59,139,255,.15);border:1px solid rgba(59,139,255,.25);color:#60a5fa;font-size:10px;font-weight:700;cursor:pointer">설정</div>
-      </div>
-    </div>`:''}
-
     <div class="stat2">
       <div class="sbox"><div class="sbox-lbl">총 입력건수</div><div class="sbox-val">${siteLogs.length}</div></div>
       <div class="sbox"><div class="sbox-lbl">오늘 가동률</div><div class="sbox-val">${tl.length>0?fPct(r):'—'}</div></div>
@@ -7566,10 +7560,10 @@ function renderAdmin(){
       </div>
       <div class="mrow" onclick="openSheet('sh-company')">
         <div class="mrow-ico" style="background:rgba(59,139,255,.12);color:rgb(59,139,255)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg></div>
-        <div class="mrow-inf"><div class="mrow-title">장비 수량 관리</div><div class="mrow-desc">현장별 업체·장비 수량 추가·수정</div></div>
+        <div class="mrow-inf"><div class="mrow-title">협력사 관리</div><div class="mrow-desc">현장별 업체·장비 수량 추가·수정</div></div>
         <div class="mrow-arr">›</div>
       </div>
-      <div class="mrow" onclick="openSheet('sh-alert')">
+      <div class="mrow" onclick="openSheet('sh-alert');setTimeout(renderCustomAlertList,30)">
         <div class="mrow-ico" style="background:rgba(239,68,68,.12);color:rgb(239,68,68)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg></div>
         <div class="mrow-inf"><div class="mrow-title">알림 설정</div><div class="mrow-desc">오후 3시 미입력 알림 기준 설정</div></div>
         <div class="mrow-arr">›</div>
@@ -7618,34 +7612,6 @@ function renderAdmin(){
         채팅 열기
       </button>
     </div>
-
-    <!-- Supabase 연동 상태 -->
-    ${(()=>{
-      const sbUrl = DB.g(K.SB_URL,'');
-      const connected = !!sbUrl;
-      const totalRecs = getLogs().length + getTransit().length + getAsReqs().length + getMembers().length;
-      const unsyncCount = getLogs().filter(l=>!l.synced).length
-        + getTransit().filter(t=>!t.synced).length
-        + getAsReqs().filter(a=>!a.synced).length;
-      return `<div style="margin-top:10px;padding:12px;background:var(--card);border:1px solid ${connected?'rgba(34,197,94,.3)':'rgba(239,68,68,.25)'};border-radius:12px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
-          <div style="font-size:12px;font-weight:800">🗄 데이터동기화</div>
-          <span style="font-size:11px;font-weight:700;color:${connected?'var(--green)':'#f87171'}">${connected?'연결됨':'미연결'}</span>
-        </div>
-        <div style="font-size:10px;color:var(--tx3);margin-bottom:8px">
-          누적 레코드 ${totalRecs.toLocaleString()}건
-          ${unsyncCount>0?` · <span style="color:#fb923c">미동기화 ${unsyncCount}건</span>`:''}
-        </div>
-        <div style="display:flex;gap:6px">
-          ${isAJ?`<button onclick="openSheet('sh-supabase')" style="padding:5px 12px;font-size:10px;font-weight:700;background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.3);border-radius:6px;color:var(--green);cursor:pointer">
-            ⚙️ 연동 설정
-          </button>`:''}
-          ${connected?`<button onclick="syncNow()" style="padding:5px 12px;font-size:10px;font-weight:700;background:rgba(59,139,255,.15);border:1px solid rgba(59,139,255,.3);border-radius:6px;color:#60a5fa;cursor:pointer">
-            🔄 지금 동기화
-          </button>`:''}
-        </div>
-      </div>`;
-    })()}
 
     ${S?.role!=='guest'?`<button class="btn-ghost" style="width:100%;margin-top:8px;color:#f87171;border-color:rgba(239,68,68,.3)" onclick="openASSheet()">장비 AS 요청</button>`:''}
     <div style="height:16px"></div>
@@ -8128,7 +8094,77 @@ function saveAlertSettings(){
   const s=DB.g(K.SETTINGS,{});
   s.alertTime=t||'15:00';
   DB.s(K.SETTINGS,s);
-  closeSheet('sh-alert'); toast('✅ 알림 설정 저장됨','ok');
+  toast('✅ 알림 설정 저장됨','ok');
+}
+
+/* ── 추가 알림 관리 ── */
+function _getCustomAlerts(){ return DB.g('custom_alerts',[]); }
+function _saveCustomAlerts(arr){ DB.s('custom_alerts',arr); }
+
+function renderCustomAlertList(){
+  const el = document.getElementById('custom-alert-list');
+  if(!el) return;
+  const list = _getCustomAlerts();
+  if(!list.length){
+    el.innerHTML = `<div style="text-align:center;font-size:11px;color:var(--tx3);padding:12px;background:var(--bg2);border-radius:8px;border:1px dashed var(--br)">추가 알림 없음</div>`;
+    return;
+  }
+  const repeatLabel = {daily:'매일', weekday:'평일', weekly:'매주'};
+  el.innerHTML = list.map((a,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--bg2);border:1px solid var(--br);border-radius:8px;margin-bottom:6px">
+      <div style="flex-shrink:0;width:36px;height:36px;background:rgba(59,139,255,.12);border-radius:8px;display:flex;align-items:center;justify-content:center">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:700">${a.time}</div>
+        <div style="font-size:10px;color:var(--tx3)">${a.label||'알림'} · ${repeatLabel[a.repeat]||'매일'}</div>
+      </div>
+      <button onclick="toggleCustomAlert(${i})" style="font-size:10px;padding:3px 8px;border-radius:5px;border:1px solid ${a.active!==false?'rgba(34,197,94,.3)':'var(--br)'};background:${a.active!==false?'rgba(34,197,94,.1)':'transparent'};color:${a.active!==false?'#4ade80':'var(--tx3)'};cursor:pointer;font-weight:600">${a.active!==false?'ON':'OFF'}</button>
+      <button onclick="deleteCustomAlert(${i})" style="font-size:11px;padding:3px 8px;border-radius:5px;border:1px solid rgba(239,68,68,.25);background:rgba(239,68,68,.08);color:#f87171;cursor:pointer">삭제</button>
+    </div>`).join('');
+}
+
+function openAddAlertForm(){
+  const el = document.getElementById('add-alert-form');
+  if(el){ el.style.display='block'; el.scrollIntoView({behavior:'smooth',block:'center'}); }
+}
+
+function closeAddAlertForm(){
+  const el = document.getElementById('add-alert-form');
+  if(el) el.style.display='none';
+  const t = document.getElementById('new-alert-time'); if(t) t.value='';
+  const l = document.getElementById('new-alert-label'); if(l) l.value='';
+}
+
+function addCustomAlert(){
+  const time  = (document.getElementById('new-alert-time')?.value||'').trim();
+  const label = (document.getElementById('new-alert-label')?.value||'').trim();
+  const repeat= document.getElementById('new-alert-repeat')?.value||'daily';
+  if(!time){ toast('알림 시간을 선택하세요','err'); return; }
+  if(!label){ toast('알림 내용을 입력하세요','err'); return; }
+  const list = _getCustomAlerts();
+  list.push({id:'ca-'+Date.now(), time, label, repeat, active:true, createdAt:Date.now()});
+  _saveCustomAlerts(list);
+  closeAddAlertForm();
+  renderCustomAlertList();
+  toast('알림이 추가되었습니다','ok');
+}
+
+function toggleCustomAlert(i){
+  const list = _getCustomAlerts();
+  if(!list[i]) return;
+  list[i].active = list[i].active === false ? true : false;
+  _saveCustomAlerts(list);
+  renderCustomAlertList();
+}
+
+function deleteCustomAlert(i){
+  if(!confirm('이 알림을 삭제할까요?')) return;
+  const list = _getCustomAlerts();
+  list.splice(i,1);
+  _saveCustomAlerts(list);
+  renderCustomAlertList();
+  toast('알림이 삭제되었습니다','ok');
 }
 function saveInviteCode(){
   const c=document.getElementById('new-invite-code').value.trim();
