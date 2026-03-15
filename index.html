@@ -1313,6 +1313,9 @@ textarea.fg-input{height:72px;line-height:1.5;}
     </div>
   </header>
 
+  <!-- Notice Bar -->
+  <div id="notice-bar" style="display:none;background:linear-gradient(90deg,#1e3a5f,#1e40af);padding:8px 14px;font-size:12px;color:#93c5fd;border-bottom:1px solid rgba(59,130,246,.3);position:relative;z-index:30"></div>
+
   <!-- Pages -->
   <div class="pages">
 
@@ -1952,6 +1955,7 @@ const K = {
   IDLE:    'idle_logs_v3',     // 미가동 기록
   MGR_HIST:'mgr_history_v3',   // 양중담당자 이력
   EQUIP:   'equipment_v3',     // 현재 반입 장비 마스터
+  NOTICE:  'siteNotice',      // 공지사항
 };
 /* ═══════════════════════════════════════════════════════════
    IDB (IndexedDB) 레이어 — 대용량 데이터 저장
@@ -2707,9 +2711,16 @@ function setupEquipAutocomplete(inputId, opts = {}) {
     dd = document.createElement('div');
     dd.id        = ddId;
     dd.className = 'equip-ac-dd';
-    inp.parentNode.style.position = 'relative';
-    inp.parentNode.appendChild(dd);
+    dd.style.position = 'fixed';
+    dd.style.zIndex   = '9999';
+    document.body.appendChild(dd);
   }
+  const _updateDDPos = () => {
+    const r = inp.getBoundingClientRect();
+    dd.style.top   = (r.bottom + 2) + 'px';
+    dd.style.left  = r.left + 'px';
+    dd.style.width = r.width + 'px';
+  };
 
   function closeDD() { dd.style.display = 'none'; dd.innerHTML = ''; }
 
@@ -2742,6 +2753,7 @@ function setupEquipAutocomplete(inputId, opts = {}) {
 
     if (!candidates.length) { closeDD(); return; }
 
+    _updateDDPos();
     dd.innerHTML = candidates.slice(0, 10).map(e => {
       const badge = e.company ? `<span style="font-size:10px;color:var(--tx3);margin-left:6px">${e.company}</span>` : '';
       return `<div class="equip-ac-item" data-equip="${e.equipNo}">
@@ -2803,13 +2815,12 @@ function setupEquipAutocomplete(inputId, opts = {}) {
   s.textContent = `
     .equip-ac-dd {
       display: none;
-      position: absolute;
-      top: 100%; left: 0; right: 0;
+      position: fixed;
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 10px;
       box-shadow: 0 8px 24px rgba(0,0,0,.35);
-      z-index: 999;
+      z-index: 9999;
       max-height: 220px;
       overflow-y: auto;
       margin-top: 4px;
@@ -3278,6 +3289,7 @@ function enterApp(){
   setTimeout(()=>document.getElementById('loginScreen').style.display='none',300);
   document.getElementById('app').classList.add('on');
   applyRole();
+  renderNoticeBar();
   if(S.role==='aj'){
     const sel=document.getElementById('ajSiteSelect');
     if(sel && S.siteId) sel.value=S.siteId;
@@ -3310,6 +3322,7 @@ function enterApp(){
       syncNow().catch(()=>{});
     });
   setInterval(check3PMAlert, 60000);
+  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible' && S) syncNow(); });
   setTimeout(_initScrollTopBtn, 400);
 }
 
@@ -3429,6 +3442,16 @@ const PG_NT={
 };
 let curPg='pg-home';
 let curOpsTab='input';
+
+window._trExpanded = window._trExpanded || new Set();
+function toggleTrCard(id){
+  if(window._trExpanded.has(id)) window._trExpanded.delete(id);
+  else window._trExpanded.add(id);
+  const body = document.getElementById('tr-body-'+id);
+  if(body) body.style.display = window._trExpanded.has(id) ? 'block' : 'none';
+  const arrow = document.getElementById('tr-arrow-'+id);
+  if(arrow) arrow.style.transform = window._trExpanded.has(id) ? 'rotate(180deg)' : '';
+}
 
 /* ── 스크롤 탑 버튼 ─────────────────────────────────────── */
 function _initScrollTopBtn(){
@@ -4042,6 +4065,7 @@ function setInputMode(m){
   if(m==='end') populateOpenSessions();
   if(m==='idle'){
     document.getElementById('f-idle-date').value=today();
+    const idleToday=document.getElementById('f-idle-today'); if(idleToday) idleToday.textContent=today();
     document.getElementById('f-idle-site-disp').textContent=S?.siteName||'—';
     document.getElementById('f-idle-co-disp').textContent=S?.company||'—';
   }
@@ -4063,6 +4087,11 @@ function initInputForm(){
   document.getElementById('f-equip').value='';
   document.getElementById('f-meter-start').value='';
   document.getElementById('f-meter-end').value='';
+  const isAJ2 = S?.role === 'aj';
+  const _setRO = (id, ro) => { const el=document.getElementById(id); if(el){ el.readOnly=ro; el.style.opacity=ro?'.55':'1'; el.style.pointerEvents=ro?'none':''; } };
+  _setRO('f-date',     !isAJ2);
+  _setRO('f-starttime',!isAJ2);
+  _setRO('f-endtime',  !isAJ2);
   setInputMode('start');
   updatePendingBanner();
 }
@@ -4369,27 +4398,26 @@ function _getInputFormHTML(){
     <span>⏳</span>
     <span><b id="pending-count">0</b>건의 미종료 장비가 있습니다. 사용 종료를 입력해주세요.</span>
   </div>
-  <div class="fg">
-    <label class="fg-lbl">날짜 <span class="req">*</span></label>
-    <input type="date" class="fg-input" id="f-date">
-  </div>
   <div id="start-fields">
-    <div class="fg"><label class="fg-lbl">현장</label><div class="fg-display" id="f-site-disp">—</div></div>
-    <div class="fg"><label class="fg-lbl">소속 업체</label><div class="fg-display" id="f-co-disp">—</div></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px">
+      <div class="fg" style="margin:0"><label class="fg-lbl">날짜 <span class="req">*</span></label><input type="date" class="fg-input" id="f-date"></div>
+      <div class="fg" style="margin:0"><label class="fg-lbl">현장</label><div class="fg-display" id="f-site-disp">—</div></div>
+      <div class="fg" style="margin:0"><label class="fg-lbl">소속 업체</label><div class="fg-display" id="f-co-disp">—</div></div>
+    </div>
     <div class="fg" id="fg-floor">
       <label class="fg-lbl">작업 층수 <span class="req">*</span></label>
       <div class="chips" id="floor-chips">
-        <div class="chip" onclick="this.classList.toggle('on')">모듈동</div>
-        <div class="chip" onclick="this.classList.toggle('on')">1F 외곽</div>
-        <div class="chip" onclick="this.classList.toggle('on')">1F</div>
-        <div class="chip" onclick="this.classList.toggle('on')">2F</div>
-        <div class="chip" onclick="this.classList.toggle('on')">3F</div>
-        <div class="chip" onclick="this.classList.toggle('on')">4F</div>
-        <div class="chip" onclick="this.classList.toggle('on')">5F</div>
-        <div class="chip" onclick="this.classList.toggle('on')">6F</div>
-        <div class="chip" onclick="this.classList.toggle('on')">7F</div>
-        <div class="chip" onclick="this.classList.toggle('on')">8F</div>
-        <div class="chip" onclick="this.classList.toggle('on')">기타</div>
+        <div class="chip" onclick="selectOne(this,'floor-chips')">모듈동</div>
+        <div class="chip" onclick="selectOne(this,'floor-chips')">1F 외곽</div>
+        <div class="chip" onclick="selectOne(this,'floor-chips')">1F</div>
+        <div class="chip" onclick="selectOne(this,'floor-chips')">2F</div>
+        <div class="chip" onclick="selectOne(this,'floor-chips')">3F</div>
+        <div class="chip" onclick="selectOne(this,'floor-chips')">4F</div>
+        <div class="chip" onclick="selectOne(this,'floor-chips')">5F</div>
+        <div class="chip" onclick="selectOne(this,'floor-chips')">6F</div>
+        <div class="chip" onclick="selectOne(this,'floor-chips')">7F</div>
+        <div class="chip" onclick="selectOne(this,'floor-chips')">8F</div>
+        <div class="chip" onclick="selectOne(this,'floor-chips')">기타</div>
       </div>
     </div>
     <div class="fg">
@@ -4409,9 +4437,12 @@ function _getInputFormHTML(){
     </div>
   </div>
   <div id="idle-fields" style="display:none">
-    <div class="fg"><label class="fg-lbl">현장</label><div class="fg-display" id="f-idle-site-disp">—</div></div>
-    <div class="fg"><label class="fg-lbl">업체</label><div class="fg-display" id="f-idle-co-disp">—</div></div>
-    <div class="fg"><label class="fg-lbl">날짜</label><input type="date" class="fg-input" id="f-idle-date"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px">
+      <div class="fg" style="margin:0"><label class="fg-lbl">입력날짜 (수정불가)</label><div class="fg-display" id="f-idle-today">—</div></div>
+      <div class="fg" style="margin:0"><label class="fg-lbl">현장</label><div class="fg-display" id="f-idle-site-disp">—</div></div>
+      <div class="fg" style="margin:0"><label class="fg-lbl">업체</label><div class="fg-display" id="f-idle-co-disp">—</div></div>
+    </div>
+    <div class="fg"><label class="fg-lbl">미가동 날짜</label><input type="date" class="fg-input" id="f-idle-date"></div>
     <div class="fg">
       <label class="fg-lbl">장비번호 <span class="req">*</span></label>
       <input type="text" class="fg-input" id="f-idle-equip" placeholder="예: GK228, GK229 또는 전체">
@@ -4710,12 +4741,16 @@ function nextBizDay(dateStr){
 }
 
 // 반입반출 상태 라벨 (영업일 기준)
-function trStatusLabel(date, type){
+function trStatusLabel(date, type, status){
   const td = today();
   const verb = type==='in' ? ['반입','금일반입','명일반입','반입완료']
              : type==='handover' ? ['인수인계','금일인계','명일인계','인계완료']
              : ['반출','금일반출','명일반출','반출완료'];
   const diff = (new Date(date) - new Date(td)) / 86400000;
+  if(diff < 0 && status === '예정'){
+    const delayLabel = type==='in'?'반입 지연':type==='handover'?'인계 지연':'반출 지연';
+    return {label: delayLabel, color:'#f87171', bg:'rgba(248,113,113,.15)', done:false};
+  }
   if(diff < 0)                  return {label: verb[3], color:'#22c55e',      bg:'rgba(34,197,94,.15)',   done:true};
   if(date === td)               return {label: verb[1], color:'#3b82f6',      bg:'rgba(59,130,246,.15)',  done:false};
   if(date === nextBizDay(td))   return {label: verb[2], color:'var(--orange)', bg:'rgba(249,115,22,.15)', done:false};
@@ -4992,7 +5027,7 @@ function _closeTransitCalendar(){
 }
 
 function _trHandoverCard(r, canEdit) {
-  const st   = trStatusLabel(r.date, r.type);
+  const st   = trStatusLabel(r.date, r.type, r.status);
   const diff = trDiff(r.date);
   const dDayStr = diff===0?' ★D-DAY':diff===1?' (내일)':diff>=2?' (D-'+diff+')':'';
   let border = 'border:1px solid var(--br)';
@@ -5006,6 +5041,7 @@ function _trHandoverCard(r, canEdit) {
     ? '<div style="grid-column:1/-1;display:flex;align-items:center;gap:5px;font-size:10px"><span style="color:var(--tx3)">프로젝트 변경</span><span style="color:var(--tx3)">'+(r.fromProject||'—')+'</span><span style="color:#14b8a6">→</span><span style="font-weight:800;color:#14b8a6">'+(r.toProject||'—')+'</span></div>'
     : '';
   const locationBadge = r.location ? '<span style="font-size:9px;padding:2px 7px;border-radius:6px;background:rgba(139,92,246,.15);color:#a78bfa">'+r.location+'</span>' : '';
+  const handoverDoneByHtml = isDone && r.doneBy ? '<div style="text-align:center;font-size:10px;color:var(--tx3);margin-top:4px">완료 확인: '+r.doneBy+'</div>' : '';
   let actionHtml = '';
   if (canEdit && r.status==='예정') {
     actionHtml = '<div style="display:flex;gap:6px;margin-top:6px;border-top:1px solid var(--br);padding-top:8px">'
@@ -5014,39 +5050,58 @@ function _trHandoverCard(r, canEdit) {
       +'<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:#f87171;border-color:rgba(248,113,113,.3)" onclick="cancelTransit(\''+r.id+'\')">취소</button>'
       +'</div>';
   }
-  return '<div class="lcard" style="margin-bottom:10px;border-radius:12px;overflow:hidden;'+border+(r.status==='취소'?';opacity:.4':'')+'">'
-    +'<div style="'+headerBg+';padding:10px 12px;display:flex;align-items:center;justify-content:space-between">'
-    +  '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
-    +    '<span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px;background:rgba(20,184,166,.2);color:#14b8a6">인수인계</span>'
-    +    doneBadge
-    +    '<span style="font-weight:800;font-size:12px">'+(r.fromCompany||r.company||'—')+'</span>'
-    +    '<span style="color:#14b8a6;font-weight:900">→</span>'
-    +    '<span style="font-weight:800;font-size:12px">'+(r.toCompany||'—')+'</span>'
-    +  '</div>'
-    +  '<div style="text-align:right">'
-    +    '<div style="font-size:14px;font-weight:900;color:'+(!st.done&&diff<=1?st.color:'var(--tx)')+';cursor:pointer" onclick="editTransitDate('+JSON.stringify(r.id)+')" title="날짜 변경">'+r.date+'</div>'
-    +    '<div style="font-size:10px;font-weight:800;color:'+st.color+';margin-top:1px">'+st.label+dDayStr+'</div>'
-    +  '</div>'
-    +'</div>'
-    +'<div style="padding:10px 12px">'
-    +  '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap">'
-    +    '<span style="font-size:10px;color:var(--tx3)">장비</span>'
-    +    '<span style="font-family:monospace;font-weight:700;font-size:11px;color:#60a5fa">'+equipStr+'</span>'
-    +    locationBadge
-    +  '</div>'
-    +  '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:10px;color:var(--tx3)">'
-    +    projHtml
-    +    (r.recorder?'<div style="grid-column:1/-1;display:flex;align-items:center;gap:5px"><span>기록자</span><b>'+r.recorder+'</b>'+(r.reporterPhone?'· <a href="tel:'+r.reporterPhone+'" style="color:#60a5fa;font-weight:600;text-decoration:none">'+r.reporterPhone+'</a>':'')+'</div>':'')
-    +    (r.note?'<div style="grid-column:1/-1;color:var(--tx3);font-size:10px">비고: '+r.note+'</div>':'')
-    +  '</div>'
-    +  actionHtml
-    +'</div>'
-    +'</div>';
+  const hoIsExpanded = window._trExpanded && window._trExpanded.has(r.id);
+  return `<div class="lcard" id="tr-card-${r.id}" style="margin-bottom:10px;border-radius:12px;overflow:hidden;${border}${r.status==='취소'?';opacity:.4':''}">
+    <div onclick="toggleTrCard('${r.id}')" style="padding:10px 12px;cursor:pointer;display:flex;align-items:flex-start;gap:8px;${headerBg}">
+      <div style="flex:1;display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap;min-width:0">
+        <span style="font-size:10px;font-weight:800;padding:2px 7px;border-radius:6px;background:rgba(20,184,166,.2);color:#14b8a6;flex-shrink:0">인수인계</span>
+        ${doneBadge}
+        <span style="font-weight:800;font-size:12px;flex-shrink:0">${r.fromCompany||r.company||'—'}</span>
+        <span style="color:#14b8a6;font-weight:900;flex-shrink:0">→</span>
+        <span style="font-weight:800;font-size:12px;flex-shrink:0">${r.toCompany||'—'}</span>
+        <span style="font-family:monospace;font-size:11px;color:#60a5fa;flex-shrink:0">${equipStr}</span>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-size:13px;font-weight:900;color:${!st.done&&diff<=1?st.color:'var(--tx)'}">${r.date}</div>
+        <div style="font-size:10px;font-weight:800;color:${st.color}">${st.label}${dDayStr}</div>
+      </div>
+      <span id="tr-arrow-${r.id}" style="font-size:12px;color:var(--tx3);transition:transform .2s;flex-shrink:0;align-self:center${hoIsExpanded?';transform:rotate(180deg)':''}">▼</span>
+    </div>
+    <div id="tr-body-${r.id}" style="display:${hoIsExpanded?'block':'none'}">
+      <div style="${headerBg};padding:10px 12px;display:flex;align-items:center;justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px;background:rgba(20,184,166,.2);color:#14b8a6">인수인계</span>
+          ${doneBadge}
+          <span style="font-weight:800;font-size:12px">${r.fromCompany||r.company||'—'}</span>
+          <span style="color:#14b8a6;font-weight:900">→</span>
+          <span style="font-weight:800;font-size:12px">${r.toCompany||'—'}</span>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:14px;font-weight:900;color:${!st.done&&diff<=1?st.color:'var(--tx)'};cursor:pointer" onclick="editTransitDate(${JSON.stringify(r.id)})" title="날짜 변경">${r.date}</div>
+          <div style="font-size:10px;font-weight:800;color:${st.color};margin-top:1px">${st.label}${dDayStr}</div>
+        </div>
+      </div>
+      <div style="padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap">
+          <span style="font-size:10px;color:var(--tx3)">장비</span>
+          <span style="font-family:monospace;font-weight:700;font-size:11px;color:#60a5fa">${equipStr}</span>
+          ${locationBadge}
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:10px;color:var(--tx3)">
+          ${projHtml}
+          ${r.recorder?'<div style="grid-column:1/-1;display:flex;align-items:center;gap:5px"><span>기록자</span><b>'+r.recorder+'</b>'+(r.reporterPhone?'· <a href="tel:'+r.reporterPhone+'" style="color:#60a5fa;font-weight:600;text-decoration:none">'+r.reporterPhone+'</a>':'')+'</div>':''}
+          ${r.note?'<div style="grid-column:1/-1;color:var(--tx3);font-size:10px">비고: '+r.note+'</div>':''}
+        </div>
+        ${actionHtml}
+        ${handoverDoneByHtml}
+      </div>
+    </div>
+  </div>`;
 }
 
 function _trCard(r, _unused, canEdit, canMsg){
   if (r.type === 'handover') return _trHandoverCard(r, canEdit);
-  const st = trStatusLabel(r.date, r.type);
+  const st = trStatusLabel(r.date, r.type, r.status);
   const diff = trDiff(r.date);
   const isIn = r.type === 'in';
   const isAJ = S?.role === 'aj';
@@ -5173,6 +5228,9 @@ function _trCard(r, _unused, canEdit, canMsg){
   const ajMsgHtml = threadBlock;
   const ajInputHtml = ''; // 댓글 방식으로 통합
 
+  // 완료 확인자
+  const doneByHtml = isDone && r.doneBy ? `<div style="text-align:center;font-size:10px;color:var(--tx3);margin-top:4px">완료 확인: ${r.doneBy}</div>` : '';
+
   // 액션 버튼
   let actionHtml = '';
   const alreadyDone = rec => rec.status === '반입완료' || rec.status === '반출완료' || rec.status === '취소';
@@ -5202,29 +5260,59 @@ function _trCard(r, _unused, canEdit, canMsg){
       `</div>`;
   }
 
-  return '<div class="lcard" style="margin-bottom:10px;border-radius:12px;overflow:hidden;' + border + (r.status === '취소' ? ';opacity:.4' : '') + '">'
-    + '<div style="' + headerBg + ';padding:10px 12px;display:flex;align-items:center;justify-content:space-between">'
-    +   '<div style="display:flex;align-items:center;gap:8px">'
-    +     '<span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px;background:' + (isIn?'rgba(96,165,250,.2)':'rgba(251,146,60,.2)') + ';color:' + typeColor + '">' + typeLabel + '</span>'
-    +     doneBadge
-    +     projectBadge
-    +     '<span style="font-weight:800;font-size:13px">' + r.company + '</span>'
-    +   '</div>'
-    +   '<div style="text-align:right">'
-    +     '<div style="font-size:14px;font-weight:900;color:' + (!st.done && diff <= 1 ? st.color : 'var(--tx)') + ';cursor:pointer;" onclick="editTransitDate(' + JSON.stringify(r.id) + ')" title="날짜 변경">' + r.date + '</div>'
-    +     '<div style="font-size:10px;font-weight:800;color:' + st.color + ';margin-top:1px">' + st.label + dDayStr + '</div>'
-    +   '</div>'
-    + '</div>'
-    + '<div style="padding:10px 12px">'
-    +   _renderSpecBlock(r, isIn && isAJ)
-    +   ((!isAJ || !isIn) ? ajEquipHtml : '')
-    +   inCopyHtml
-    +   '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:10px;color:var(--tx3)">' + contactHtml + '</div>'
-    +   ajMsgHtml
-    +   ajInputHtml
-    +   actionHtml
-    + '</div>'
-    + '</div>';
+  // 아코디언 요약
+  const totalQty = specs.reduce((a,s)=>a+(+s.qty||0),0);
+  const specSummary = specs.length
+    ? specs.map(s=>`<span style="font-size:11px;font-weight:700">${s.spec} × ${s.qty}</span>`).join('<br>')
+    : (r.equip||'—');
+  const allEquipNos = specs.flatMap(s=>s.equipNos||[]);
+  if(r.ajEquip) allEquipNos.unshift(r.ajEquip);
+  const equipShort = allEquipNos.length===0 ? '—'
+    : allEquipNos.length<=2 ? allEquipNos.join(', ')
+    : allEquipNos.slice(0,2).join(', ')+' ...';
+  const isExpanded = window._trExpanded && window._trExpanded.has(r.id);
+
+  return `<div class="lcard" id="tr-card-${r.id}" style="margin-bottom:10px;border-radius:12px;overflow:hidden;${border}${r.status==='취소'?';opacity:.4':''}">
+    <div onclick="toggleTrCard('${r.id}')" style="padding:10px 12px;cursor:pointer;display:flex;align-items:flex-start;gap:8px;${headerBg}">
+      <div style="flex:1;display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap;min-width:0">
+        <span style="font-size:10px;font-weight:800;padding:2px 7px;border-radius:6px;background:rgba(${isIn?'96,165,250':'251,146,60'},.2);color:${typeColor};flex-shrink:0">${typeLabel}</span>
+        ${doneBadge}
+        <span style="font-weight:800;font-size:12px;flex-shrink:0">${r.company||'—'}</span>
+        <div style="flex-shrink:0;line-height:1.4">${specSummary}</div>
+        <span style="font-family:monospace;font-size:11px;color:#60a5fa;flex-shrink:0">${equipShort}</span>
+        ${totalQty>0?`<span style="font-size:10px;color:var(--tx3);flex-shrink:0">총 ${totalQty}대</span>`:''}
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-size:13px;font-weight:900;color:${!st.done&&diff<=1?st.color:'var(--tx)'}">${r.date}</div>
+        <div style="font-size:10px;font-weight:800;color:${st.color}">${st.label}${dDayStr}</div>
+      </div>
+      <span id="tr-arrow-${r.id}" style="font-size:12px;color:var(--tx3);transition:transform .2s;flex-shrink:0;align-self:center${isExpanded?';transform:rotate(180deg)':''}">▼</span>
+    </div>
+    <div id="tr-body-${r.id}" style="display:${isExpanded?'block':'none'}">
+      <div style="${headerBg};padding:10px 12px;display:flex;align-items:center;justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px;background:${isIn?'rgba(96,165,250,.2)':'rgba(251,146,60,.2)'};color:${typeColor}">${typeLabel}</span>
+          ${doneBadge}
+          ${projectBadge}
+          <span style="font-weight:800;font-size:13px">${r.company}</span>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:14px;font-weight:900;color:${!st.done && diff <= 1 ? st.color : 'var(--tx)'};cursor:pointer;" onclick="editTransitDate(${JSON.stringify(r.id)})" title="날짜 변경">${r.date}</div>
+          <div style="font-size:10px;font-weight:800;color:${st.color};margin-top:1px">${st.label}${dDayStr}</div>
+        </div>
+      </div>
+      <div style="padding:10px 12px">
+        ${_renderSpecBlock(r, isIn && isAJ)}
+        ${(!isAJ || !isIn) ? ajEquipHtml : ''}
+        ${inCopyHtml}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:10px;color:var(--tx3)">${contactHtml}</div>
+        ${ajMsgHtml}
+        ${ajInputHtml}
+        ${actionHtml}
+        ${doneByHtml}
+      </div>
+    </div>
+  </div>`;
 }
 
 
@@ -5617,7 +5705,7 @@ async function completeTransit(id) {
   // 인수인계 완료 처리
   if (rec.type === 'handover') {
     if (!confirm('인계완료 처리하시겠습니까?\n' + (rec.fromCompany||'') + ' → ' + (rec.toCompany||'') + '\n장비: ' + (rec.handoverEquips||[]).join(', '))) return;
-    rec.status = '인계완료'; rec.doneAt = Date.now(); rec.synced = false;
+    rec.status = '인계완료'; rec.date = today(); rec.doneAt = Date.now(); rec.doneBy = S?.name||''; rec.synced = false;
     await saveTransit(recs);
     await _applyHandoverToEquipMaster(rec).catch(()=>{});
     toast('인계완료 처리 완료', 'ok'); renderTransit(); return;
@@ -5639,7 +5727,9 @@ async function completeTransit(id) {
   if (!confirm(`${verb} 처리하시겠습니까?\n업체: ${rec.company}\n날짜: ${rec.date}${rec.ajEquip ? '\n장비번호: ' + rec.ajEquip : ''}`)) return;
 
   rec.status   = verb;
+  rec.date     = today();
   rec.doneAt   = Date.now();
+  rec.doneBy   = S?.name || '';
   rec.synced   = false;
   await saveTransit(recs);
 
@@ -5974,34 +6064,93 @@ function editTransitDate(id){
   const recs=getTransit();
   const rec=recs.find(r=>r.id===id);
   if(!rec){ toast('레코드를 찾을 수 없습니다','err'); return; }
+  const specs = rec.specs||[];
   let sh = document.getElementById('sh-edit-date');
   if(!sh){
     sh = document.createElement('div');
     sh.className='soverlay'; sh.id='sh-edit-date';
     sh.onclick=function(e){ if(e.target===sh) closeSheet('sh-edit-date'); };
-    sh.innerHTML=`<div class="sheet">
-      <div class="sh-handle"></div>
-      <div class="sh-title">날짜 변경</div>
-      <div class="fg">
-        <label class="fg-lbl">새 날짜 <span class="req">*</span></label>
-        <input type="date" class="fg-input" id="edit-date-input">
-      </div>
-      <div class="btn-gap">
-        <button class="btn-full teal" id="edit-date-save">변경 저장</button>
-        <button class="btn-ghost" onclick="closeSheet('sh-edit-date')">닫기</button>
-      </div>
-    </div>`;
     document.body.appendChild(sh);
   }
+  const specRows = specs.map((s,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <span style="flex:1;font-size:12px;font-weight:700">${s.spec} (전체 ${s.qty}대)</span>
+      <input type="number" id="split-qty-${i}" min="0" max="${s.qty}" placeholder="0" style="width:60px;background:var(--bg3);border:1px solid var(--br);border-radius:6px;color:var(--tx);padding:4px 8px;font-size:12px;text-align:center">
+      <span style="font-size:11px;color:var(--tx3)">대 이동</span>
+    </div>`).join('');
+  sh.innerHTML=`<div class="sheet">
+    <div class="sh-handle"></div>
+    <div class="sh-title">날짜 변경</div>
+    <div style="display:flex;gap:10px;margin-bottom:12px">
+      <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer">
+        <input type="radio" name="split-mode" value="all" checked onchange="_onSplitModeChange()"> 전부
+      </label>
+      <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer">
+        <input type="radio" name="split-mode" value="partial" onchange="_onSplitModeChange()"> 일부
+      </label>
+    </div>
+    <div class="fg">
+      <label class="fg-lbl">새 날짜 <span class="req">*</span></label>
+      <input type="date" class="fg-input" id="edit-date-input">
+    </div>
+    <div id="split-detail" style="display:none;border-top:1px solid var(--br);padding-top:10px;margin-top:4px">
+      <div style="font-size:12px;font-weight:700;color:var(--tx2);margin-bottom:8px">이동할 수량</div>
+      ${specRows||'<div style="font-size:11px;color:var(--tx3)">제원 정보 없음</div>'}
+      <div class="fg" style="margin-top:8px">
+        <label class="fg-lbl">이동할 장비번호 (쉼표 구분)</label>
+        <input type="text" class="fg-input" id="split-equip" placeholder="예: GA123, GB456" style="text-transform:uppercase">
+      </div>
+    </div>
+    <div class="btn-gap" style="margin-top:10px">
+      <button class="btn-full teal" id="edit-date-save">변경 저장</button>
+      <button class="btn-ghost" onclick="closeSheet('sh-edit-date')">닫기</button>
+    </div>
+  </div>`;
   document.getElementById('edit-date-input').value = rec.date||today();
+  window._onSplitModeChange = function(){
+    const isP = document.querySelector('input[name="split-mode"]:checked')?.value==='partial';
+    document.getElementById('split-detail').style.display = isP?'block':'none';
+  };
   document.getElementById('edit-date-save').onclick = function(){
     const nd = document.getElementById('edit-date-input').value;
     if(!nd){ toast('날짜를 선택하세요','err'); return; }
+    const isPartial = document.querySelector('input[name="split-mode"]:checked')?.value==='partial';
     const recs2=getTransit();
     const rec2=recs2.find(r=>r.id===id);
-    if(rec2){ rec2.date=nd; saveTransit(recs2); }
+    if(!rec2){ toast('레코드를 찾을 수 없습니다','err'); return; }
+    if(!isPartial){
+      rec2.date=nd; rec2.synced=false; saveTransit(recs2);
+      closeSheet('sh-edit-date'); toast('날짜가 변경되었습니다','ok'); renderTransit(); return;
+    }
+    // 일부 분리
+    const specs2 = rec2.specs||[];
+    const movedSpecs = specs2.map((s,i)=>{
+      const qtyEl = document.getElementById('split-qty-'+i);
+      const mv = Math.min(+qtyEl?.value||0, s.qty);
+      return mv>0 ? {...s, qty:mv, equipNos:(s.equipNos||[]).slice(0,mv)} : null;
+    }).filter(Boolean);
+    if(!movedSpecs.length){ toast('이동할 수량을 입력하세요','err'); return; }
+    const splitEquipStr = document.getElementById('split-equip')?.value||'';
+    const splitEquipNos = splitEquipStr.split(/[,\s]+/).filter(Boolean).map(x=>x.toUpperCase());
+    // 원본 수정
+    rec2.specs = specs2.map((s,i)=>{
+      const qtyEl = document.getElementById('split-qty-'+i);
+      const mv = Math.min(+qtyEl?.value||0, s.qty);
+      return mv>=s.qty ? null : {...s, qty:s.qty-mv};
+    }).filter(Boolean);
+    rec2.synced=false;
+    // 신규 카드 생성
+    const newRec = {...rec2,
+      id:'tr-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,6),
+      date:nd, specs:movedSpecs,
+      ajEquip: splitEquipNos.length?splitEquipNos.join(', '):'',
+      status:'예정', doneAt:null, doneBy:null, synced:false, createdAt:Date.now()
+    };
+    recs2.push(newRec);
+    saveTransit(recs2);
     closeSheet('sh-edit-date');
-    toast('날짜가 변경되었습니다','ok'); renderTransit();
+    toast(`일부 분리 완료 — 새 카드 생성됨 (${movedSpecs.reduce((a,s)=>a+s.qty,0)}대)`,'ok');
+    renderTransit();
   };
   openSheet('sh-edit-date');
 }
@@ -6779,6 +6928,56 @@ async function runAI(){
 }
 
 /* ═══════════════════════════════════════════
+   NOTICE BOARD
+═══════════════════════════════════════════ */
+function getNotices(){ return DB.g(K.NOTICE,[]); }
+function saveNotices(arr){ DB.s(K.NOTICE,arr); }
+
+function renderNoticeBar(){
+  const el = document.getElementById('notice-bar');
+  if(!el||!S) return;
+  const notices = getNotices();
+  const siteId = S.siteId==='all'?null:S.siteId;
+  const active = notices.filter(n=>n.active&&(siteId?n.siteId===siteId:true));
+  if(!active.length){ el.style.display='none'; return; }
+  el.style.display='block';
+  el.innerHTML = active.map(n=>
+    `<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:${active.length>1?'6px':'0'}">
+      <span style="font-size:13px;flex-shrink:0">📢</span>
+      <span style="flex:1;line-height:1.4">${n.text}</span>
+      <span style="font-size:10px;color:#60a5fa;flex-shrink:0">${n.createdBy||''}</span>
+    </div>`
+  ).join('');
+}
+
+function saveNotice(siteId, text){
+  if(!text.trim()){ toast('공지 내용을 입력하세요','err'); return; }
+  const notices = getNotices();
+  notices.unshift({id:'notice-'+Date.now().toString(36), siteId, text:text.trim(), createdBy:S.name, createdAt:Date.now(), active:true});
+  saveNotices(notices);
+  renderNoticeBar();
+  toast('공지가 등록되었습니다','ok');
+  renderAdmin();
+}
+
+function deleteNotice(id){
+  const notices = getNotices().filter(n=>n.id!==id);
+  saveNotices(notices);
+  renderNoticeBar();
+  renderAdmin();
+  toast('공지가 삭제되었습니다','warn');
+}
+
+function toggleNotice(id){
+  const notices = getNotices();
+  const n = notices.find(x=>x.id===id);
+  if(n) n.active = !n.active;
+  saveNotices(notices);
+  renderNoticeBar();
+  renderAdmin();
+}
+
+/* ═══════════════════════════════════════════
    ADMIN
 ═══════════════════════════════════════════ */
 function renderAdmin(){
@@ -6819,6 +7018,33 @@ function renderAdmin(){
       <div class="ap-avi ${role}">${role==='aj'?'AJ':'담당'}</div>
       <div><div class="ap-name">${S.name}</div><div class="ap-role ${role}">${role==='aj'?'AJ 관리자 · 전체 현장':'협력사 관리자 · '+S.company+' · '+S.siteName}</div></div>
     </div>
+
+    ${(isSub||isAJ)?`<div style="background:var(--bg2);border:1px solid var(--br);border-radius:12px;padding:14px;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:800;margin-bottom:12px">📢 공지사항 관리</div>
+      ${isAJ?`
+      <div class="fg" style="margin-bottom:8px">
+        <label class="fg-lbl">대상 현장</label>
+        <select class="fg-input" id="notice-site-sel" style="width:100%">
+          ${getSites().map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}
+        </select>
+      </div>`:''}
+      <div class="fg" style="margin-bottom:8px">
+        <label class="fg-lbl">공지 내용</label>
+        <textarea class="fg-input" id="notice-text" rows="3" placeholder="공지할 내용을 입력하세요..." style="resize:none"></textarea>
+      </div>
+      <button class="btn-full teal" onclick="saveNotice(${isAJ?`document.getElementById('notice-site-sel')?.value||'${S.siteId}'`:`'${S.siteId}'`}, document.getElementById('notice-text').value)" style="margin-bottom:10px">공지 등록</button>
+      <div style="max-height:180px;overflow-y:auto">
+        ${getNotices().filter(n=>isAJ||(n.siteId===S.siteId)).map(n=>`
+        <div style="display:flex;align-items:flex-start;gap:6px;padding:8px;background:var(--bg3);border-radius:8px;margin-bottom:5px">
+          <div style="flex:1">
+            <div style="font-size:11px;color:var(--tx2);margin-bottom:2px">${getSites().find(s=>s.id===n.siteId)?.name||n.siteId} · ${n.createdBy}</div>
+            <div style="font-size:12px">${n.text}</div>
+          </div>
+          <button onclick="toggleNotice('${n.id}')" style="font-size:10px;padding:2px 7px;border-radius:5px;border:1px solid var(--br);background:${n.active?'rgba(34,197,94,.15)':'var(--bg2)'};color:${n.active?'#22c55e':'var(--tx3)'};cursor:pointer;flex-shrink:0">${n.active?'ON':'OFF'}</button>
+          <button onclick="deleteNotice('${n.id}')" style="font-size:12px;background:none;border:none;color:var(--red);cursor:pointer;flex-shrink:0;padding:0 4px">×</button>
+        </div>`).join('')||'<div style="font-size:11px;color:var(--tx3);text-align:center;padding:10px">등록된 공지가 없습니다</div>'}
+      </div>
+    </div>`:''}
 
     ${isSub?`<div style="background:var(--bg2);border:1px solid var(--br);border-radius:10px;padding:12px;margin-bottom:14px">
       <div style="font-size:11px;font-weight:800;color:var(--tx2);margin-bottom:8px">내 정보 수정</div>
@@ -7350,8 +7576,8 @@ function renderSiteMgr(){
       <div style="display:flex;gap:6px;align-items:center">
         <input type="text" class="lg-input" id="proj-input-${s.id}" value="${projStr}"
           placeholder="프로젝트 (쉼표 구분: Ph.2, Ph.4)"
-          style="flex:1;font-size:11px;padding:5px 8px">
-        <button class="btn-ghost" style="font-size:10px;padding:5px 10px;white-space:nowrap"
+          style="flex:0 0 calc(85% - 3px);font-size:11px;padding:5px 8px">
+        <button class="btn-ghost" style="flex:0 0 calc(15% - 3px);font-size:11px;padding:5px 0;white-space:nowrap"
           onclick="saveProjects('${s.id}')">저장</button>
       </div>
     </div>`;
@@ -7400,8 +7626,7 @@ function renderCoMgr(){
       <div style="display:flex;align-items:center;gap:9px;background:var(--bg2);border-radius:var(--rs);padding:9px 12px;margin-bottom:5px">
         <div style="width:7px;height:7px;border-radius:50%;background:${c.color};flex-shrink:0"></div>
         <div style="flex:1"><div style="font-size:12px;font-weight:700">${c.name}</div></div>
-        <input type="number" value="${c.equip}" min="0" onchange="updateEquip('${site.id}',${i},this.value)"
-          style="width:56px;background:var(--bg3);border:1px solid var(--br);border-radius:5px;color:var(--tx);padding:4px 7px;font-size:11px;text-align:center">
+        <span style="font-size:11px;font-weight:700;background:var(--bg3);border:1px solid var(--br);border-radius:5px;color:var(--blue);padding:4px 7px;min-width:56px;text-align:center;display:inline-block">${getEquipMaster().filter(e=>e.company===c.name&&e.siteId===site.id&&e.status!=='out').length}대</span>
         <div onclick="removeCo('${site.id}',${i})" style="color:var(--red);font-size:16px;cursor:pointer;padding:2px 5px">×</div>
       </div>`).join('');
   });
