@@ -351,6 +351,15 @@ input,select,button,textarea{font-family:inherit;}
 .google-or::before,.google-or::after{content:'';flex:1;height:1px;background:var(--br)}
 .gsi-wrap{display:flex;justify-content:center;min-height:44px;margin-bottom:4px}
 .gsi-no-client{font-size:11px;color:var(--tx3);text-align:center;padding:4px 0 8px;display:none}
+/* 회원 승인 상태 뱃지 */
+.mbr-badge{display:inline-block;font-size:9px;font-weight:800;padding:2px 6px;border-radius:5px;vertical-align:middle}
+.mbr-badge.pending {background:rgba(245,158,11,.2);color:#fbbf24}
+.mbr-badge.approved{background:rgba(34,197,94,.15);color:#4ade80}
+.mbr-badge.rejected{background:rgba(239,68,68,.15);color:#f87171}
+/* 가입신청 안내박스 */
+.pending-box{padding:12px 14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:10px;margin-bottom:12px}
+.pending-box-title{font-size:13px;font-weight:800;color:#fbbf24;margin-bottom:4px}
+.pending-box-desc{font-size:11px;color:var(--tx2);line-height:1.7}
 
 /* Admin hint */
 .admin-hint{font-size:11px;color:var(--tx3);text-align:center;margin-top:10px;line-height:1.7;}
@@ -1107,6 +1116,11 @@ textarea.fg-input{height:72px;line-height:1.5;}
     <div id="form-tech">
       <div style="font-size:10px;font-weight:700;color:var(--tx2);letter-spacing:1px;text-transform:uppercase;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--br)">기술인 로그인</div>
 
+      <!-- Google 로그인 -->
+      <div class="gsi-wrap" id="gsi-btn-tech"></div>
+      <div class="gsi-no-client" id="gsi-no-client-tech">Google 로그인 사용 시 <b onclick="openSheet('sh-supabase')" style="color:var(--blue);cursor:pointer">Client ID 설정</b>이 필요합니다</div>
+      <div class="google-or" id="gsi-tech-or">또는 직접 입력</div>
+
       <div class="lg">
         <label class="lg-label">현장 선택 <span class="req">*</span></label>
         <div class="site-select-wrap">
@@ -1178,8 +1192,13 @@ textarea.fg-input{height:72px;line-height:1.5;}
 
     <!-- ── 협력사 관리자 폼 ── -->
     <div id="form-sub" style="display:none">
+      <!-- Google 로그인 -->
+      <div class="gsi-wrap" id="gsi-btn-sub"></div>
+      <div class="gsi-no-client" id="gsi-no-client-sub">Google 로그인 사용 시 <b onclick="openSheet('sh-supabase')" style="color:var(--blue);cursor:pointer">Client ID 설정</b>이 필요합니다</div>
+      <div class="google-or" id="gsi-sub-or">또는 직접 가입</div>
+
       <div class="role-notice sub">
-        <div class="rn-txt">협력사 관리자는 <b>AJ관리자가 발급한 초대코드</b>를 입력해야 합니다. <b>자동 분석, 데이터 내보내기, 소속 장비 수정</b> 기능을 이용할 수 있습니다.</div>
+        <div class="rn-txt">가입 후 <b>AJ관리자의 승인</b>이 필요합니다. 승인 완료 시 <b>자동 분석, 데이터 내보내기, 소속 장비 수정</b> 기능을 이용할 수 있습니다.</div>
       </div>
       <div class="lg">
         <label class="lg-label">현장 선택 <span class="req">*</span></label>
@@ -1201,15 +1220,11 @@ textarea.fg-input{height:72px;line-height:1.5;}
         <label class="lg-label">연락처</label>
         <input type="tel" class="lg-input phone-input" id="subPhone" placeholder="숫자만 입력" maxlength="11">
       </div>
-      <div class="lg">
-        <label class="lg-label">초대코드 <span class="req">*</span></label>
-        <input type="password" class="lg-input" id="subCode" placeholder="AJ관리자에게 발급받은 코드">
-      </div>
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--tx2);padding:6px 0;margin-bottom:4px">
         <input type="checkbox" id="chk-auto-login-sub" checked style="width:16px;height:16px;accent-color:var(--teal);cursor:pointer;flex-shrink:0">
         자동 로그인 <span style="font-size:10px;color:var(--tx3)">(7일간 유지)</span>
       </label>
-      <button class="login-btn sub" onclick="doLogin('sub')">협력사 관리자로 로그인</button>
+      <button class="login-btn sub" onclick="doLogin('sub')">가입 신청 / 로그인</button>
     </div>
 
     <!-- ── AJ 관리자 폼 ── -->
@@ -1299,6 +1314,47 @@ textarea.fg-input{height:72px;line-height:1.5;}
   </div><!-- /login-body -->
   </div><!-- /login-content -->
 </div><!-- /loginScreen -->
+
+<!-- Google 프로필 입력 모달 (기술인/협력사 최초 가입용) -->
+<div id="modal-gprofile" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9999;align-items:flex-end;justify-content:center">
+  <div style="background:var(--bg1);border-radius:20px 20px 0 0;padding:20px 20px 44px;width:100%;max-width:480px;max-height:92vh;overflow-y:auto">
+    <div style="width:36px;height:4px;background:var(--br);border-radius:2px;margin:0 auto 18px"></div>
+    <div style="font-size:15px;font-weight:800;margin-bottom:4px" id="gpf-title">프로필 입력</div>
+    <div style="font-size:12px;color:var(--tx2);margin-bottom:14px;line-height:1.6" id="gpf-desc"></div>
+    <!-- Google 계정 표시 -->
+    <div style="padding:10px 12px;background:var(--bg2);border-radius:10px;margin-bottom:16px;display:flex;align-items:center;gap:10px">
+      <div style="width:34px;height:34px;border-radius:50%;background:rgba(234,67,53,.15);display:flex;align-items:center;justify-content:center;font-weight:900;color:#EA4335;font-size:14px;flex-shrink:0">G</div>
+      <div>
+        <div style="font-size:12px;font-weight:700" id="gpf-gname">—</div>
+        <div style="font-size:10px;color:var(--tx3)" id="gpf-email">—</div>
+      </div>
+    </div>
+    <!-- 프로필 폼 -->
+    <div class="lg">
+      <label class="lg-label">현장 선택 <span class="req">*</span></label>
+      <div class="site-select-wrap"><select class="lg-select" id="gpf-site" onchange="syncGpfCoList()"></select></div>
+    </div>
+    <div class="lg">
+      <label class="lg-label">소속 업체 <span class="req">*</span></label>
+      <div class="site-select-wrap"><select class="lg-select" id="gpf-company"></select></div>
+    </div>
+    <div class="lg">
+      <label class="lg-label">이름 <span class="req">*</span></label>
+      <input type="text" class="lg-input" id="gpf-name" placeholder="성명 입력" maxlength="20">
+    </div>
+    <div class="lg">
+      <label class="lg-label">연락처 <span class="req">*</span></label>
+      <input type="tel" class="lg-input phone-input" id="gpf-phone" placeholder="숫자만 입력" maxlength="11">
+    </div>
+    <div class="lg" id="gpf-jobtitle-wrap" style="display:none">
+      <label class="lg-label">직급/직함</label>
+      <input type="text" class="lg-input" id="gpf-jobtitle" placeholder="예: 팀장, 대리, 반장">
+    </div>
+    <!-- 제출 버튼 -->
+    <button class="login-btn" id="gpf-submit-btn" onclick="doGoogleProfileSubmit()" style="margin-top:10px">시작하기</button>
+    <button onclick="document.getElementById('modal-gprofile').style.display='none'" style="width:100%;margin-top:8px;padding:10px;font-size:13px;font-weight:600;background:transparent;border:1px solid var(--br);border-radius:var(--rs);color:var(--tx2);cursor:pointer">취소</button>
+  </div>
+</div>
 
 <!-- Google 계정 연동 모달 -->
 <div id="modal-glink" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9999;align-items:flex-end;justify-content:center">
@@ -1801,7 +1857,14 @@ create index if not exists idx_equip_company on equipment(company, status);
 create index if not exists idx_equip_no      on equipment(equip_no);
 alter table equipment disable row level security;
 
--- 5. AJ 관리자 테이블 (Supabase에 없을 경우 생성)
+-- 5. members 테이블 Google 로그인 / 승인 시스템 컬럼 추가
+alter table members add column if not exists google_email text;
+alter table members add column if not exists status text default 'approved';
+alter table members add column if not exists role text default 'sub';
+create index if not exists idx_members_google on members(google_email) where google_email is not null;
+create index if not exists idx_members_status on members(status);
+
+-- 6. AJ 관리자 테이블 (Supabase에 없을 경우 생성)
 create table if not exists aj_members (
   emp_no     text primary key,
   name       text not null,
@@ -3202,6 +3265,8 @@ function initLogin(){
   }
   syncCoList('techSite');
   syncCoList('subSite');
+  // GIS 기본 활성 탭 = tech (로그인 화면 초기 탭)
+  window._gsiActiveRole = window._gsiActiveRole || 'tech';
   // GIS 라이브러리가 먼저 로드됐으면 즉시 초기화, 아니면 로드 완료 시 자동 호출
   if(window._gsiLoadPending){ window._gsiLoadPending=false; _gsiInit(); }
   else if(typeof google!=='undefined'&&google.accounts?.id) _gsiInit();
@@ -3230,12 +3295,13 @@ function syncCoList(siteElId){
 
 function switchRole(r){
   curRole=r;
+  window._gsiActiveRole = r; // 현재 활성 탭 기록 (Google Sign-In 콜백에서 사용)
   ['tech','sub','aj'].forEach(x=>{
     document.getElementById('form-'+x).style.display=x===r?'block':'none';
     const tab=document.querySelector(`.role-tab[data-r="${x}"]`);
     tab.className='role-tab'+(x===r?' active-'+x:'');
   });
-  if(r==='aj') setTimeout(_renderGsiBtn, 50); // form-aj 표시 후 버튼 렌더링
+  setTimeout(()=>_renderGsiBtn(r), 50); // form 표시 후 버튼 렌더링
 }
 
 const privState={p1:true,p2:true,p3:false};
@@ -3263,7 +3329,7 @@ function switchAjTab(tab){
     if(pane) pane.style.display=t===tab?'':'none';
     if(btn) btn.classList.toggle('on',t===tab);
   });
-  if(tab==='login') setTimeout(_renderGsiBtn, 50);
+  if(tab==='login') setTimeout(()=>_renderGsiBtn('aj'), 50);
 }
 /* ── AJ 멤버 로컬 저장소 헬퍼 ── */
 function _getAjMembers(){ return DB.g(K.AJ_MEMBERS,[]); }
@@ -3297,7 +3363,8 @@ function _deleteAjMemberSb(empNo){ // Supabase 백그라운드 삭제 (실패 �
 ══════════════════════════════════════════════════════════ */
 function _gsiInit(){
   const clientId = DB.g(K.GOOGLE_CLIENT_ID,'');
-  if(!clientId){ _renderGsiBtn(); return; } // 미설정 시 안내 표시
+  // 미설정 시 안내 표시만 하고 종료
+  if(!clientId){ ['tech','sub','aj'].forEach(r=>_renderGsiBtn(r)); return; }
   if(typeof google==='undefined'||!google.accounts?.id){ window._gsiLoadPending=true; return; }
   try {
     google.accounts.id.initialize({
@@ -3308,14 +3375,19 @@ function _gsiInit(){
     });
     window._gsi_initialized = true;
   } catch(e){ console.warn('[GSI] initialize 오류:',e); }
-  _renderGsiBtn();
+  // 현재 보이는 탭의 버튼 렌더링 (나머지는 탭 전환 시 렌더링)
+  const curR = window._gsiActiveRole || 'tech';
+  _renderGsiBtn(curR);
 }
 
-function _renderGsiBtn(){
+/* role: 'tech' | 'sub' | 'aj' */
+function _renderGsiBtn(role){
+  role = role || 'aj';
   const clientId = DB.g(K.GOOGLE_CLIENT_ID,'');
-  const container = document.getElementById('gsi-btn-aj');
+  const container = document.getElementById('gsi-btn-'+role);
   if(!container) return;
-  const noClient = document.getElementById('gsi-no-client');
+  const noClientId = role==='aj'?'gsi-no-client':'gsi-no-client-'+role;
+  const noClient = document.getElementById(noClientId);
   if(!clientId){
     container.style.display='none';
     if(noClient) noClient.style.display='block';
@@ -3342,14 +3414,186 @@ function _decodeJwt(token){
   } catch { return null; }
 }
 
-/* GIS 콜백 — 구글 로그인 성공 시 호출 */
+/* GIS 콜백 — 구글 로그인 성공 시 호출 (어느 탭에서든 동일 콜백) */
 async function onGoogleSignIn(response){
   const payload = _decodeJwt(response.credential);
   if(!payload?.email){ toast('Google 로그인 실패: 토큰 오류','err'); return; }
-  await _doGoogleAjLogin(payload.email, payload.name||'');
+  const activeRole = window._gsiActiveRole || 'aj';
+  if(activeRole === 'tech') await _doGoogleTechLogin(payload.email, payload.name||'');
+  else if(activeRole === 'sub') await _doGoogleSubLogin(payload.email, payload.name||'');
+  else await _doGoogleAjLogin(payload.email, payload.name||'');
 }
 
-/* Google 이메일로 AJ 멤버 조회 후 로그인 */
+/* ── 기술인 Google 로그인 ── */
+async function _doGoogleTechLogin(email, googleName){
+  toast('Google 계정 확인 중...','ok',2000);
+  const allMembers = getMembers();
+  // google_email 기준으로 기술인 레코드 검색 (role='tech' 또는 title='기술인')
+  let member = allMembers.find(m=>m.google_email===email && (m.role==='tech'||m.title==='기술인'));
+  if(!member){
+    try {
+      const rows = await sbReq('members','GET',null,
+        `?google_email=eq.${encodeURIComponent(email)}&role=eq.tech&limit=1`);
+      if(rows?.length){
+        member=rows[0];
+        allMembers.push(member);
+        saveMembers(allMembers);
+      }
+    } catch {}
+  }
+  // 프로필 입력 모달 열기 (신규 또는 재확인)
+  _showGoogleProfileModal('tech',{
+    email, googleName,
+    name:member?.name||googleName||'',
+    phone:member?.phone||'',
+    siteId:member?.siteId||'',
+    company:member?.company||'',
+    existingId:member?.id||null
+  });
+}
+
+/* ── 협력사 Google 로그인 ── */
+async function _doGoogleSubLogin(email, googleName){
+  toast('Google 계정 확인 중...','ok',2000);
+  const allMembers = getMembers();
+  let member = allMembers.find(m=>m.google_email===email && m.role!=='tech' && m.title!=='기술인');
+  if(!member){
+    try {
+      const rows = await sbReq('members','GET',null,
+        `?google_email=eq.${encodeURIComponent(email)}&role=eq.sub&limit=1`);
+      if(rows?.length){
+        member=rows[0];
+        const idx=allMembers.findIndex(m=>m.id===member.id);
+        if(idx>=0) allMembers[idx]=member; else allMembers.push(member);
+        saveMembers(allMembers);
+      }
+    } catch {}
+  }
+  if(member){
+    const st = member.status||'approved';
+    if(st==='approved'){
+      // 로그인 성공
+      S={role:'sub',name:member.name,title:member.title||'',phone:member.phone||'',
+         company:member.company,siteId:member.siteId,
+         siteName:getSites().find(s=>s.id===member.siteId)?.name||member.siteId,
+         loginAt:Date.now()};
+      DB.s(K.SESSION,S); DB.s('auto_login',true);
+      toast(`${member.name}님 환영합니다!`,'ok');
+      enterApp();
+    } else if(st==='pending'){
+      toast('가입 승인 대기 중입니다. AJ관리자에게 문의하세요.','warn',4000);
+    } else {
+      toast('가입이 거절되었습니다. AJ관리자에게 문의하세요.','err');
+    }
+    return;
+  }
+  // 미등록 → 프로필 입력
+  _showGoogleProfileModal('sub',{email, googleName});
+}
+
+/* ── Google 프로필 모달 열기 ── */
+function _showGoogleProfileModal(mode, data){
+  window._gpfMode = mode;
+  window._gpfEmail = data.email;
+  window._gpfExistingId = data.existingId||null;
+  // 제목/설명
+  document.getElementById('gpf-title').textContent = mode==='tech'?'기술인 프로필 확인':'협력사 담당자 가입';
+  document.getElementById('gpf-desc').textContent = mode==='tech'
+    ? '현장과 업체를 선택하고 프로필을 확인해주세요.'
+    : '가입 후 AJ관리자 승인이 완료되면 로그인됩니다.';
+  // Google 계정 표시
+  document.getElementById('gpf-email').textContent = data.email||'';
+  document.getElementById('gpf-gname').textContent = data.googleName||data.email.split('@')[0];
+  // 버튼 색상
+  const btn = document.getElementById('gpf-submit-btn');
+  btn.className = 'login-btn '+(mode==='tech'?'tech':'sub');
+  btn.textContent = mode==='tech'?'시작하기':'가입 신청';
+  // 직함 필드 (sub만)
+  document.getElementById('gpf-jobtitle-wrap').style.display = mode==='sub'?'':'none';
+  document.getElementById('gpf-jobtitle').value = data.title||'';
+  // 현장 셀렉트 초기화
+  const siteEl = document.getElementById('gpf-site');
+  const sites = getSites();
+  siteEl.innerHTML = '<option value="">현장 선택</option>' +
+    sites.map(s=>`<option value="${s.id}"${s.id===data.siteId?' selected':''}>${s.name}</option>`).join('');
+  // 업체 초기화
+  syncGpfCoList();
+  if(data.company) document.getElementById('gpf-company').value = data.company;
+  // 이름/연락처
+  document.getElementById('gpf-name').value = data.name||'';
+  document.getElementById('gpf-phone').value = data.phone||'';
+  document.getElementById('modal-gprofile').style.display='flex';
+}
+
+/* 프로필 모달 - 현장 변경 시 업체 목록 동기화 */
+function syncGpfCoList(){
+  const siteEl = document.getElementById('gpf-site');
+  const coEl   = document.getElementById('gpf-company');
+  if(!siteEl||!coEl) return;
+  const siteId = siteEl.value;
+  const cos = siteId ? getCos(siteId) : [];
+  coEl.innerHTML = '<option value="">업체 선택</option>' +
+    cos.map(c=>`<option value="${c.name}">${c.name}</option>`).join('');
+  if(cos.length) coEl.value = cos[0].name;
+}
+
+/* 프로필 모달 제출 */
+async function doGoogleProfileSubmit(){
+  const mode    = window._gpfMode;
+  const email   = window._gpfEmail;
+  const site    = document.getElementById('gpf-site').value;
+  const co      = document.getElementById('gpf-company').value;
+  const name    = document.getElementById('gpf-name').value.trim();
+  const phone   = document.getElementById('gpf-phone').value.trim();
+  const title   = mode==='sub'?(document.getElementById('gpf-jobtitle').value.trim()||''):'기술인';
+  if(!site||!co||!name||!phone){ toast('모든 항목을 입력해주세요','err'); return; }
+  if(mode==='tech' && (!window.privState?.p1||!window.privState?.p2)){
+    // 기술인 개인정보 동의 확인 (간소화: 모달에서는 동의로 간주)
+  }
+  const siteObj = getSites().find(s=>s.id===site);
+  const siteName = siteObj?.name||site;
+  const allMembers = getMembers();
+  let member = window._gpfExistingId ? allMembers.find(m=>m.id===window._gpfExistingId) : null;
+  const isNew = !member;
+  if(isNew){
+    // 중복 체크 (같은 google_email이 이미 있으면 업데이트)
+    const dup = allMembers.find(m=>m.google_email===email);
+    if(dup) member = dup;
+  }
+  const status = mode==='tech'?'approved':'pending';
+  const role   = mode==='tech'?'tech':'sub';
+  const id     = member?.id || (role+'-'+Date.now()+'-'+Math.random().toString(36).slice(2,7));
+  const record = {
+    id, name, company:co, siteId:site, siteName, phone, title,
+    role, status, google_email:email,
+    joinedAt: member?.joinedAt||Date.now(), synced:false
+  };
+  // 로컬 저장
+  const idx = allMembers.findIndex(m=>m.id===id);
+  if(idx>=0) allMembers[idx]=record; else allMembers.push(record);
+  saveMembers(allMembers);
+  // Supabase 저장 (fire-and-forget)
+  sbReq('members','POST',[{
+    record_id:record.id, name:record.name, company:record.company,
+    site_id:record.siteId, site_name:record.siteName, phone:record.phone, title:record.title,
+    google_email:email, status:record.status, role:record.role,
+    joined_at:new Date(record.joinedAt).toISOString()
+  }],'?on_conflict=record_id').then(()=>{record.synced=true;saveMembers(getMembers());}).catch(()=>{});
+  document.getElementById('modal-gprofile').style.display='none';
+  if(mode==='tech'){
+    // 바로 로그인
+    S={role:'tech',name,phone,company:co,siteId:site,siteName,loginAt:Date.now()};
+    DB.s(K.SESSION,S); DB.s('auto_login',true);
+    enterApp();
+  } else {
+    // 가입 신청 완료 메시지
+    addNotif({icon:'',title:`신규 관리자 가입신청: ${co}`,
+      desc:`${co} ${name}님이 가입을 신청했습니다. 승인이 필요합니다.`});
+    toast('가입 신청 완료! AJ관리자 승인 후 로그인 가능합니다.','ok',4000);
+  }
+}
+
+/* ── Google 이메일로 AJ 멤버 조회 후 로그인 ── */
 async function _doGoogleAjLogin(email, googleName){
   toast('Google 계정 확인 중...','ok',2000);
   const localList = _getAjMembers();
@@ -3596,32 +3840,109 @@ function renderAcctAjList(){
       <div style="font-size:10px;color:var(--tx3);margin-top:3px;padding-left:2px">사번: <b style="color:var(--tx);font-family:monospace">${m.emp_no}</b>${m.phone?` · <span style="color:var(--tx2)">${m.phone}</span>`:''}</div>
     </div>`).join('');
 }
+let _subFilter='all'; // 'all' | 'pending' | 'approved'
+function setSubFilter(f){
+  _subFilter=f;
+  ['all','pending','approved'].forEach(t=>{
+    const btn=document.getElementById('sub-filter-'+t);
+    if(!btn) return;
+    const on=(t===f);
+    btn.style.background=on?'rgba(20,184,166,.15)':'transparent';
+    btn.style.borderColor=on?'rgba(20,184,166,.4)':'var(--br)';
+    btn.style.color=on?'var(--teal)':'var(--tx2)';
+    btn.style.fontWeight=on?'700':'500';
+  });
+  renderAcctSubList();
+}
 function renderAcctSubList(){
   const el=document.getElementById('acct-sub-list'); if(!el) return;
   const siteId=S?.siteId==='all'?null:S?.siteId;
-  const members=getMembers().filter(m=>!siteId||m.siteId===siteId);
-  if(!members.length){ el.innerHTML='<div style="text-align:center;color:var(--tx3);padding:20px;font-size:12px">가입된 협력사 관리자가 없습니다</div>'; return; }
-  el.innerHTML=members.map((m,i)=>`
-    <div style="background:var(--bg2);border:1px solid var(--br);border-radius:10px;padding:9px 12px;margin-bottom:7px">
-      <div style="display:flex;align-items:center;gap:6px">
-        <span style="font-weight:800;font-size:12px;flex:1">${m.name}</span>
-        <button class="btn-ghost" style="font-size:9px;padding:2px 6px;color:#f87171;border-color:rgba(248,113,113,.3)" onclick="deleteAcctSubMember(${i})">탈퇴처리</button>
-      </div>
-      <div style="font-size:10px;color:var(--tx3);margin-top:3px">${m.company} · ${getSites().find(s=>s.id===m.siteId)?.name||m.siteId}</div>
-      ${m.phone?`<div style="font-size:10px;color:var(--tx2);margin-top:1px">${m.phone}</div>`:''}
-      <div style="font-size:10px;color:var(--tx3);margin-top:1px">가입: ${new Date(m.joinedAt).toLocaleDateString('ko-KR')}</div>
-    </div>`).join('');
-}
-function deleteAcctSubMember(idx){
-  const siteId=S?.siteId==='all'?null:S?.siteId;
+  // 협력사(sub) 멤버만 필터 (기술인 제외)
+  let members=getMembers().filter(m=>
+    (m.role==='sub'||(!m.role&&m.title!=='기술인'))&&
+    (!siteId||m.siteId===siteId)
+  );
+  // 대기 중 개수 배지
+  const pendingCnt=members.filter(m=>(m.status||'approved')==='pending').length;
+  const cntEl=document.getElementById('sub-pending-cnt');
+  if(cntEl){ cntEl.textContent=pendingCnt; cntEl.style.display=pendingCnt>0?'inline':'none'; }
+  // 필터 적용
+  if(_subFilter==='pending')   members=members.filter(m=>(m.status||'approved')==='pending');
+  if(_subFilter==='approved')  members=members.filter(m=>(m.status||'approved')==='approved');
+  if(!members.length){
+    el.innerHTML=`<div style="text-align:center;color:var(--tx3);padding:20px;font-size:12px">${
+      _subFilter==='pending'?'대기 중인 가입 신청이 없습니다':'가입된 협력사 관리자가 없습니다'
+    }</div>`;
+    return;
+  }
+  // 대기중 먼저 정렬
+  members.sort((a,b)=>{
+    const sa=(a.status||'approved')==='pending'?0:1;
+    const sb=(b.status||'approved')==='pending'?0:1;
+    return sa-sb || (b.joinedAt||0)-(a.joinedAt||0);
+  });
+  const statusLabel={pending:'대기중',approved:'승인됨',rejected:'거절됨'};
   const all=getMembers();
-  const filtered=all.filter(m=>!siteId||m.siteId===siteId);
-  const m=filtered[idx]; if(!m) return;
+  el.innerHTML=members.map(m=>{
+    const st=m.status||'approved';
+    const isPending=st==='pending';
+    return `<div style="background:var(--bg2);border:1px solid ${isPending?'rgba(245,158,11,.3)':'var(--br)'};border-radius:10px;padding:10px 12px;margin-bottom:7px">
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span class="mbr-badge ${st}">${statusLabel[st]||st}</span>
+        <span style="font-weight:800;font-size:13px;flex:1">${m.name}</span>
+        <div style="display:flex;gap:4px;flex-shrink:0">
+          ${isPending?`
+            <button onclick="approveMember('${m.id}')" style="font-size:10px;padding:3px 8px;background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.4);border-radius:5px;color:#4ade80;cursor:pointer;font-weight:700">승인</button>
+            <button onclick="rejectMember('${m.id}')" style="font-size:10px;padding:3px 8px;background:transparent;border:1px solid rgba(239,68,68,.3);border-radius:5px;color:#f87171;cursor:pointer">거절</button>
+          `:`<button onclick="deleteAcctSubMemberId('${m.id}')" style="font-size:9px;padding:2px 6px;background:transparent;border:1px solid rgba(248,113,113,.3);border-radius:5px;color:#f87171;cursor:pointer">탈퇴처리</button>`}
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--tx2);margin-top:4px">${m.company} · ${getSites().find(s=>s.id===m.siteId)?.name||m.siteId}</div>
+      ${m.phone?`<div style="font-size:10px;color:var(--tx3);margin-top:2px">📞 ${m.phone}</div>`:''}
+      ${m.title?`<div style="font-size:10px;color:var(--tx3)">직함: ${m.title}</div>`:''}
+      ${m.google_email?`<div style="font-size:10px;color:var(--tx3)">Google: ${m.google_email}</div>`:''}
+      <div style="font-size:10px;color:var(--tx3);margin-top:2px">가입: ${new Date(m.joinedAt).toLocaleDateString('ko-KR')}</div>
+    </div>`;
+  }).join('');
+}
+
+function approveMember(id){
+  const all=getMembers();
+  const m=all.find(a=>a.id===id); if(!m) return;
+  m.status='approved'; m.synced=false;
+  saveMembers(all);
+  // Supabase 업데이트
+  sbReq('members','PATCH',{status:'approved'},`?record_id=eq.${encodeURIComponent(id)}`).catch(()=>{});
+  toast(`${m.name}님을 승인했습니다`,'ok');
+  renderAcctSubList();
+}
+function rejectMember(id){
+  const all=getMembers();
+  const m=all.find(a=>a.id===id); if(!m) return;
+  if(!confirm(`[${m.name}] 가입 신청을 거절하시겠습니까?`)) return;
+  m.status='rejected'; m.synced=false;
+  saveMembers(all);
+  sbReq('members','PATCH',{status:'rejected'},`?record_id=eq.${encodeURIComponent(id)}`).catch(()=>{});
+  toast(`${m.name}님의 가입이 거절되었습니다`,'ok');
+  renderAcctSubList();
+}
+function deleteAcctSubMemberId(id){
+  const all=getMembers();
+  const m=all.find(a=>a.id===id); if(!m) return;
   if(!confirm(`[${m.name}] 협력사 관리자를 탈퇴 처리하시겠습니까?`)) return;
-  const newAll=all.filter(a=>!(a.name===m.name&&a.siteId===m.siteId&&a.company===m.company));
+  const newAll=all.filter(a=>a.id!==id);
   saveMembers(newAll);
+  sbReq('members','DELETE',null,`?record_id=eq.${encodeURIComponent(id)}`).catch(()=>{});
   toast('탈퇴 처리되었습니다','ok');
   renderAcctSubList();
+}
+function deleteAcctSubMember(idx){
+  // 하위 호환 (기존 openMemberMgr에서 idx 기반 호출)
+  const siteId=S?.siteId==='all'?null:S?.siteId;
+  const all=getMembers();
+  const filtered=all.filter(m=>(!siteId||m.siteId===siteId)&&(m.role==='sub'||(!m.role&&m.title!=='기술인')));
+  const m=filtered[idx]; if(!m) return;
+  deleteAcctSubMemberId(m.id);
 }
 function renderAcctInviteCodes(){
   const el=document.getElementById('acct-invite-codes'); if(!el) return;
@@ -3877,7 +4198,8 @@ async function doLogin(role){
     const _alreadyTech=_techMbrs.some(m=>m.name===name&&m.phone===phone&&m.company===co&&m.siteId===site);
     if(!_alreadyTech){
       const _newTech={id:'tech-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),
-        name,company:co,siteId:site,phone,title:'기술인',
+        name,company:co,siteId:site,siteName:getSites().find(s=>s.id===site)?.name||site,
+        phone,title:'기술인',role:'tech',status:'approved',google_email:'',
         joinedAt:Date.now(),synced:false};
       _techMbrs.push(_newTech);
       saveMembers(_techMbrs);
@@ -3886,7 +4208,7 @@ async function doLogin(role){
       sbReq('members','POST',[{
         record_id:_newTech.id,name:_newTech.name,company:_newTech.company,
         site_id:_newTech.siteId,site_name:_sm[_newTech.siteId]||_newTech.siteId||'',
-        phone:_newTech.phone,title:_newTech.title,
+        phone:_newTech.phone,title:_newTech.title,role:'tech',status:'approved',google_email:'',
         joined_at:new Date(_newTech.joinedAt).toISOString()
       }],'?on_conflict=record_id').then(()=>{
         _newTech.synced=true; saveMembers(getMembers());
@@ -3896,36 +4218,39 @@ async function doLogin(role){
     const site=document.getElementById('subSite').value;
     const co=document.getElementById('subCompany').value;
     const name=document.getElementById('subName').value.trim();
-    const code=document.getElementById('subCode').value.trim();
-    const validCode = DB.g(K.INVITE_SITE + site, null) || DB.g(K.INVITE,'') || '';
-    if(!site||!co||!name||!code){ toast('모든 항목을 입력해주세요','err'); return; }
-    if(!validCode){ toast('이 현장의 초대코드가 설정되지 않았습니다. AJ 관리자에게 문의하세요','err'); return; }
-    if(code!==validCode){ toast('초대코드가 올바르지 않습니다','err'); const el=document.getElementById('subCode'); el.classList.add('shake'); setTimeout(()=>el.classList.remove('shake'),500); return; }
     const subTitle=document.getElementById('subTitle')?.value.trim()||'';
     const subPhone=document.getElementById('subPhone')?.value.trim()||'';
-    S={role:'sub',name,title:subTitle,phone:subPhone,company:co,siteId:site,siteName:getSites().find(s=>s.id===site)?.name||site,loginAt:Date.now()};
-    // 신규 회원가입 알림 (이전에 저장 안된 경우)
+    if(!site||!co||!name){ toast('현장·업체·이름을 입력해주세요','err'); return; }
     const members=getMembers();
-    const alreadyMember=members.some(m=>m.name===name&&m.company===co&&m.siteId===site);
-    if(!alreadyMember){
+    // 이미 가입된 멤버 확인 (이름+업체+현장)
+    const existing=members.find(m=>m.name===name&&m.company===co&&m.siteId===site&&m.role!=='tech'&&m.title!=='기술인');
+    if(existing){
+      const st=existing.status||'approved';
+      if(st==='pending'){ toast('가입 승인 대기 중입니다. AJ관리자에게 문의하세요.','warn',4000); return; }
+      if(st==='rejected'){ toast('가입이 거절되었습니다. AJ관리자에게 문의하세요.','err'); return; }
+      // approved → 로그인
+    } else {
+      // 신규 가입 신청 (pending)
       const _newMbr={id:'sub-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),
-        name,company:co,siteId:site,phone:subPhone||'',title:subTitle||'',
+        name,company:co,siteId:site,siteName:getSites().find(s=>s.id===site)?.name||site,
+        phone:subPhone,title:subTitle,role:'sub',status:'pending',google_email:'',
         joinedAt:Date.now(),synced:false};
       members.push(_newMbr);
       saveMembers(members);
-      addNotif({icon:'',title:`신규 관리자 가입: ${co}`,
-        desc:`${co} 업체 관리자 ${name}님이 가입하였습니다`});
-      // 즉시 Supabase 저장 (fire-and-forget)
+      addNotif({icon:'',title:`신규 관리자 가입신청: ${co}`,
+        desc:`${co} ${name}님이 가입을 신청했습니다. 승인이 필요합니다.`});
       const _sm=Object.fromEntries(getSites().map(s=>[s.id,s.name]));
       sbReq('members','POST',[{
         record_id:_newMbr.id,name:_newMbr.name,company:_newMbr.company,
-        site_id:_newMbr.siteId,site_name:_sm[_newMbr.siteId]||_newMbr.siteId||'',
+        site_id:_newMbr.siteId,site_name:_sm[_newMbr.siteId]||'',
         phone:_newMbr.phone,title:_newMbr.title,
+        role:'sub',status:'pending',google_email:'',
         joined_at:new Date(_newMbr.joinedAt).toISOString()
-      }],'?on_conflict=record_id').then(()=>{
-        _newMbr.synced=true; saveMembers(getMembers());
-      }).catch(()=>{});
+      }],'?on_conflict=record_id').then(()=>{_newMbr.synced=true;saveMembers(getMembers());}).catch(()=>{});
+      toast('가입 신청 완료! AJ관리자 승인 후 로그인 가능합니다.','ok',4000);
+      return; // 승인 전 로그인 불가
     }
+    S={role:'sub',name,title:subTitle||existing?.title||'',phone:subPhone||existing?.phone||'',company:co,siteId:site,siteName:getSites().find(s=>s.id===site)?.name||site,loginAt:Date.now()};
   } else {
     // AJ 관리자 로그인 — 로컬스토리지 주 저장소, Supabase 폴백
     const empNo = document.getElementById('ajEmpNo').value.trim();
@@ -7978,9 +8303,9 @@ function renderAdmin(){
         <div class="mrow-arr">›</div>
       </div>
       ${isAJ?`
-      <div class="mrow" onclick="openAcctMgr('aj')">
+      <div class="mrow" onclick="openAcctMgr('sub')" style="${(()=>{const cnt=getMembers().filter(m=>(m.role==='sub'||(!m.role&&m.title!=='기술인'))&&(m.status||'approved')==='pending').length;return cnt?'border-color:rgba(245,158,11,.4)':'';})()}">
         <div class="mrow-ico" style="background:rgba(222,31,35,.12);color:rgb(222,31,35)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></div>
-        <div class="mrow-inf"><div class="mrow-title">관리자 계정 관리</div><div class="mrow-desc">AJ·협력사 관리자 계정 및 초대코드 관리</div></div>
+        <div class="mrow-inf"><div class="mrow-title">관리자 계정 관리 ${(()=>{const cnt=getMembers().filter(m=>(m.role==='sub'||(!m.role&&m.title!=='기술인'))&&(m.status||'approved')==='pending').length;return cnt?`<span class="mbr-badge pending">승인대기 ${cnt}</span>`:'';})()} </div><div class="mrow-desc">AJ·협력사 관리자 계정 및 가입 승인 관리</div></div>
         <div class="mrow-arr">›</div>
       </div>
       <div class="mrow" onclick="openEquipMasterSheet()">
@@ -8295,22 +8620,34 @@ function saveMyProfile(){
 
 function openMemberMgr(){
   const siteId=S?.siteId==='all'?null:S?.siteId;
-  const members=getMembers().filter(m=>!siteId||m.siteId===siteId);
+  const subMembers=getMembers().filter(m=>
+    (m.role==='sub'||(!m.role&&m.title!=='기술인'))&&
+    (!siteId||m.siteId===siteId)
+  );
+  const pendingCnt=subMembers.filter(m=>(m.status||'approved')==='pending').length;
+  const statusLabel={pending:'대기중',approved:'승인됨',rejected:'거절됨'};
   let html=`<div style="padding:14px">
-    <div class="shd"><span class="shd-title">협력사 관리자 목록 (${members.length}명)</span></div>
-    ${members.length===0?'<div class="empty"><div class="empty-txt">가입된 관리자 없음</div></div>':
-      members.map((m,i)=>`
-      <div class="lcard" style="padding:12px">
+    <div class="shd"><span class="shd-title">협력사 관리자 목록 (${subMembers.length}명)${pendingCnt?` <span class="mbr-badge pending">대기 ${pendingCnt}건</span>`:''}</span></div>
+    ${subMembers.length===0?'<div class="empty"><div class="empty-txt">가입된 관리자 없음</div></div>':
+      subMembers.sort((a,b)=>{const sa=(a.status||'approved')==='pending'?0:1,sb=(b.status||'approved')==='pending'?0:1;return sa-sb;}).map((m,i)=>{
+        const st=m.status||'approved'; const isPending=st==='pending';
+        return `<div class="lcard" style="padding:12px;${isPending?'border-color:rgba(245,158,11,.3)':''}">
         <div style="display:flex;justify-content:space-between;align-items:start">
-          <div>
-            <div style="font-size:13px;font-weight:700">${m.name}</div>
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+              <span class="mbr-badge ${st}">${statusLabel[st]||st}</span>
+              <span style="font-size:13px;font-weight:700">${m.name}</span>
+            </div>
             <div style="font-size:11px;color:var(--tx2)">${m.company} · ${getSites().find(s=>s.id===m.siteId)?.name||m.siteId}</div>
             <div style="font-size:10px;color:var(--tx3);margin-top:2px">가입: ${new Date(m.joinedAt).toLocaleDateString('ko-KR')}</div>
           </div>
-          <button class="btn-ghost" style="font-size:10px;padding:4px 8px;color:#f87171;border-color:rgba(239,68,68,.3)"
-            onclick="deleteMember(${i})">탈퇴처리</button>
+          <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+            ${isPending?`<button onclick="approveMember('${m.id}');openMemberMgr()" style="font-size:10px;padding:3px 8px;background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.4);border-radius:5px;color:#4ade80;cursor:pointer;font-weight:700">승인</button>`:''}
+            <button class="btn-ghost" style="font-size:10px;padding:4px 8px;color:#f87171;border-color:rgba(239,68,68,.3)"
+              onclick="deleteAcctSubMemberId('${m.id}');openMemberMgr()">탈퇴처리</button>
+          </div>
         </div>
-      </div>`).join('')
+      </div>`;}).join('')
     }
   </div>`;
   document.getElementById('adm-content').innerHTML=`
@@ -8321,13 +8658,15 @@ function openMemberMgr(){
 }
 
 function deleteMember(idx){
+  // 하위 호환용 (idx 기반 호출 처리)
   const members=getMembers();
-  const m=members[idx];
-  if(!confirm(`${m?.company} ${m?.name}님의 계정을 탈퇴 처리할까요?`)) return;
-  members.splice(idx,1);
-  saveMembers(members);
-  toast('탈퇴 처리되었습니다','ok');
-  openMemberMgr();
+  const m=members[idx]; if(!m) return;
+  if(m.id) deleteAcctSubMemberId(m.id);
+  else {
+    if(!confirm(`${m?.company} ${m?.name}님의 계정을 탈퇴 처리할까요?`)) return;
+    members.splice(idx,1); saveMembers(members);
+    toast('탈퇴 처리되었습니다','ok'); openMemberMgr();
+  }
 }
 
 function openASList(){
@@ -8974,6 +9313,12 @@ ensureAdminAccount().then(()=>initLogin());
       </div>
       <!-- 협력사 관리자 탭 -->
       <div id="acct-pane-sub" style="display:none">
+        <!-- 필터 탭 -->
+        <div style="display:flex;gap:4px;margin-bottom:10px">
+          <button id="sub-filter-all" onclick="setSubFilter('all')" style="flex:1;padding:5px 4px;font-size:11px;font-weight:700;background:rgba(20,184,166,.15);border:1px solid rgba(20,184,166,.4);border-radius:6px;color:var(--teal);cursor:pointer">전체</button>
+          <button id="sub-filter-pending" onclick="setSubFilter('pending')" style="flex:1;padding:5px 4px;font-size:11px;font-weight:500;background:transparent;border:1px solid var(--br);border-radius:6px;color:var(--tx2);cursor:pointer">대기중 <span id="sub-pending-cnt" style="display:none;background:#fbbf24;color:#000;border-radius:8px;padding:0 5px;font-size:9px;font-weight:900;margin-left:2px"></span></button>
+          <button id="sub-filter-approved" onclick="setSubFilter('approved')" style="flex:1;padding:5px 4px;font-size:11px;font-weight:500;background:transparent;border:1px solid var(--br);border-radius:6px;color:var(--tx2);cursor:pointer">승인됨</button>
+        </div>
         <div id="acct-sub-list"></div>
       </div>
       <!-- 초대코드 탭 -->
