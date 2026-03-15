@@ -1386,19 +1386,19 @@ textarea.fg-input{height:72px;line-height:1.5;}
     </div>
 
     <!-- OPS: 가동현황 (입력/이력/분석 통합) -->
-    <div class="page" id="pg-ops">
+    <div class="page" id="pg-ops" style="display:flex;flex-direction:column;overflow:hidden">
       <!-- 서브탭 -->
-      <div class="ops-subtabs" id="ops-subtabs">
+      <div class="ops-subtabs" id="ops-subtabs" style="flex-shrink:0">
         <div class="ops-tab on" id="opst-input" onclick="setOpsTab('input',this)">입력</div>
         <div class="ops-tab" id="opst-log"   onclick="setOpsTab('log',this)">이력</div>
         <div class="ops-tab" id="opst-ana"   onclick="setOpsTab('ana',this)">분석</div>
       </div>
       <!-- 입력 패널 -->
-      <div id="ops-input-panel" class="pg-scroll" style="padding-bottom:80px"></div>
+      <div id="ops-input-panel" class="pg-scroll" style="flex:1;overflow-y:auto;padding-bottom:80px"></div>
       <!-- 이력 패널 -->
-      <div id="ops-log-panel" class="pg-scroll" style="display:none;padding-bottom:80px"></div>
+      <div id="ops-log-panel" class="pg-scroll" style="flex:1;overflow-y:auto;display:none;padding-bottom:80px"></div>
       <!-- 분석 패널 -->
-      <div id="ops-ana-panel" style="display:none;overflow-y:auto;height:100%;padding-bottom:80px">
+      <div id="ops-ana-panel" style="flex:1;overflow-y:auto;display:none;padding-bottom:80px">
         <div class="pg-scroll" id="ana-content"></div>
       </div>
     </div>
@@ -3173,7 +3173,7 @@ async function doLogin(role){
     S={role:'tech',name,phone,company:co,siteId:site,siteName:getSites().find(s=>s.id===site)?.name||site,loginAt:Date.now()};
     // 기술인 멤버 저장 (첫 로그인 시 서버에 즉시 등록)
     const _techMbrs=getMembers();
-    const _alreadyTech=_techMbrs.some(m=>m.name===name&&m.company===co&&m.siteId===site);
+    const _alreadyTech=_techMbrs.some(m=>m.name===name&&m.phone===phone&&m.company===co&&m.siteId===site);
     if(!_alreadyTech){
       const _newTech={id:'tech-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),
         name,company:co,siteId:site,phone,title:'기술인',
@@ -3256,7 +3256,7 @@ async function doLogin(role){
       }
     }
     DB.s(K.AJ_MEMBER, member);
-    S={role:'aj',name:member.name,ajType:member.aj_type||ajType,company:'AJ네트웍스',siteId:'all',siteName:'전체 현장',loginAt:Date.now(),empNo:member.emp_no};
+    S={role:'aj',name:member.name,phone:member.phone||'',ajType:member.aj_type||ajType,company:'AJ네트웍스',siteId:'all',siteName:'전체 현장',loginAt:Date.now(),empNo:member.emp_no};
   }
   DB.s(K.SESSION,S);
   // 자동 로그인 설정 저장
@@ -4286,9 +4286,9 @@ function setOpsTab(tab, el){
   document.querySelectorAll('.ops-tab').forEach(t=>t.classList.remove('on'));
   if(el) el.classList.add('on');
   else document.getElementById('opst-'+tab)?.classList.add('on');
-  document.getElementById('ops-input-panel').style.display = tab==='input'?'':'none';
-  document.getElementById('ops-log-panel').style.display   = tab==='log'  ?'':'none';
-  document.getElementById('ops-ana-panel').style.display   = tab==='ana'  ?'':'none';
+  document.getElementById('ops-input-panel').style.display = tab==='input'?'block':'none';
+  document.getElementById('ops-log-panel').style.display   = tab==='log'  ?'block':'none';
+  document.getElementById('ops-ana-panel').style.display   = tab==='ana'  ?'block':'none';
   if(tab==='input') initInputForm();
   if(tab==='log')   renderOpsLog();
   if(tab==='ana')  { renderAnalysis(); setTimeout(runAI,300); }
@@ -4719,7 +4719,7 @@ function trStatusLabel(date, type){
   if(diff < 0)                  return {label: verb[3], color:'#22c55e',      bg:'rgba(34,197,94,.15)',   done:true};
   if(date === td)               return {label: verb[1], color:'#3b82f6',      bg:'rgba(59,130,246,.15)',  done:false};
   if(date === nextBizDay(td))   return {label: verb[2], color:'var(--orange)', bg:'rgba(249,115,22,.15)', done:false};
-  return {label: verb[0], color:'var(--tx2)', bg:'rgba(255,255,255,.05)', done:false};
+  return {label: verb[0] + ' 예정', color:'var(--tx2)', bg:'rgba(255,255,255,.05)', done:false};
 }
 
 // 날짜 차이 정밀 계산
@@ -4738,10 +4738,11 @@ function renderTransit(){
   const allRecs=getTransit().filter(r=>siteId?r.siteId===siteId:true);
 
   // ── 필터 상태 유지 ──────────────────────────
-  if (!window._trFilter) window._trFilter = {date:'', company:'', spec:''};
+  if (!window._trFilter) window._trFilter = {date:'', company:'', spec:'', status:''};
   const fDate    = window._trFilter.date    || '';
   const fCompany = window._trFilter.company || '';
   const fSpec    = window._trFilter.spec    || '';
+  const fStatus  = window._trFilter.status  || '';
 
   // ── 유니크 업체 목록 ────────────────────────
   const coSet = new Set();
@@ -4766,6 +4767,7 @@ function renderTransit(){
       const inHo = (r.handoverEquips||[]).some(x=>x.toUpperCase().includes(s));
       if (!inSp && !inEq && !inHo) return false;
     }
+    if (fStatus && r.status !== fStatus) return false;
     return true;
   });
 
@@ -4789,7 +4791,7 @@ function renderTransit(){
   active.sort((a,b)=>a.date.localeCompare(b.date));
   done.sort((a,b)=>b.date.localeCompare(a.date));
 
-  const hasFilter = !!(fDate || fCompany || fSpec);
+  const hasFilter = !!(fDate || fCompany || fSpec || fStatus);
   const filterBadge = hasFilter
     ? `<span style="font-size:10px;background:rgba(59,139,255,.2);color:#60a5fa;padding:2px 8px;border-radius:6px">${filtered.length}건</span>`
     : '';
@@ -4800,23 +4802,23 @@ function renderTransit(){
   <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px">
     <div class="kpi" style="text-align:center;padding:8px 4px;cursor:pointer" onclick="openTransitCalendar('in','반입')">
       <div style="font-size:16px;font-weight:900;color:var(--blue)">${kpiIn}</div>
-      <div style="font-size:9px;color:var(--tx2)">반입 📅</div>
+      <div style="font-size:9px;color:var(--tx2)">반입</div>
     </div>
     <div class="kpi" style="text-align:center;padding:8px 4px;cursor:pointer" onclick="openTransitCalendar('out','반출')">
       <div style="font-size:16px;font-weight:900;color:var(--orange)">${kpiOut}</div>
-      <div style="font-size:9px;color:var(--tx2)">반출 📅</div>
+      <div style="font-size:9px;color:var(--tx2)">반출</div>
     </div>
     <div class="kpi" style="text-align:center;padding:8px 4px;cursor:pointer" onclick="openTransitCalendar('handover','인수인계')">
       <div style="font-size:16px;font-weight:900;color:#14b8a6">${kpiHo}</div>
-      <div style="font-size:9px;color:var(--tx2)">인수인계 📅</div>
+      <div style="font-size:9px;color:var(--tx2)">인수인계</div>
     </div>
     <div class="kpi" style="text-align:center;padding:8px 4px;cursor:pointer" onclick="openTransitCalendar('cancel','취소')">
       <div style="font-size:16px;font-weight:900;color:var(--tx3)">${kpiCan}</div>
-      <div style="font-size:9px;color:var(--tx2)">취소 📅</div>
+      <div style="font-size:9px;color:var(--tx2)">취소</div>
     </div>
     <div class="kpi" style="text-align:center;padding:8px 4px;cursor:pointer" onclick="openTransitCalendar('done','완료')">
       <div style="font-size:16px;font-weight:900;color:#22c55e">${kpiDone}</div>
-      <div style="font-size:9px;color:var(--tx2)">완료 📅</div>
+      <div style="font-size:9px;color:var(--tx2)">완료</div>
     </div>
   </div>
   </div><!-- /tr-kpi-bar -->
@@ -4836,7 +4838,17 @@ function renderTransit(){
         ${coList.map(c=>`<option value="${c}"${fCompany===c?' selected':''}>${c}</option>`).join('')}
       </select>
     </div>
-    <input type="text" id="tr-filter-spec" value="${fSpec}" oninput="_filterTransit()" placeholder="🔧 장비명 / 장비번호 검색" style="font-size:11px;padding:6px 10px;border:1px solid var(--br);border-radius:8px;background:var(--bg1);color:var(--tx);width:100%;box-sizing:border-box">
+    <div style="display:grid;grid-template-columns:1fr auto;gap:6px">
+      <input type="text" id="tr-filter-spec" value="${fSpec}" oninput="_filterTransit()" placeholder="장비명 / 장비번호 검색" style="font-size:11px;padding:6px 10px;border:1px solid var(--br);border-radius:8px;background:var(--bg1);color:var(--tx);width:100%;box-sizing:border-box">
+      <select id="tr-filter-status" onchange="_filterTransit()" style="font-size:11px;padding:6px 8px;border:1px solid var(--br);border-radius:8px;background:var(--bg1);color:var(--tx);box-sizing:border-box">
+        <option value="">전체 상태</option>
+        <option value="예정"${fStatus==='예정'?' selected':''}>예정</option>
+        <option value="반입완료"${fStatus==='반입완료'?' selected':''}>반입완료</option>
+        <option value="반출완료"${fStatus==='반출완료'?' selected':''}>반출완료</option>
+        <option value="인계완료"${fStatus==='인계완료'?' selected':''}>인계완료</option>
+        <option value="취소"${fStatus==='취소'?' selected':''}>취소</option>
+      </select>
+    </div>
   </div>
 
   <!-- 신규 등록 버튼 -->
@@ -4848,7 +4860,7 @@ function renderTransit(){
     active.map(r=>_trCard(r, r.id, isAJ, isSub)).join('')}
 
   <!-- 완료 (상태 기준 — 완료 버튼 누른 것) -->
-  ${done.length>0?`<div class="shd" style="margin-top:10px"><span class="shd-title" style="color:#22c55e">✅ 완료 (${done.length}건)</span></div>
+  ${done.length>0?`<div class="shd" style="margin-top:10px"><span class="shd-title" style="color:#22c55e">완료 (${done.length}건)</span></div>
   ${done.slice(0,50).map(r=>_trCard(r, r.id, false, false)).join('')}`:''}
 
   <!-- 취소 -->
@@ -4867,11 +4879,12 @@ function _filterTransit(){
   window._trFilter.date    = document.getElementById('tr-filter-date')?.value    || '';
   window._trFilter.company = document.getElementById('tr-filter-company')?.value || '';
   window._trFilter.spec    = document.getElementById('tr-filter-spec')?.value    || '';
+  window._trFilter.status  = document.getElementById('tr-filter-status')?.value  || '';
   renderTransit();
 }
 
 function _clearTransitFilter(){
-  window._trFilter = {date:'', company:'', spec:''};
+  window._trFilter = {date:'', company:'', spec:'', status:''};
   renderTransit();
 }
 
@@ -4941,7 +4954,7 @@ function _renderTransitCalendar(){
   ov.innerHTML = `
     <div style="background:var(--bg1);border-radius:16px;width:100%;max-width:360px;padding:16px;box-shadow:0 8px 48px rgba(0,0,0,.7)">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-        <span style="font-size:14px;font-weight:800;color:${typeColor}">📅 ${label} 달력</span>
+        <span style="font-size:14px;font-weight:800;color:${typeColor}">${label} 달력</span>
         <button onclick="_closeTransitCalendar()" style="font-size:18px;background:none;border:none;color:var(--tx2);cursor:pointer;line-height:1">✕</button>
       </div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
@@ -4981,7 +4994,7 @@ function _closeTransitCalendar(){
 function _trHandoverCard(r, canEdit) {
   const st   = trStatusLabel(r.date, r.type);
   const diff = trDiff(r.date);
-  const dDayStr = diff===0?' ★D-DAY':diff===1?' (내일)':'';
+  const dDayStr = diff===0?' ★D-DAY':diff===1?' (내일)':diff>=2?' (D-'+diff+')':'';
   let border = 'border:1px solid var(--br)';
   let headerBg = 'background:var(--bg2)';
   if (!st.done && diff===0){ border='border:2px solid #14b8a6;box-shadow:0 0 0 3px rgba(20,184,166,.15)'; headerBg='background:linear-gradient(135deg,#042f2e,#0f766e)'; }
@@ -4996,7 +5009,7 @@ function _trHandoverCard(r, canEdit) {
   let actionHtml = '';
   if (canEdit && r.status==='예정') {
     actionHtml = '<div style="display:flex;gap:6px;margin-top:6px;border-top:1px solid var(--br);padding-top:8px">'
-      +'<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:#14b8a6;border-color:rgba(20,184,166,.4);font-weight:700" onclick="completeTransit(\''+r.id+'\')">✅ 인계완료</button>'
+      +'<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:#14b8a6;border-color:rgba(20,184,166,.4);font-weight:700" onclick="completeTransit(\''+r.id+'\')">인계완료</button>'
       +'<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px" onclick="editTransitDate(\''+r.id+'\')">날짜변경</button>'
       +'<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:#f87171;border-color:rgba(248,113,113,.3)" onclick="cancelTransit(\''+r.id+'\')">취소</button>'
       +'</div>';
@@ -5011,7 +5024,7 @@ function _trHandoverCard(r, canEdit) {
     +    '<span style="font-weight:800;font-size:12px">'+(r.toCompany||'—')+'</span>'
     +  '</div>'
     +  '<div style="text-align:right">'
-    +    '<div style="font-size:14px;font-weight:900;color:'+(!st.done&&diff<=1?st.color:'var(--tx)')+';cursor:pointer" onclick="editTransitDate('+JSON.stringify(r.id)+')" title="날짜 변경">'+r.date+' 📅</div>'
+    +    '<div style="font-size:14px;font-weight:900;color:'+(!st.done&&diff<=1?st.color:'var(--tx)')+';cursor:pointer" onclick="editTransitDate('+JSON.stringify(r.id)+')" title="날짜 변경">'+r.date+'</div>'
     +    '<div style="font-size:10px;font-weight:800;color:'+st.color+';margin-top:1px">'+st.label+dDayStr+'</div>'
     +  '</div>'
     +'</div>'
@@ -5059,7 +5072,7 @@ function _trCard(r, _unused, canEdit, canMsg){
 
   const typeColor = isIn ? '#60a5fa' : '#fb923c';
   const typeLabel = isIn ? '반입' : '반출';
-  const dDayStr = diff === 0 ? ' ★D-DAY' : diff === 1 ? ' (내일)' : '';
+  const dDayStr = diff === 0 ? ' ★D-DAY' : diff === 1 ? ' (내일)' : diff >= 2 ? ' (D-' + diff + ')' : '';
 
   // 완료 상태 배지
   const isDone = r.status === '반입완료' || r.status === '반출완료';
@@ -5164,18 +5177,18 @@ function _trCard(r, _unused, canEdit, canMsg){
   let actionHtml = '';
   const alreadyDone = rec => rec.status === '반입완료' || rec.status === '반출완료' || rec.status === '취소';
   if (canEdit && !st.done && !alreadyDone(r)) {
-    const completeBtnLabel = isIn ? '✅ 반입완료' : '✅ 반출완료';
+    const completeBtnLabel = isIn ? '반입완료' : '반출완료';
     const completeBtnColor = isIn ? '#22c55e' : '#fb923c';
-    const dispatchBtnLabel = r.dispatch ? '🚗 배차정보 확인하기' : '🚗 배차정보 입력';
+    const dispatchBtnLabel = r.dispatch ? '배차정보 확인하기' : '배차정보 입력';
     const dispatchBtnColor = r.dispatch ? '#4ade80' : 'var(--tx2)';
     actionHtml =
       `<div style="display:flex;gap:6px;margin-top:4px;border-top:1px solid var(--br);padding-top:8px">` +
-      `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:${completeBtnColor};border-color:${completeBtnColor}40;font-weight:700" onclick="completeTransit('${r.id}')">${completeBtnLabel}</button>` +
+      `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:${dispatchBtnColor}" onclick="openDispatchPopup('${r.id}')">${dispatchBtnLabel}</button>` +
       `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px" onclick="editTransitDate('${r.id}')">날짜변경</button>` +
       `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:#f87171;border-color:rgba(248,113,113,.3)" onclick="cancelTransit('${r.id}')">취소</button>` +
       `</div>` +
       `<div style="margin-top:5px">` +
-      `<button class="btn-ghost" style="width:100%;font-size:10px;padding:5px;color:${dispatchBtnColor}" onclick="openDispatchPopup('${r.id}')">${dispatchBtnLabel}</button>` +
+      `<button class="btn-ghost" style="width:100%;font-size:10px;padding:5px;color:${completeBtnColor};border-color:${completeBtnColor}40;font-weight:700" onclick="completeTransit('${r.id}')">${completeBtnLabel}</button>` +
       `</div>`;
   } else if (canEdit && (alreadyDone(r) || st.done) && r.status !== '취소') {
     // 완료 후 안내만 (장비번호 수정은 specBlock 입력란에서)
@@ -5198,7 +5211,7 @@ function _trCard(r, _unused, canEdit, canMsg){
     +     '<span style="font-weight:800;font-size:13px">' + r.company + '</span>'
     +   '</div>'
     +   '<div style="text-align:right">'
-    +     '<div style="font-size:14px;font-weight:900;color:' + (!st.done && diff <= 1 ? st.color : 'var(--tx)') + ';cursor:pointer;" onclick="editTransitDate(' + JSON.stringify(r.id) + ')" title="날짜 변경">' + r.date + ' 📅</div>'
+    +     '<div style="font-size:14px;font-weight:900;color:' + (!st.done && diff <= 1 ? st.color : 'var(--tx)') + ';cursor:pointer;" onclick="editTransitDate(' + JSON.stringify(r.id) + ')" title="날짜 변경">' + r.date + '</div>'
     +     '<div style="font-size:10px;font-weight:800;color:' + st.color + ';margin-top:1px">' + st.label + dDayStr + '</div>'
     +   '</div>'
     + '</div>'
@@ -5216,11 +5229,15 @@ function _trCard(r, _unused, canEdit, canMsg){
 
 
 // ── 배차정보 팝업 ─────────────────────────────────────────────
+function _parseDispatch(v){
+  try{ const o=JSON.parse(v||'{}'); if(o&&typeof o==='object'&&(o.driver||o.carNo||o.phone)) return {driver:o.driver||'',carNo:o.carNo||'',phone:o.phone||''}; }catch{}
+  return {driver:'',carNo:'',phone:''};
+}
 function openDispatchPopup(id){
   const recs = getTransit();
   const r = recs.find(x=>x.id===id);
   if(!r) return;
-  const existing = r.dispatch || '';
+  const d = _parseDispatch(r.dispatch);
   const isAJ = S?.role==='aj';
 
   // 기존 팝업 제거
@@ -5230,20 +5247,33 @@ function openDispatchPopup(id){
   pop.id = 'dispatch-popup';
   pop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;display:flex;align-items:flex-end;justify-content:center;padding-bottom:env(safe-area-inset-bottom)';
   pop.innerHTML = `
-    <div style="background:var(--bg1);border-radius:20px 20px 0 0;padding:20px 16px;width:100%;max-width:480px;max-height:70vh;overflow-y:auto">
+    <div style="background:var(--bg1);border-radius:20px 20px 0 0;padding:20px 16px;width:100%;max-width:480px;max-height:80vh;overflow-y:auto">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-        <span style="font-size:14px;font-weight:800">🚗 배차정보</span>
+        <span style="font-size:14px;font-weight:800">배차정보</span>
         <button onclick="document.getElementById('dispatch-popup').remove()" style="background:none;border:none;font-size:20px;color:var(--tx2);cursor:pointer;padding:4px">✕</button>
       </div>
-      <div style="font-size:11px;color:var(--tx3);margin-bottom:10px">${r.company} · ${r.date}</div>
+      <div style="font-size:11px;color:var(--tx3);margin-bottom:14px">${r.company} · ${r.date}</div>
       ${isAJ ? `
-      <textarea id="dispatch-input" rows="6" placeholder="배차 차량, 기사명, 연락처, 차량번호 등 입력..."
-        style="width:100%;box-sizing:border-box;padding:10px;font-size:12px;line-height:1.6;background:var(--bg2);border:1px solid var(--br);border-radius:8px;color:var(--tx);resize:none;outline:none">${existing}</textarea>
-      <div style="display:flex;gap:8px;margin-top:10px">
+      <div class="fg"><label class="fg-lbl">기사 성명</label>
+        <input type="text" class="fg-input" id="dispatch-driver" value="${d.driver}" placeholder="기사님 성함">
+      </div>
+      <div class="fg"><label class="fg-lbl">차량번호</label>
+        <input type="text" class="fg-input" id="dispatch-carno" value="${d.carNo}" placeholder="예: 12가3456">
+      </div>
+      <div class="fg"><label class="fg-lbl">연락처</label>
+        <input type="tel" class="fg-input phone-input" id="dispatch-phone" value="${d.phone}" placeholder="숫자만 입력" maxlength="11">
+      </div>
+      <div style="display:flex;gap:8px;margin-top:6px">
         <button onclick="saveDispatch('${id}')" style="flex:1;padding:10px;background:#DE1F23;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">저장</button>
         <button onclick="document.getElementById('dispatch-popup').remove()" style="flex:1;padding:10px;background:var(--bg2);color:var(--tx2);border:1px solid var(--br);border-radius:8px;font-size:13px;cursor:pointer">닫기</button>
       </div>` : `
-      <div style="padding:12px;background:var(--bg2);border:1px solid var(--br);border-radius:8px;font-size:12px;line-height:1.8;color:var(--tx);white-space:pre-wrap">${existing || '(배차정보 없음)'}</div>
+      <div style="padding:12px 14px;background:var(--bg2);border:1px solid var(--br);border-radius:10px;font-size:12px;line-height:2.2">
+        ${d.driver||d.carNo||d.phone ? `
+        <div style="display:flex;gap:8px"><span style="color:var(--tx3);min-width:56px">기사 성명</span><b>${d.driver||'—'}</b></div>
+        <div style="display:flex;gap:8px"><span style="color:var(--tx3);min-width:56px">차량번호</span><b>${d.carNo||'—'}</b></div>
+        <div style="display:flex;gap:8px"><span style="color:var(--tx3);min-width:56px">연락처</span>${d.phone?'<a href="tel:'+d.phone+'" style="color:#60a5fa;font-weight:700;text-decoration:none">'+d.phone+'</a>':'<b>—</b>'}</div>
+        ` : '<div style="color:var(--tx3);text-align:center">(배차정보 없음)</div>'}
+      </div>
       <button onclick="document.getElementById('dispatch-popup').remove()" style="width:100%;margin-top:12px;padding:10px;background:var(--bg2);color:var(--tx2);border:1px solid var(--br);border-radius:8px;font-size:13px;cursor:pointer">닫기</button>`}
     </div>`;
   pop.addEventListener('click', e => { if(e.target===pop) pop.remove(); });
@@ -5251,17 +5281,18 @@ function openDispatchPopup(id){
 }
 
 async function saveDispatch(id){
-  const inp = document.getElementById('dispatch-input');
-  if(!inp) return;
-  const dispatch = inp.value.trim();
+  const driver = document.getElementById('dispatch-driver')?.value.trim()||'';
+  const carNo  = document.getElementById('dispatch-carno')?.value.trim()||'';
+  const phone  = document.getElementById('dispatch-phone')?.value.trim()||'';
   const recs = getTransit();
   const rec = recs.find(r=>r.id===id);
   if(!rec){ toast('레코드를 찾을 수 없습니다','err'); return; }
-  rec.dispatch = dispatch;
+  const hasData = driver||carNo||phone;
+  rec.dispatch = hasData ? JSON.stringify({driver,carNo,phone}) : '';
   rec.synced = false;
   await saveTransit(recs);
   document.getElementById('dispatch-popup')?.remove();
-  toast(dispatch ? '배차정보 저장됨' : '배차정보 삭제됨', 'ok');
+  toast(hasData ? '배차정보 저장됨' : '배차정보 삭제됨', 'ok');
   renderTransit();
 }
 
@@ -5409,7 +5440,7 @@ function _renderSpecBlock(r, canEdit) {
       const nosVal = hasNos ? s.equipNos.join(', ') : '';
       const inpId  = 'spec-equip-' + rid + '-' + idx;
       const specLabel = s.spec + (s.model ? ' (' + s.model + ')' : '') + ' ×' + s.qty;
-      return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
+      return `<div style="display:flex;align-items:center;gap:14px;margin-bottom:5px">
         <span style="font-size:12px;font-weight:700;white-space:nowrap;min-width:90px;color:var(--tx)">${specLabel}</span>
         <input type="text" id="${inpId}" data-rid="${rid}" data-idx="${idx}"
           value="${nosVal}"
@@ -6753,7 +6784,23 @@ async function runAI(){
 function renderAdmin(){
   const role=S?.role;
   if(role==='tech'){
-    document.getElementById('adm-content').innerHTML=`<div class="locked-page"><div class="lp-ico"></div><div class="lp-title">접근 권한 없음</div><div class="lp-desc">관리 기능은 협력사관리자 또는<br>AJ관리자만 이용할 수 있습니다.</div></div>`; return;
+    document.getElementById('adm-content').innerHTML=`<div style="padding:14px">
+      <div style="font-size:15px;font-weight:900;margin-bottom:14px">내 정보 수정</div>
+      <div style="background:var(--bg2);border:1px solid var(--br);border-radius:10px;padding:14px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div class="fg" style="margin:0"><label class="fg-lbl">이름 <span class="req">*</span></label>
+            <input type="text" class="fg-input" id="prof-name" value="${S.name||''}">
+          </div>
+          <div class="fg" style="margin:0"><label class="fg-lbl">연락처</label>
+            <input type="tel" class="fg-input phone-input" id="prof-phone" value="${S.phone||''}" placeholder="숫자만 입력" maxlength="11">
+          </div>
+        </div>
+        <div class="fg" style="margin-bottom:0"><label class="fg-lbl">소속 업체</label>
+          <div class="fg-display" style="padding:8px 10px;background:var(--bg3);border-radius:6px;font-size:12px">${S.company||'—'} · ${S.siteName||'—'}</div>
+        </div>
+      </div>
+      <button class="btn-full" style="margin-top:12px" onclick="saveMyProfile()">저장</button>
+    </div>`; return;
   }
   const isSub=role==='sub';
   const isAJ =role==='aj';
@@ -6772,6 +6819,22 @@ function renderAdmin(){
       <div class="ap-avi ${role}">${role==='aj'?'AJ':'담당'}</div>
       <div><div class="ap-name">${S.name}</div><div class="ap-role ${role}">${role==='aj'?'AJ 관리자 · 전체 현장':'협력사 관리자 · '+S.company+' · '+S.siteName}</div></div>
     </div>
+
+    ${isSub?`<div style="background:var(--bg2);border:1px solid var(--br);border-radius:10px;padding:12px;margin-bottom:14px">
+      <div style="font-size:11px;font-weight:800;color:var(--tx2);margin-bottom:8px">내 정보 수정</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div class="fg" style="margin:0"><label class="fg-lbl">이름</label>
+          <input type="text" class="fg-input" id="prof-name" value="${S.name||''}">
+        </div>
+        <div class="fg" style="margin:0"><label class="fg-lbl">연락처</label>
+          <input type="tel" class="fg-input phone-input" id="prof-phone" value="${S.phone||''}" placeholder="숫자만 입력" maxlength="11">
+        </div>
+      </div>
+      <div class="fg" style="margin-bottom:8px"><label class="fg-lbl">직함</label>
+        <input type="text" class="fg-input" id="prof-title" value="${S.title||''}" placeholder="예: 안전관리자">
+      </div>
+      <button class="btn-full" onclick="saveMyProfile()">저장</button>
+    </div>`:''}
 
     ${isAJ?`<div style="margin-bottom:14px">
       <div style="background:linear-gradient(135deg,rgba(34,197,94,.12),rgba(16,185,129,.06));border:1px solid rgba(34,197,94,.25);border-radius:var(--r);padding:12px;margin-bottom:8px;display:flex;align-items:center;gap:12px;">
@@ -7158,6 +7221,29 @@ async function _equipMasterDel(id) {
   toast('삭제됨', 'ok');
   const sh = document.getElementById('sh-equip-master');
   if (sh) _renderEquipMasterSheet(sh);
+}
+
+function saveMyProfile(){
+  const name  = document.getElementById('prof-name')?.value.trim();
+  const phone = document.getElementById('prof-phone')?.value.trim() || '';
+  const title = document.getElementById('prof-title')?.value.trim() || '';
+  if(!name){ toast('이름을 입력하세요','err'); return; }
+  S.name = name; S.phone = phone;
+  if(S.role==='sub') S.title = title;
+  DB.s(K.SESSION, S);
+  // 멤버 목록 업데이트
+  const members = getMembers();
+  const mIdx = members.findIndex(m=>m.company===S.company&&m.siteId===S.siteId&&(m.name===name||m.phone===phone));
+  if(mIdx>=0){
+    members[mIdx] = {...members[mIdx], name, phone, title:title||members[mIdx].title, synced:false};
+    saveMembers(members);
+    if(members[mIdx].id){
+      const _sm=Object.fromEntries(getSites().map(s=>[s.id,s.name]));
+      sbReq('members','PATCH',{name,phone,title:title||''},`?record_id=eq.${encodeURIComponent(members[mIdx].id)}`).catch(()=>{});
+    }
+  }
+  toast('내 정보가 저장되었습니다','ok');
+  renderAdmin();
 }
 
 function openMemberMgr(){
