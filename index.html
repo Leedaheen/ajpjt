@@ -3206,6 +3206,8 @@ async function ensureAdminAccount(){
   const admin = {emp_no:'admin', name:'관리자(Admin)', phone:'', pw_hash:pwHash, aj_type:'관리자', created_at:new Date().toISOString()};
   members.unshift(admin);
   _saveAjMembers(members);
+  // 신규 생성 시 Supabase에도 저장 (다기기 로그인 지원)
+  _syncAjMemberSb(admin);
 }
 function _syncAjMemberSb(member){ // Supabase 백그라운드 upsert (실패 무시)
   sbBatchUpsert('aj_members',[member]).catch(()=>{});
@@ -3602,20 +3604,21 @@ async function doAjRegister(){
   localList.push(member); _saveAjMembers(localList);
   DB.s(K.AJ_MEMBER, member);
   // Supabase 동기화 (await — 서버 저장 여부 사용자에게 피드백)
+  // 비밀번호는 SHA-256 해시(pw_hash)로만 저장됩니다
   try {
-    await sbReq('aj_members','POST',[member],'?on_conflict=emp_no');
+    await sbBatchUpsert('aj_members', [member]);
     toast('가입 완료! 서버에 저장되었습니다 ✓','ok');
   } catch(sbErr) {
     if (sbErr?.message === 'NO_SB_URL') {
       toast('가입 완료 (Supabase 미설정 — 이 기기에서만 로그인 가능)','warn');
     } else {
       console.warn('[AJ Register] Supabase 저장 실패:', sbErr?.message);
-      // 5초 후 1회 자동 재시도
+      // 5초 후 1회 자동 재시도 (실패해도 다음 syncNow에서 재시도)
       setTimeout(async () => {
         try {
-          await sbReq('aj_members','POST',[member],'?on_conflict=emp_no');
+          await sbBatchUpsert('aj_members', [member]);
           toast('서버 저장 완료 (재시도 성공) ✓','ok');
-        } catch { /* 재시도도 실패하면 다음 syncNow에서 처리 */ }
+        } catch { /* syncNow에서 자동 재처리 */ }
       }, 5000);
       toast('가입 완료! 단, 서버 저장 지연 중 — 잠시 후 자동 재시도됩니다.','warn');
     }
@@ -4230,6 +4233,13 @@ async function _syncToSupabase(){
     } catch(err) {
       console.warn('[sync] equipment 동기화 실패:', err);
     }
+  }
+
+  // 6. AJ 멤버 동기화 (로컬 → Supabase upsert, 다기기 로그인 지원)
+  //    push 먼저 → pull(merge)로 다른 기기 계정 반영 순서 보장
+  const _ajMemsSync = _getAjMembers().filter(m => m.emp_no && m.pw_hash);
+  if (_ajMemsSync.length) {
+    await sbBatchUpsert('aj_members', _ajMemsSync).catch(e => console.warn('[sync] aj_members push 실패:', e));
   }
 
   // ── 설정 데이터 pull (sites/companies/notices/settings/invite/idle) ──
