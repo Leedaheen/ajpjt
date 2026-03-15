@@ -3603,6 +3603,21 @@ async function _doGoogleAjLogin(email, googleName){
       `?google_email=eq.${encodeURIComponent(email)}&limit=1`);
     if(rows?.length){
       member = rows[0];
+      // pending 계정이 조회된 경우: 같은 이름의 approved 계정이 있으면 그쪽으로 전환
+      // (이전 세션에서 중복 pending 계정이 생성됐을 때 처리)
+      if((member.status||'approved')==='pending'){
+        const approvedRows = await sbReq('aj_members','GET',null,
+          `?name=eq.${encodeURIComponent(member.name)}&status=eq.approved&limit=1`).catch(()=>null);
+        if(approvedRows?.length){
+          const approved = approvedRows[0];
+          // approved 계정에 google_email 연동 (아직 없으면)
+          if(!approved.google_email){
+            _patchAjMemberSb(approved.emp_no, {google_email: email});
+            approved.google_email = email;
+          }
+          member = approved;
+        }
+      }
       // 로컬 캐시 갱신
       const localList = _getAjMembers();
       const idx = localList.findIndex(m=>m.emp_no===member.emp_no);
@@ -3614,6 +3629,11 @@ async function _doGoogleAjLogin(email, googleName){
   if(!member){
     const localList = _getAjMembers();
     member = localList.find(m=>m.google_email===email);
+    // 로컬에서도 pending이면 같은 이름의 approved 계정으로 전환
+    if(member && (member.status||'approved')==='pending'){
+      const approvedLocal = localList.find(m=>m.name===member.name && (m.status||'approved')==='approved');
+      if(approvedLocal) member = approvedLocal;
+    }
   }
   if(member){
     const _st = member.status||'approved';
