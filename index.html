@@ -3206,11 +3206,14 @@ async function ensureAdminAccount(){
   members.unshift(admin);
   _saveAjMembers(members);
 }
-function _syncAjMemberSb(member){ // Supabase 백그라운드 동기화 (실패 무시)
-  sbReq('aj_members','POST',[member],'').catch(()=>{});
+function _syncAjMemberSb(member){ // Supabase 백그라운드 upsert (실패 무시)
+  sbBatchUpsert('aj_members',[member]).catch(()=>{});
 }
 function _patchAjMemberSb(empNo,patch){ // Supabase 백그라운드 패치 (실패 무시)
   sbReq('aj_members','PATCH',patch,`?emp_no=eq.${encodeURIComponent(empNo)}`).catch(()=>{});
+}
+function _deleteAjMemberSb(empNo){ // Supabase 백그라운드 삭제 (실패 무시)
+  sbReq('aj_members','DELETE',null,`?emp_no=eq.${encodeURIComponent(empNo)}`).catch(()=>{});
 }
 
 /* ── AJ 관리자 계정 관리 UI ── */
@@ -3324,6 +3327,7 @@ function deleteAjMember(idx){
   if(!confirm(`[${m.name}] 계정을 삭제하시겠습니까?`)) return;
   members.splice(idx,1);
   _saveAjMembers(members);
+  _deleteAjMemberSb(m.emp_no);
   toast('계정이 삭제되었습니다','ok');
   renderAjMemberList();
 }
@@ -3484,6 +3488,7 @@ function deleteAcctAjMember(idx){
   if(m.emp_no==='admin'){ toast('admin 계정은 삭제할 수 없습니다','err'); return; }
   if(!confirm(`[${m.name}] 계정을 삭제하시겠습니까?`)) return;
   members.splice(idx,1); _saveAjMembers(members);
+  _deleteAjMemberSb(m.emp_no);
   toast('계정이 삭제되었습니다','ok'); renderAcctAjList();
 }
 function closeAcctAjForm(){
@@ -4357,6 +4362,12 @@ async function _pullIdleLogsFromSB(){
   })));
 }
 
+async function _pullAjMembersFromSB(){
+  const rows = await sbReq('aj_members','GET',null,'?order=created_at').catch(()=>null);
+  if(!Array.isArray(rows)||!rows.length) return;
+  _saveAjMembers(rows);
+}
+
 /* ── 통합 Config Pull ──────────────────────────────────── */
 async function _pullConfigFromSB(){
   await Promise.allSettled([
@@ -4366,6 +4377,7 @@ async function _pullConfigFromSB(){
     _pullSettingsFromSB(),
     _pullInviteCodesFromSB(),
     _pullIdleLogsFromSB(),
+    _pullAjMembersFromSB(),
   ]);
 }
 
