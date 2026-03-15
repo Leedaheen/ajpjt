@@ -3113,20 +3113,27 @@ async function doAjRegister(){
   const localList=_getAjMembers();
   if(localList.some(m=>m.emp_no===empNo)){ toast('이미 가입된 사번입니다','err'); return; }
   const pwHash=await sha256(pw);
-  const member={emp_no:empNo,name,phone,pw_hash:pwHash,aj_type:ajType,created_at:Date.now()};
+  const member={emp_no:empNo,name,phone,pw_hash:pwHash,aj_type:ajType,created_at:new Date().toISOString()};
   // 로컬 저장 (주 저장소)
   localList.push(member); _saveAjMembers(localList);
   DB.s(K.AJ_MEMBER, member);
   // Supabase 동기화 (await — 서버 저장 여부 사용자에게 피드백)
   try {
-    await sbReq('aj_members','POST',[member],'');
-    toast('가입 완료! 서버에 저장되었습니다','ok');
+    await sbReq('aj_members','POST',[member],'?on_conflict=emp_no');
+    toast('가입 완료! 서버에 저장되었습니다 ✓','ok');
   } catch(sbErr) {
     if (sbErr?.message === 'NO_SB_URL') {
       toast('가입 완료 (Supabase 미설정 — 이 기기에서만 로그인 가능)','warn');
     } else {
       console.warn('[AJ Register] Supabase 저장 실패:', sbErr?.message);
-      toast('가입 완료! 단, 서버 저장 실패 — 다른 기기에서는 로그인이 안 될 수 있습니다. 관리자에게 문의하세요.','warn');
+      // 5초 후 1회 자동 재시도
+      setTimeout(async () => {
+        try {
+          await sbReq('aj_members','POST',[member],'?on_conflict=emp_no');
+          toast('서버 저장 완료 (재시도 성공) ✓','ok');
+        } catch { /* 재시도도 실패하면 다음 syncNow에서 처리 */ }
+      }, 5000);
+      toast('가입 완료! 단, 서버 저장 지연 중 — 잠시 후 자동 재시도됩니다.','warn');
     }
   }
   switchAjTab('login');
@@ -3164,6 +3171,26 @@ async function doLogin(role){
     if(!site||!co||!name||!phone){ toast('모든 항목을 입력해주세요','err'); return; }
     if(!privState.p1||!privState.p2){ toast('필수 동의 항목에 체크해주세요','err'); return; }
     S={role:'tech',name,phone,company:co,siteId:site,siteName:getSites().find(s=>s.id===site)?.name||site,loginAt:Date.now()};
+    // 기술인 멤버 저장 (첫 로그인 시 서버에 즉시 등록)
+    const _techMbrs=getMembers();
+    const _alreadyTech=_techMbrs.some(m=>m.name===name&&m.company===co&&m.siteId===site);
+    if(!_alreadyTech){
+      const _newTech={id:'tech-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),
+        name,company:co,siteId:site,phone,title:'기술인',
+        joinedAt:Date.now(),synced:false};
+      _techMbrs.push(_newTech);
+      saveMembers(_techMbrs);
+      // 즉시 Supabase 저장 (fire-and-forget)
+      const _sm=Object.fromEntries(getSites().map(s=>[s.id,s.name]));
+      sbReq('members','POST',[{
+        record_id:_newTech.id,name:_newTech.name,company:_newTech.company,
+        site_id:_newTech.siteId,site_name:_sm[_newTech.siteId]||_newTech.siteId||'',
+        phone:_newTech.phone,title:_newTech.title,
+        joined_at:new Date(_newTech.joinedAt).toISOString()
+      }],'?on_conflict=record_id').then(()=>{
+        _newTech.synced=true; saveMembers(getMembers());
+      }).catch(()=>{});
+    }
   } else if(role==='sub'){
     const site=document.getElementById('subSite').value;
     const co=document.getElementById('subCompany').value;
@@ -3180,10 +3207,23 @@ async function doLogin(role){
     const members=getMembers();
     const alreadyMember=members.some(m=>m.name===name&&m.company===co&&m.siteId===site);
     if(!alreadyMember){
-      members.push({name,company:co,siteId:site,joinedAt:Date.now()});
+      const _newMbr={id:'sub-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),
+        name,company:co,siteId:site,phone:subPhone||'',title:subTitle||'',
+        joinedAt:Date.now(),synced:false};
+      members.push(_newMbr);
       saveMembers(members);
       addNotif({icon:'',title:`신규 관리자 가입: ${co}`,
         desc:`${co} 업체 관리자 ${name}님이 가입하였습니다`});
+      // 즉시 Supabase 저장 (fire-and-forget)
+      const _sm=Object.fromEntries(getSites().map(s=>[s.id,s.name]));
+      sbReq('members','POST',[{
+        record_id:_newMbr.id,name:_newMbr.name,company:_newMbr.company,
+        site_id:_newMbr.siteId,site_name:_sm[_newMbr.siteId]||_newMbr.siteId||'',
+        phone:_newMbr.phone,title:_newMbr.title,
+        joined_at:new Date(_newMbr.joinedAt).toISOString()
+      }],'?on_conflict=record_id').then(()=>{
+        _newMbr.synced=true; saveMembers(getMembers());
+      }).catch(()=>{});
     }
   } else {
     // AJ 관리자 로그인 — 로컬스토리지 주 저장소, Supabase 폴백
