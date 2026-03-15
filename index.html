@@ -1217,7 +1217,7 @@ textarea.fg-input{height:72px;line-height:1.5;}
         <input type="text" class="lg-input" id="subTitle" placeholder="예: 팀장, 대리, 반장">
       </div>
       <div class="lg">
-        <label class="lg-label">연락처</label>
+        <label class="lg-label">연락처 <span class="req">*</span></label>
         <input type="tel" class="lg-input phone-input" id="subPhone" placeholder="숫자만 입력" maxlength="11">
       </div>
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--tx2);padding:6px 0;margin-bottom:4px">
@@ -4273,7 +4273,7 @@ async function doLogin(role){
     const name=document.getElementById('subName').value.trim();
     const subTitle=document.getElementById('subTitle')?.value.trim()||'';
     const subPhone=document.getElementById('subPhone')?.value.trim()||'';
-    if(!site||!co||!name){ toast('현장·업체·이름을 입력해주세요','err'); return; }
+    if(!site||!co||!name||!subPhone){ toast('현장·업체·이름·연락처를 입력해주세요','err'); return; }
     const members=getMembers();
     // 이미 가입된 멤버 확인 (이름+업체+현장)
     const existing=members.find(m=>m.name===name&&m.company===co&&m.siteId===site&&m.role!=='tech'&&m.title!=='기술인');
