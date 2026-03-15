@@ -4707,7 +4707,8 @@ function initInputForm(){
   document.getElementById('f-site-disp').textContent=S.siteName;
   document.getElementById('f-co-disp').textContent=S.company;
   // reset
-  document.querySelectorAll('#floor-chips .chip').forEach(c=>c.classList.remove('on'));
+  const _fsel2=document.getElementById('f-floor-select'); if(_fsel2) _fsel2.value='';
+  const _fdet2=document.getElementById('f-location-detail'); if(_fdet2) _fdet2.value='';
   document.getElementById('f-equip').value='';
   document.getElementById('f-meter-start').value='';
   document.getElementById('f-meter-end').value='';
@@ -4769,7 +4770,8 @@ async function submitStart(){
   if(!S) return;
   const date=document.getElementById('f-date').value;
   const equip=document.getElementById('f-equip').value.toUpperCase().trim();
-  const floors=[...document.querySelectorAll('#floor-chips .chip.on')].map(c=>c.textContent).join(', ');
+  const floors = document.getElementById('f-floor-select')?.value || '';
+  const locationDetail = document.getElementById('f-location-detail')?.value.trim() || '';
   const project = document.querySelector('#ops-project-chips .chip.on')?.textContent || '';
   const opsProjects = getSites().find(s=>s.id===S?.siteId)?.projects||[];
   if(!equip){ toast('장비번호를 입력하세요','err'); return; }
@@ -4779,7 +4781,7 @@ async function submitStart(){
   const entry={
     id:`${S.siteId}-${date}-${S.company}-${equip}-${Date.now().toString(36)}`,
     siteId:S.siteId, date, company:S.company,
-    floor:floors, equip, name:S.name, project,
+    floor:floors, locationDetail, equip, name:S.name, project,
     meterStart:+document.getElementById('f-meter-start').value||null,
     meterEnd:null, duration:null,
     startTime:document.getElementById('f-starttime').value,
@@ -4789,13 +4791,16 @@ async function submitStart(){
   try {
     spinner(true,'저장 중...');
     await saveLog(entry);          // IDB 단건 저장
+    // 장비별 층수 데이터 수집 (새 층수로 덮어쓰기)
+    if(equip && floors){ const _fm=DB.g('equip_floors',{}); _fm[equip]={floor:floors,detail:locationDetail}; DB.s('equip_floors',_fm); }
     await pushToGS(entry);         // Supabase/GS 즉시 push
     toast(entry.synced?'사용 신청 완료':'로컬 저장 (미연동)', entry.synced?'ok':'warn');
     updatePendingBanner(); updateLogBadge();
     document.getElementById('f-equip').value='';
     document.getElementById('f-meter-start').value='';
     document.getElementById('f-starttime').value=nowHM();
-    document.querySelectorAll('#floor-chips .chip.on').forEach(c=>c.classList.remove('on'));
+    const _fsel=document.getElementById('f-floor-select'); if(_fsel) _fsel.value='';
+    const _fdet=document.getElementById('f-location-detail'); if(_fdet) _fdet.value='';
     document.querySelectorAll('#ops-project-chips .chip.on').forEach(c=>c.classList.remove('on'));
   } catch(e) {
     toast('저장 중 오류가 발생했습니다','err');
@@ -5050,18 +5055,24 @@ function _getInputFormHTML(){
     </div>
     <div class="fg" id="fg-floor">
       <label class="fg-lbl">작업 층수 <span class="req">*</span></label>
-      <div class="chips" id="floor-chips">
-        <div class="chip" onclick="selectOne(this,'floor-chips')">모듈동</div>
-        <div class="chip" onclick="selectOne(this,'floor-chips')">1F 외곽</div>
-        <div class="chip" onclick="selectOne(this,'floor-chips')">1F</div>
-        <div class="chip" onclick="selectOne(this,'floor-chips')">2F</div>
-        <div class="chip" onclick="selectOne(this,'floor-chips')">3F</div>
-        <div class="chip" onclick="selectOne(this,'floor-chips')">4F</div>
-        <div class="chip" onclick="selectOne(this,'floor-chips')">5F</div>
-        <div class="chip" onclick="selectOne(this,'floor-chips')">6F</div>
-        <div class="chip" onclick="selectOne(this,'floor-chips')">7F</div>
-        <div class="chip" onclick="selectOne(this,'floor-chips')">8F</div>
-        <div class="chip" onclick="selectOne(this,'floor-chips')">기타</div>
+      <div style="display:flex;gap:6px">
+        <div class="site-select-wrap" style="flex:1">
+          <select class="fg-select" id="f-floor-select" style="width:100%">
+            <option value="">선택</option>
+            <option value="모듈동">모듈동</option>
+            <option value="1F 외곽">1F 외곽</option>
+            <option value="1F">1F</option>
+            <option value="2F">2F</option>
+            <option value="3F">3F</option>
+            <option value="4F">4F</option>
+            <option value="5F">5F</option>
+            <option value="6F">6F</option>
+            <option value="7F">7F</option>
+            <option value="8F">8F</option>
+            <option value="기타">기타</option>
+          </select>
+        </div>
+        <input type="text" class="fg-input" id="f-location-detail" placeholder="상세 위치" style="flex:1;margin:0">
       </div>
     </div>
     <div class="fg">
@@ -5210,28 +5221,29 @@ function renderASPage(){
       <div style="font-size:9px;color:var(--tx2)">처리완료</div>
     </div>
   </div>
-  <div class="fchips" style="margin-bottom:6px">
-    <div class="fc${_asFilter==='all'?' on':''}" onclick="_setAsFilter('all',this)">전체</div>
-    <div class="fc${_asFilter==='대기'?' on':''}" onclick="_setAsFilter('대기',this)">대기</div>
-    <div class="fc${_asFilter==='자재수급중'?' on':''}" onclick="_setAsFilter('자재수급중',this)">자재수급중</div>
-    <div class="fc${_asFilter==='처리완료'?' on':''}" onclick="_setAsFilter('처리완료',this)">처리완료</div>
+  <div style="display:flex;gap:8px;margin-bottom:12px">
+    <div class="site-select-wrap" style="flex:1">
+      <select class="fg-select" style="width:100%;font-size:11px" onchange="_asFilter=this.value;renderASPage()">
+        <option value="all"${_asFilter==='all'?' selected':''}>전체 상태</option>
+        <option value="대기"${_asFilter==='대기'?' selected':''}>대기</option>
+        <option value="자재수급중"${_asFilter==='자재수급중'?' selected':''}>자재수급중</option>
+        <option value="처리완료"${_asFilter==='처리완료'?' selected':''}>처리완료</option>
+      </select>
+    </div>
+    <div class="site-select-wrap" style="flex:1">
+      <select class="fg-select" style="width:100%;font-size:11px" onchange="_asTypeFilter=this.value;renderASPage()">
+        <option value="all"${_asTypeFilter==='all'?' selected':''}>전체 유형</option>
+        <option value="작동불량"${_asTypeFilter==='작동불량'?' selected':''}>작동불량</option>
+        <option value="충전불량"${_asTypeFilter==='충전불량'?' selected':''}>충전불량</option>
+        <option value="누유의심"${_asTypeFilter==='누유의심'?' selected':''}>누유의심</option>
+        <option value="파손"${_asTypeFilter==='파손'?' selected':''}>파손</option>
+        <option value="자재요청"${_asTypeFilter==='자재요청'?' selected':''}>자재요청</option>
+        <option value="오류코드"${_asTypeFilter==='오류코드'?' selected':''}>오류코드</option>
+        <option value="기타"${_asTypeFilter==='기타'?' selected':''}>기타</option>
+      </select>
+    </div>
   </div>
-  <div class="fchips" style="margin-bottom:12px;flex-wrap:wrap">
-    <div class="fc${_asTypeFilter==='all'?' on':''}" onclick="_setAsTypeFilter('all',this)" style="font-size:9px">전체유형</div>
-    <div class="fc${_asTypeFilter==='작동불량'?' on':''}" onclick="_setAsTypeFilter('작동불량',this)" style="font-size:9px">작동불량</div>
-    <div class="fc${_asTypeFilter==='충전불량'?' on':''}" onclick="_setAsTypeFilter('충전불량',this)" style="font-size:9px">충전불량</div>
-    <div class="fc${_asTypeFilter==='누유의심'?' on':''}" onclick="_setAsTypeFilter('누유의심',this)" style="font-size:9px">누유의심</div>
-    <div class="fc${_asTypeFilter==='파손'?' on':''}" onclick="_setAsTypeFilter('파손',this)" style="font-size:9px">파손</div>
-    <div class="fc${_asTypeFilter==='자재요청'?' on':''}" onclick="_setAsTypeFilter('자재요청',this)" style="font-size:9px">자재요청</div>
-    <div class="fc${_asTypeFilter==='오류코드'?' on':''}" onclick="_setAsTypeFilter('오류코드',this)" style="font-size:9px">오류코드</div>
-    <div class="fc${_asTypeFilter==='기타'?' on':''}" onclick="_setAsTypeFilter('기타',this)" style="font-size:9px">기타</div>
-  </div>
-  <!-- 고장 유형 필터 -->
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-    <span style="font-size:10px;color:var(--tx3);font-weight:700">유형 필터</span>
-    ${_asTypeFilter!=='all'?`<button onclick="_asTypeFilter='all';renderASPage()" style="font-size:9px;color:var(--tx3);background:none;border:none;cursor:pointer;padding:0;text-decoration:underline">초기화</button>`:''}
-  </div>
-  
+
 
   <!-- 카드 목록 -->
   ${reqs.length===0?'<div class="empty"><div class="empty-txt">해당하는 AS 요청 없음</div></div>':
@@ -5795,13 +5807,8 @@ function _trCard(r, _unused, canEdit, canMsg){
     ? `<span style="font-size:9px;font-weight:800;padding:2px 6px;border-radius:6px;background:rgba(20,184,166,.2);color:#14b8a6">${r.project}</span>`
     : '';
 
-  // 반입 제원+장비번호 복사 버튼
-  let inCopyHtml = '';
-  if (isIn && specs.length) {
-    inCopyHtml = `<div style="display:flex;justify-content:flex-end;margin-bottom:6px">`
-      + `<button onclick="copyInInfo('${r.id}')" style="padding:3px 10px;font-size:10px;background:rgba(96,165,250,.15);border:1px solid rgba(96,165,250,.3);border-radius:6px;color:#60a5fa;cursor:pointer;font-weight:700">제원·장비번호 복사</button>`
-      + `</div>`;
-  }
+  // 반입 제원+장비번호 복사 버튼 (specBlock 저장 버튼 좌측으로 이동)
+  const inCopyHtml = '';
 
   // AJ 장비번호 영역
   let ajEquipHtml = '';
@@ -5897,12 +5904,8 @@ function _trCard(r, _unused, canEdit, canMsg){
     const dispatchBtnColor = r.dispatch ? '#4ade80' : 'var(--tx2)';
     actionHtml =
       `<div style="display:flex;gap:6px;margin-top:4px;border-top:1px solid var(--br);padding-top:8px">` +
-      `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:${dispatchBtnColor}" onclick="openDispatchPopup('${r.id}')">${dispatchBtnLabel}</button>` +
-      `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px" onclick="editTransitDate('${r.id}')">날짜변경</button>` +
       `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:#f87171;border-color:rgba(248,113,113,.3)" onclick="cancelTransit('${r.id}')">취소</button>` +
-      `</div>` +
-      `<div style="margin-top:5px">` +
-      `<button class="btn-ghost" style="width:100%;font-size:10px;padding:5px;color:${completeBtnColor};border-color:${completeBtnColor}40;font-weight:700" onclick="completeTransit('${r.id}')">${completeBtnLabel}</button>` +
+      `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:${completeBtnColor};border-color:${completeBtnColor}40;font-weight:700" onclick="completeTransit('${r.id}')">${completeBtnLabel}</button>` +
       `</div>`;
   } else if (canEdit && (alreadyDone(r) || st.done) && r.status !== '취소') {
     // 완료 후 안내만 (장비번호 수정은 specBlock 입력란에서)
@@ -5951,18 +5954,6 @@ function _trCard(r, _unused, canEdit, canMsg){
       <span id="tr-arrow-${r.id}" style="font-size:12px;color:var(--tx3);transition:transform .2s;flex-shrink:0;align-self:center${isExpanded?';transform:rotate(180deg)':''}">▼</span>
     </div>
     <div id="tr-body-${r.id}" style="display:${isExpanded?'block':'none'}">
-      <div style="${headerBg};padding:10px 12px;display:flex;align-items:center;justify-content:space-between">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px;background:${isIn?'rgba(96,165,250,.2)':'rgba(251,146,60,.2)'};color:${typeColor}">${typeLabel}</span>
-          ${doneBadge}
-          ${projectBadge}
-          <span style="font-weight:800;font-size:13px">${r.company}</span>
-        </div>
-        <div style="text-align:right">
-          <div style="font-size:14px;font-weight:900;color:${!st.done && diff <= 1 ? st.color : 'var(--tx)'};cursor:pointer;" onclick="editTransitDate(${JSON.stringify(r.id)})" title="날짜 변경">${r.date}</div>
-          <div style="font-size:10px;font-weight:800;color:${st.color};margin-top:1px">${st.label}${dDayStr}</div>
-        </div>
-      </div>
       <div style="padding:10px 12px">
         ${_renderSpecBlock(r, isIn && isAJ)}
         ${(!isAJ || !isIn) ? ajEquipHtml : ''}
@@ -6179,7 +6170,7 @@ function _renderSpecBlock(r, canEdit) {
           <button onclick="if(!window._specEditMode)window._specEditMode=new Map();window._specEditMode.set('${rid}',true);renderTransit();"
             style="padding:5px 14px;font-size:11px;font-weight:700;background:rgba(96,165,250,.18);
               border:1px solid rgba(96,165,250,.35);border-radius:6px;color:#60a5fa;cursor:pointer;white-space:nowrap">
-            ✏️ 수정
+            수정
           </button>
         </div>
       </div>`;
@@ -6202,15 +6193,19 @@ function _renderSpecBlock(r, canEdit) {
       </div>`;
     }).join('');
     const btnId = 'spec-save-btn-' + rid;
+    const _dispLabel = r.dispatch ? '배차정보 확인' : '배차정보';
+    const _dispColor = r.dispatch ? '#4ade80' : 'var(--tx2)';
     return `<div style="margin-bottom:8px;padding:8px 10px;background:rgba(96,165,250,.04);border:1px solid rgba(96,165,250,.15);border-radius:8px">
       <div style="font-size:10px;font-weight:700;color:#60a5fa;margin-bottom:7px">🏷 제원별 장비번호 입력</div>
       ${rows}
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;padding-top:6px;border-top:1px solid rgba(96,165,250,.12)">
-        <div style="font-size:10px;color:var(--tx3)">저장하면 장비 마스터에 자동 등록됩니다</div>
+      <div style="display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-top:6px;padding-top:6px;border-top:1px solid rgba(96,165,250,.12)">
+        <button class="btn-ghost" style="font-size:10px;padding:4px 10px;color:${_dispColor}" onclick="openDispatchPopup('${rid}')">${_dispLabel}</button>
+        <button class="btn-ghost" style="font-size:10px;padding:4px 10px" onclick="editTransitDate('${rid}')">날짜변경</button>
+        <button onclick="copyInInfo('${rid}')" style="padding:4px 10px;font-size:10px;background:rgba(96,165,250,.15);border:1px solid rgba(96,165,250,.3);border-radius:6px;color:#60a5fa;cursor:pointer;font-weight:700;white-space:nowrap">복사</button>
         <button id="${btnId}" onclick="_saveAllSpecEquip('${rid}')"
-          style="padding:5px 14px;font-size:11px;font-weight:700;background:rgba(96,165,250,.18);
+          style="padding:4px 10px;font-size:11px;font-weight:700;background:rgba(96,165,250,.18);
             border:1px solid rgba(96,165,250,.35);border-radius:6px;color:#60a5fa;cursor:pointer;white-space:nowrap;flex-shrink:0">
-          💾 저장
+          저장
         </button>
       </div>
     </div>`;
@@ -6249,8 +6244,8 @@ async function _saveAllSpecEquip(recordId) {
 
   const recs = getTransit();
   const rec  = recs.find(r => r.id === recordId);
-  if (!rec) { toast('레코드를 찾을 수 없습니다', 'err'); if(btn){btn.disabled=false;btn.innerHTML='💾 저장';} return; }
-  if (!rec.specs) { toast('제원 정보 없음', 'err'); if(btn){btn.disabled=false;btn.innerHTML='💾 저장';} return; }
+  if (!rec) { toast('레코드를 찾을 수 없습니다', 'err'); if(btn){btn.disabled=false;btn.innerHTML='저장';} return; }
+  if (!rec.specs) { toast('제원 정보 없음', 'err'); if(btn){btn.disabled=false;btn.innerHTML='저장';} return; }
 
   let hasAny = false;
   rec.specs.forEach((s, idx) => {
@@ -6269,14 +6264,9 @@ async function _saveAllSpecEquip(recordId) {
 
   await saveTransit(recs);
 
-  if (rec.type === 'in' && hasAny) {
-    await registerEquipFromTransit(rec).catch(()=>{});
-    toast('장비번호 저장 완료 + 마스터 등록', 'ok');
-  } else {
-    toast('저장됨', 'ok');
-  }
+  toast('장비번호 저장됨', 'ok');
   // 버튼 텍스트 변경 (1.5초 후 카드 재렌더)
-  if (btn) { btn.innerHTML = '✅ 저장완료'; btn.style.background = 'rgba(34,197,94,.15)'; btn.style.borderColor = 'rgba(34,197,94,.35)'; btn.style.color = '#4ade80'; btn.disabled = false; }
+  if (btn) { btn.innerHTML = '저장완료'; btn.style.background = 'rgba(34,197,94,.15)'; btn.style.borderColor = 'rgba(34,197,94,.35)'; btn.style.color = '#4ade80'; btn.disabled = false; }
   // 편집 모드 플래그 초기화 → 재렌더 시 읽기 전용으로 표시
   if (window._specEditMode) window._specEditMode.delete(recordId);
   // 카드 re-render (입력란 border 색 갱신 위해)
@@ -6304,13 +6294,7 @@ async function _saveSpecEquip(recordId, specIdx) {
 
   await saveTransit(recs);
 
-  // 마스터 즉시 등록
-  if (rec.type === 'in' && equipNos.length) {
-    await registerEquipFromTransit(rec);
-    toast(equipNos.join(', ') + ' 장비 마스터 등록 완료', 'ok');
-  } else {
-    toast('저장됨', 'ok');
-  }
+  toast('저장됨', 'ok');
   renderTransit();
 }
 
