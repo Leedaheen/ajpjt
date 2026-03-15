@@ -4159,6 +4159,7 @@ async function _syncToSupabase(){
         reporter_phone:a.reporterPhone||'',
         status:        a.status||'대기',
         tech_name:     a.techName||'',
+        tech_phone:    a.techPhone||'',
         resolved_at:   a.resolvedAt ? new Date(a.resolvedAt).toISOString() : null,
         resolve_note:  a.resolvedNote||'',
         material_at:   a.materialAt ? new Date(a.materialAt).toISOString() : null,
@@ -5394,11 +5395,23 @@ function renderTransit(){
 
 function _filterTransit(){
   if (!window._trFilter) window._trFilter = {};
+  // 포커스·커서 위치 저장 (re-render 후 복원용)
+  const _focId  = document.activeElement?.id || '';
+  const _selEnd = document.activeElement?.selectionStart ?? null;
   window._trFilter.date    = document.getElementById('tr-filter-date')?.value    || '';
   window._trFilter.company = document.getElementById('tr-filter-company')?.value || '';
   window._trFilter.spec    = document.getElementById('tr-filter-spec')?.value    || '';
   window._trFilter.status  = document.getElementById('tr-filter-status')?.value  || '';
   renderTransit();
+  // re-render 후 포커스 복원
+  if(_focId){
+    const restored = document.getElementById(_focId);
+    if(restored){
+      restored.focus();
+      if(_selEnd !== null && restored.setSelectionRange)
+        restored.setSelectionRange(_selEnd, _selEnd);
+    }
+  }
 }
 
 function _clearTransitFilter(){
