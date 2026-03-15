@@ -2596,7 +2596,7 @@ function getSites(){
   if(!_cache.sites) _cache.sites = DB.g(K.SITES, DEFAULT_SITES);
   return _cache.sites;
 }
-function saveSites(arr){ _cache.sites=null; DB.s(K.SITES,arr); }
+function saveSites(arr){ _cache.sites=null; DB.s(K.SITES,arr); _pushSitesToSB(arr).catch(()=>{}); }
 
 function getCos(siteId){
   if(!_cache.cos){
@@ -2607,7 +2607,7 @@ function getCos(siteId){
   }
   return _cache.cos[siteId] || [];
 }
-function saveCos(obj){ _cache.cos=null; DB.s(K.COS,obj); }
+function saveCos(obj){ _cache.cos=null; DB.s(K.COS,obj); _pushCosToSB(obj).catch(()=>{}); }
 
 // ══════════════════════════════════════════════════════════
 //  장비 마스터 (현재 반입 중인 장비 목록)
@@ -2968,10 +2968,12 @@ function getLogsByCo(company, siteId){
 function saveCos(obj){
   _cache.cos = null; // invalidate
   DB.s(K.COS, obj);
+  _pushCosToSB(obj).catch(()=>{});
 }
 function saveSites(arr){
   _cache.sites = null;
   DB.s(K.SITES, arr);
+  _pushSitesToSB(arr).catch(()=>{});
 }
 
 function seedIfEmpty(){
@@ -4218,10 +4220,153 @@ async function _syncToSupabase(){
     }
   }
 
+  // ── 설정 데이터 pull (sites/companies/notices/settings/invite/idle) ──
+  await _pullConfigFromSB().catch(e => console.warn('[config pull] 실패:', e));
+
   // ── 다른 기기 변경사항 pull (충돌 방지) ─────────────────
   // 마지막 동기화 이후 서버에서 변경된 transit / AS 데이터를 내려받아 로컬 병합
   // updated_at 기준 비교: 서버 버전이 더 새로우면 로컬을 덮어씀
   await _pullRecentFromSupabase().catch(e => console.warn('[pull] 실패:', e));
+}
+
+/* ══════════════════════════════════════════════════════════
+   설정 데이터 서버 동기화 — Push / Pull
+   (K.SITES, K.COS, K.NOTICE, K.SETTINGS, K.INVITE_SITE, K.IDLE)
+══════════════════════════════════════════════════════════ */
+
+/* ── Push 함수 6개 ─────────────────────────────────────── */
+async function _pushSitesToSB(arr){
+  const rows = (arr||getSites()).map(s=>({
+    id:s.id, name:s.name, active:s.active!==false,
+    projects:JSON.stringify(s.projects||[]), updated_at:new Date().toISOString()
+  }));
+  if(rows.length) await sbBatchUpsert('sites', rows);
+}
+
+async function _pushCosToSB(obj){
+  obj = obj || DB.g(K.COS,{})||{};
+  for(const [siteId, list] of Object.entries(obj)){
+    await sbReq('companies','DELETE',null,`?site_id=eq.${encodeURIComponent(siteId)}`).catch(()=>{});
+    if(list&&list.length){
+      const rows = list.map(c=>({site_id:siteId, name:c.name, color:c.color||'#3b8bff', equip:c.equip||0}));
+      await sbReq('companies','POST',rows,'').catch(()=>{});
+    }
+  }
+}
+
+async function _pushNoticesToSB(arr){
+  arr = arr || getNotices();
+  await sbReq('notices','DELETE',null,'?id=neq.__none__').catch(()=>{});
+  if(arr.length){
+    const rows = arr.map(n=>({
+      id:n.id, site_id:n.siteId, text:n.text,
+      created_by:n.createdBy, created_at:n.createdAt,
+      active:n.active!==false, updated_at:new Date().toISOString()
+    }));
+    await sbBatchUpsert('notices', rows);
+  }
+}
+
+async function _pushSettingsToSB(){
+  const s  = DB.g(K.SETTINGS,{});
+  const ca = DB.g('custom_alerts',[]);
+  const row = {
+    site_id:S?.siteId||'global',
+    alert_time:s.alertTime||'15:00',
+    custom_alerts:JSON.stringify(ca),
+    updated_at:new Date().toISOString()
+  };
+  await sbReq('app_settings','POST',[row],'').catch(()=>{});
+}
+
+async function _pushInviteCodeToSB(siteId, code){
+  const row = {site_id:siteId, code, set_month:new Date().toISOString().slice(0,7), updated_at:new Date().toISOString()};
+  await sbReq('invite_codes','POST',[row],'').catch(()=>{});
+}
+
+async function _pushIdleLogToSB(entry){
+  const siteMap = Object.fromEntries(getSites().map(s=>[s.id,s.name]));
+  const row = {
+    id:entry.id, date:entry.date,
+    site_id:entry.siteId, site_name:siteMap[entry.siteId]||'',
+    company:entry.company, equip:entry.equip,
+    recorder:entry.name||entry.recorder||'',
+    reason:entry.reason||'', note:entry.note||'',
+    created_at:new Date().toISOString(), updated_at:new Date().toISOString()
+  };
+  await sbReq('idle_logs','POST',[row],'').catch(()=>{});
+}
+
+/* ── Pull 함수 6개 ─────────────────────────────────────── */
+async function _pullSitesFromSB(){
+  const rows = await sbReq('sites','GET',null,'?order=name').catch(()=>null);
+  if(!Array.isArray(rows)||!rows.length) return;
+  const local = rows.map(r=>({
+    id:r.id, name:r.name, active:r.active!==false,
+    projects:(()=>{ try{ return JSON.parse(r.projects||'[]'); }catch{ return []; } })()
+  }));
+  _cache.sites = null; DB.s(K.SITES, local);
+}
+
+async function _pullCosFromSB(){
+  const rows = await sbReq('companies','GET',null,'?order=site_id,name').catch(()=>null);
+  if(!Array.isArray(rows)||!rows.length) return;
+  const obj = {};
+  for(const r of rows){
+    if(!obj[r.site_id]) obj[r.site_id]=[];
+    obj[r.site_id].push({name:r.name, color:r.color||'#3b8bff', equip:r.equip||0});
+  }
+  _cache.cos = null; DB.s(K.COS, obj);
+}
+
+async function _pullNoticesFromSB(){
+  const rows = await sbReq('notices','GET',null,'?order=created_at.desc').catch(()=>null);
+  if(!Array.isArray(rows)) return;
+  DB.s(K.NOTICE, rows.map(r=>({
+    id:r.id, siteId:r.site_id, text:r.text,
+    createdBy:r.created_by, createdAt:r.created_at, active:r.active!==false
+  })));
+}
+
+async function _pullSettingsFromSB(){
+  const siteId = S?.siteId||'global';
+  const rows = await sbReq('app_settings','GET',null,`?site_id=eq.${encodeURIComponent(siteId)}`).catch(()=>null);
+  if(!Array.isArray(rows)||!rows.length) return;
+  const r = rows[0];
+  const s = DB.g(K.SETTINGS,{}); s.alertTime = r.alert_time||'15:00';
+  DB.s(K.SETTINGS, s);
+  try{ DB.s('custom_alerts', JSON.parse(r.custom_alerts||'[]')); }catch{}
+}
+
+async function _pullInviteCodesFromSB(){
+  const rows = await sbReq('invite_codes','GET',null,'').catch(()=>null);
+  if(!Array.isArray(rows)||!rows.length) return;
+  for(const r of rows) DB.s(K.INVITE_SITE + r.site_id, r.code);
+}
+
+async function _pullIdleLogsFromSB(){
+  const since = new Date(Date.now()-90*24*60*60*1000).toISOString();
+  const rows = await sbReq('idle_logs','GET',null,
+    `?created_at=gte.${encodeURIComponent(since)}&order=created_at.desc&limit=500`
+  ).catch(()=>null);
+  if(!Array.isArray(rows)||!rows.length) return;
+  DB.s(K.IDLE, rows.map(r=>({
+    id:r.id, type:'idle', siteId:r.site_id, date:r.date,
+    company:r.company, equip:r.equip, name:r.recorder,
+    reason:r.reason, note:r.note||'', status:'idle', synced:true
+  })));
+}
+
+/* ── 통합 Config Pull ──────────────────────────────────── */
+async function _pullConfigFromSB(){
+  await Promise.allSettled([
+    _pullSitesFromSB(),
+    _pullCosFromSB(),
+    _pullNoticesFromSB(),
+    _pullSettingsFromSB(),
+    _pullInviteCodesFromSB(),
+    _pullIdleLogsFromSB(),
+  ]);
 }
 
 async function _pullRecentFromSupabase(){
@@ -4708,7 +4853,7 @@ async function submitIdle(){
     equip:eq, name:S.name, reason, note, status:'idle', ts:Date.now(), synced:false,
   }));
   try {
-    for(const e of entries){ await saveLog(e); await pushToGS(e); }
+    for(const e of entries){ await saveLog(e); await pushToGS(e); _pushIdleLogToSB(e).catch(()=>{}); }
     toast(`미가동 등록 완료 (${equipList.length}건)`,'ok');
     document.getElementById('f-idle-equip').value='';
     document.getElementById('f-idle-note').value='';
@@ -4734,6 +4879,7 @@ function autoRotateInvite(){
   for(const s of sites){
     const code = genCode();
     DB.s(K.INVITE_SITE + s.id, code);
+    _pushInviteCodeToSB(s.id, code).catch(()=>{});
   }
   // 전체 기본 코드도 갱신
   DB.s(K.INVITE, genCode());
@@ -4768,6 +4914,7 @@ function saveInviteCodeSite(siteId, codeOverride){
   const code = (codeOverride !== undefined ? codeOverride : inp?.value || '').trim();
   if(!code || code.length < 6){ toast('6자 이상 입력하세요','err'); return; }
   DB.s(K.INVITE_SITE + siteId, code);
+  _pushInviteCodeToSB(siteId, code).catch(()=>{});
   // 양쪽 표시 엘리먼트 업데이트
   const dispEl = document.getElementById('invite-code-'+siteId) || document.getElementById('acct-invite-'+siteId);
   if(dispEl) dispEl.textContent = code;
@@ -7415,7 +7562,7 @@ async function runAI(){
    NOTICE BOARD
 ═══════════════════════════════════════════ */
 function getNotices(){ return DB.g(K.NOTICE,[]); }
-function saveNotices(arr){ DB.s(K.NOTICE,arr); }
+function saveNotices(arr){ DB.s(K.NOTICE,arr); _pushNoticesToSB(arr).catch(()=>{}); }
 
 function renderNoticeBar(){
   const el = document.getElementById('notice-bar');
@@ -8107,12 +8254,13 @@ function saveAlertSettings(){
   const s=DB.g(K.SETTINGS,{});
   s.alertTime=t||'15:00';
   DB.s(K.SETTINGS,s);
+  _pushSettingsToSB().catch(()=>{});
   toast('✅ 알림 설정 저장됨','ok');
 }
 
 /* ── 추가 알림 관리 ── */
 function _getCustomAlerts(){ return DB.g('custom_alerts',[]); }
-function _saveCustomAlerts(arr){ DB.s('custom_alerts',arr); }
+function _saveCustomAlerts(arr){ DB.s('custom_alerts',arr); _pushSettingsToSB().catch(()=>{}); }
 
 function renderCustomAlertList(){
   const el = document.getElementById('custom-alert-list');
