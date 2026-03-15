@@ -1356,12 +1356,12 @@ textarea.fg-input{height:72px;line-height:1.5;}
   </div>
 </div>
 
-<!-- Google 계정 연동 모달 -->
+<!-- AJ 관리자 Google 가입 신청 모달 -->
 <div id="modal-glink" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9999;align-items:flex-end;justify-content:center">
   <div style="background:var(--bg1);border-radius:20px 20px 0 0;padding:20px 20px 44px;width:100%;max-width:480px">
     <div style="width:36px;height:4px;background:var(--br);border-radius:2px;margin:0 auto 18px"></div>
-    <div style="font-size:16px;font-weight:800;margin-bottom:4px">Google 계정 연동</div>
-    <div style="font-size:12px;color:var(--tx2);margin-bottom:14px;line-height:1.6">처음 Google 로그인 시 기존 AJ 계정과 연동이 필요합니다.<br>이후에는 Google 계정으로 바로 로그인됩니다.</div>
+    <div style="font-size:16px;font-weight:800;margin-bottom:4px">AJ 관리자 가입 신청</div>
+    <div style="font-size:12px;color:var(--tx2);margin-bottom:14px;line-height:1.6">아래 정보를 입력 후 가입 신청하세요.<br>기존 AJ 관리자 승인 후 서비스를 이용할 수 있습니다.</div>
     <!-- Google 계정 표시 -->
     <div style="padding:10px 12px;background:var(--bg2);border-radius:10px;margin-bottom:16px;display:flex;align-items:center;gap:10px">
       <div style="width:34px;height:34px;border-radius:50%;background:rgba(234,67,53,.15);display:flex;align-items:center;justify-content:center;font-weight:900;color:#EA4335;font-size:14px;flex-shrink:0">G</div>
@@ -1375,10 +1375,17 @@ textarea.fg-input{height:72px;line-height:1.5;}
       <input type="text" class="lg-input" id="glEmpNo" placeholder="사번 입력" autocomplete="off" inputmode="numeric">
     </div>
     <div class="lg">
-      <label class="lg-label">비밀번호 <span class="req">*</span></label>
-      <input type="password" class="lg-input" id="glPw" placeholder="비밀번호" onkeydown="if(event.key==='Enter')doGoogleLink()">
+      <label class="lg-label">이름 <span class="req">*</span></label>
+      <input type="text" class="lg-input" id="glName" placeholder="이름 입력">
     </div>
-    <button class="login-btn aj" onclick="doGoogleLink()" style="margin-top:10px">연동하고 로그인</button>
+    <div class="lg">
+      <label class="lg-label">직무 유형 <span class="req">*</span></label>
+      <div style="display:flex;gap:8px;margin-top:4px" id="gl-aj-type-chips">
+        <button type="button" class="chip on" onclick="toggleGlAjType('관리자')" style="flex:1;padding:8px 0;font-size:12px;font-weight:700;border-radius:8px;border:1px solid rgba(222,31,35,.4);background:rgba(222,31,35,.15);color:#f87171;cursor:pointer">관리자</button>
+        <button type="button" class="chip" onclick="toggleGlAjType('정비기사')" style="flex:1;padding:8px 0;font-size:12px;font-weight:700;border-radius:8px;border:1px solid var(--br);background:transparent;color:var(--tx2);cursor:pointer">정비기사</button>
+      </div>
+    </div>
+    <button class="login-btn aj" onclick="doGoogleAjRegister()" style="margin-top:10px">가입 신청</button>
     <button onclick="document.getElementById('modal-glink').style.display='none'" style="width:100%;margin-top:8px;padding:10px;font-size:13px;font-weight:600;background:transparent;border:1px solid var(--br);border-radius:var(--rs);color:var(--tx2);cursor:pointer">취소</button>
   </div>
 </div>
@@ -1867,10 +1874,12 @@ create table if not exists aj_members (
   created_at timestamptz default now()
 );
 alter table aj_members disable row level security;
--- 이미 aj_members 테이블이 있는 경우 google_email 컬럼만 추가
+-- 이미 aj_members 테이블이 있는 경우 컬럼 추가
 alter table aj_members add column if not exists google_email text;
+alter table aj_members add column if not exists status text default 'approved';
 create index if not exists idx_aj_google on aj_members(google_email)
-  where google_email is not null;</pre>
+  where google_email is not null;
+create index if not exists idx_aj_status on aj_members(status);</pre>
           <button onclick="navigator.clipboard?.writeText(document.getElementById('sb-sql-pre').textContent).then(()=>toast('SQL 복사됨','ok'))"
             style="position:absolute;top:6px;right:6px;padding:3px 8px;font-size:9px;background:rgba(34,197,94,.2);border:1px solid rgba(34,197,94,.3);border-radius:4px;color:#4ade80;cursor:pointer">복사</button>
         </div>
@@ -3604,6 +3613,15 @@ async function _doGoogleAjLogin(email, googleName){
     } catch {}
   }
   if(member){
+    const _st = member.status||'approved';
+    if(_st==='pending'){
+      toast('가입 승인 대기 중입니다. AJ 관리자에게 문의하세요.','warn',4000);
+      return;
+    }
+    if(_st==='rejected'){
+      toast('가입이 거절되었습니다. AJ 관리자에게 문의하세요.','err',4000);
+      return;
+    }
     // 로그인 성공
     DB.s(K.AJ_MEMBER, member);
     S={ role:'aj', name:member.name, phone:member.phone||'',
@@ -3614,58 +3632,60 @@ async function _doGoogleAjLogin(email, googleName){
     toast(`${member.name}님 환영합니다!`,'ok');
     enterApp();
   } else {
-    // 연동 필요 → 연동 모달 표시
+    // 미등록 → 가입 신청 모달
     _showGoogleLinkModal(email, googleName);
   }
 }
 
-/* Google 연동 모달 열기 */
+/* Google 가입 신청 모달 열기 */
 function _showGoogleLinkModal(email, googleName){
   window._glEmail = email;
   document.getElementById('gl-email').textContent = email;
   document.getElementById('gl-gname').textContent = googleName || email.split('@')[0];
   document.getElementById('glEmpNo').value = '';
-  document.getElementById('glPw').value = '';
+  document.getElementById('glName').value = googleName || '';
+  toggleGlAjType('관리자'); // chip 초기화
   document.getElementById('modal-glink').style.display = 'flex';
 }
 
-/* Google 계정 연동 실행 */
-async function doGoogleLink(){
-  const empNo = document.getElementById('glEmpNo').value.trim();
-  const pw    = document.getElementById('glPw').value;
-  if(!empNo||!pw){ toast('사번과 비밀번호를 입력하세요','err'); return; }
-  const pwHash = await sha256(pw);
+/* 직무 유형 chip 토글 */
+function toggleGlAjType(type){
+  document.querySelectorAll('#gl-aj-type-chips .chip').forEach(c=>{
+    const on = c.textContent===type;
+    c.classList.toggle('on',on);
+    c.style.background=on?'rgba(222,31,35,.15)':'transparent';
+    c.style.color=on?'#f87171':'var(--tx2)';
+    c.style.borderColor=on?'rgba(222,31,35,.4)':'var(--br)';
+  });
+}
+
+/* Google AJ 관리자 가입 신청 */
+async function doGoogleAjRegister(){
+  const empNo  = document.getElementById('glEmpNo').value.trim();
+  const name   = document.getElementById('glName').value.trim();
+  const ajTypeChip = document.querySelector('#gl-aj-type-chips .chip.on');
+  const ajType = ajTypeChip?.textContent||'관리자';
+  if(!empNo||!name){ toast('사번과 이름을 입력하세요','err'); return; }
   const localList = _getAjMembers();
-  let member = localList.find(m=>m.emp_no===empNo);
-  if(!member){
-    try {
-      const rows = await sbReq('aj_members','GET',null,`?emp_no=eq.${encodeURIComponent(empNo)}&limit=1`);
-      if(rows?.length){ member=rows[0]; localList.push(member); _saveAjMembers(localList); }
-    } catch {}
-  }
-  if(!member){ toast('등록되지 않은 사번입니다','err'); return; }
-  if(member.pw_hash!==pwHash){
-    const el=document.getElementById('glPw');
-    el.classList.add('shake'); setTimeout(()=>el.classList.remove('shake'),500);
-    toast('비밀번호가 틀렸습니다','err'); el.value=''; return;
-  }
-  // google_email 저장
-  member.google_email = window._glEmail;
-  const idx = localList.findIndex(m=>m.emp_no===empNo);
-  if(idx>=0) localList[idx]=member; else localList.push(member);
+  if(localList.some(m=>m.emp_no===empNo)){ toast('이미 등록된 사번입니다','err'); return; }
+  // Supabase 중복 체크
+  try{
+    const rows = await sbReq('aj_members','GET',null,`?emp_no=eq.${encodeURIComponent(empNo)}&limit=1`).catch(()=>null);
+    if(rows?.length){ toast('이미 등록된 사번입니다','err'); return; }
+  } catch{}
+  const member = {
+    emp_no:empNo, name, phone:'',
+    pw_hash:'GOOGLE_AUTH',
+    aj_type:ajType,
+    google_email:window._glEmail,
+    status:'pending',
+    created_at:new Date().toISOString()
+  };
+  localList.push(member);
   _saveAjMembers(localList);
-  DB.s(K.AJ_MEMBER, member);
-  // Supabase 업데이트 (백그라운드)
-  _patchAjMemberSb(empNo,{ google_email: window._glEmail });
-  // 로그인
-  S={ role:'aj', name:member.name, phone:member.phone||'',
-      ajType:member.aj_type||'관리자', company:'AJ네트웍스',
-      siteId:'all', siteName:'전체 현장', loginAt:Date.now(), empNo:member.emp_no };
-  DB.s(K.SESSION, S);
-  DB.s('auto_login', true);
+  _syncAjMemberSb(member);
   document.getElementById('modal-glink').style.display='none';
-  toast('Google 계정 연동 완료! 다음부터 Google로 바로 로그인됩니다.','ok',3500);
-  enterApp();
+  toast('가입 신청 완료! 기존 AJ 관리자 승인 후 로그인 가능합니다.','ok',4000);
 }
 
 /* ── AJ 관리자 계정 관리 UI ── */
@@ -3815,22 +3835,64 @@ function switchAcctTab(tab){
 }
 function renderAcctAjList(){
   const el=document.getElementById('acct-aj-list'); if(!el) return;
-  const members=_getAjMembers();
+  // 대기 중 먼저 정렬
+  const members=[..._getAjMembers()].sort((a,b)=>{
+    const sa=(a.status||'approved')==='pending'?0:1;
+    const sb=(b.status||'approved')==='pending'?0:1;
+    return sa-sb;
+  });
+  // AJ 대기 중 배지 업데이트
+  const ajPendingCnt=members.filter(m=>(m.status||'approved')==='pending').length;
+  const ajCntEl=document.getElementById('aj-pending-cnt');
+  if(ajCntEl){ ajCntEl.textContent=ajPendingCnt; ajCntEl.style.display=ajPendingCnt>0?'inline':'none'; }
   if(!members.length){ el.innerHTML='<div style="text-align:center;color:var(--tx3);padding:20px;font-size:12px">등록된 계정이 없습니다</div>'; return; }
-  el.innerHTML=members.map((m,i)=>`
-    <div style="background:var(--bg2);border:1px solid var(--br);border-radius:10px;padding:9px 12px;margin-bottom:7px">
+  const statusLabel={pending:'대기중',approved:'',rejected:'거절됨'};
+  el.innerHTML=members.map((m,i)=>{
+    const st=m.status||'approved';
+    const isPending=st==='pending';
+    const isRejected=st==='rejected';
+    const isGoogleOnly=m.pw_hash==='GOOGLE_AUTH';
+    return `
+    <div style="background:var(--bg2);border:1px solid ${isPending?'rgba(245,158,11,.4)':isRejected?'rgba(239,68,68,.3)':'var(--br)'};border-radius:10px;padding:9px 12px;margin-bottom:7px">
       <div style="display:flex;align-items:center;gap:6px">
         <span style="font-size:10px;font-weight:800;padding:2px 6px;border-radius:5px;background:${m.aj_type==='관리자'?'rgba(222,31,35,.15)':'rgba(59,130,246,.15)'};color:${m.aj_type==='관리자'?'#f87171':'#60a5fa'};flex-shrink:0">${m.aj_type||'관리자'}</span>
         <span style="font-weight:800;font-size:12px">${m.name}${m.emp_no==='admin'?' <span style="font-size:9px;background:rgba(245,158,11,.2);color:#fbbf24;padding:1px 5px;border-radius:3px">ADMIN</span>':''}</span>
+        ${isPending?`<span class="mbr-badge pending">대기중</span>`:isRejected?`<span class="mbr-badge rejected">거절됨</span>`:''}
+        ${isGoogleOnly?'<span style="font-size:9px;background:rgba(234,67,53,.15);color:#EA4335;padding:1px 5px;border-radius:3px;font-weight:700">Google</span>':''}
         <div style="display:flex;gap:3px;margin-left:auto;flex-shrink:0">
-          <button class="btn-ghost" style="font-size:9px;padding:2px 6px" onclick="editAcctAjMember(${i})">수정</button>
-          <button class="btn-ghost" style="font-size:9px;padding:2px 6px;color:#fb923c;border-color:rgba(251,146,60,.3)" onclick="resetAcctAjPw(${i})">PW초기화</button>
-          ${m.emp_no==='admin'?'':`<button class="btn-ghost" style="font-size:9px;padding:2px 6px;color:#f87171;border-color:rgba(248,113,113,.3)" onclick="deleteAcctAjMember(${i})">삭제</button>`}
+          ${isPending
+            ?`<button class="btn-ghost" style="font-size:9px;padding:2px 7px;color:#4ade80;border-color:rgba(74,222,128,.4)" onclick="approveAjMember('${m.emp_no}')">승인</button>
+               <button class="btn-ghost" style="font-size:9px;padding:2px 7px;color:#f87171;border-color:rgba(248,113,113,.3)" onclick="rejectAjMember('${m.emp_no}')">거절</button>`
+            :`<button class="btn-ghost" style="font-size:9px;padding:2px 6px" onclick="editAcctAjMember(${i})">수정</button>
+               ${!isGoogleOnly?`<button class="btn-ghost" style="font-size:9px;padding:2px 6px;color:#fb923c;border-color:rgba(251,146,60,.3)" onclick="resetAcctAjPw(${i})">PW초기화</button>`:''}
+               ${m.emp_no==='admin'?'':`<button class="btn-ghost" style="font-size:9px;padding:2px 6px;color:#f87171;border-color:rgba(248,113,113,.3)" onclick="deleteAcctAjMember(${i})">삭제</button>`}`
+          }
         </div>
       </div>
-      <div style="font-size:10px;color:var(--tx3);margin-top:3px;padding-left:2px">사번: <b style="color:var(--tx);font-family:monospace">${m.emp_no}</b>${m.phone?` · <span style="color:var(--tx2)">${m.phone}</span>`:''}</div>
-    </div>`).join('');
+      <div style="font-size:10px;color:var(--tx3);margin-top:3px;padding-left:2px">사번: <b style="color:var(--tx);font-family:monospace">${m.emp_no}</b>${m.phone?` · <span style="color:var(--tx2)">${m.phone}</span>`:''}${m.google_email?` · <span style="color:#EA4335">${m.google_email}</span>`:''}</div>
+    </div>`;
+  }).join('');
 }
+/* AJ 관리자 가입 승인 / 거절 */
+function approveAjMember(empNo){
+  const members=_getAjMembers();
+  const idx=members.findIndex(m=>m.emp_no===empNo); if(idx<0) return;
+  members[idx].status='approved';
+  _saveAjMembers(members);
+  _patchAjMemberSb(empNo,{status:'approved'});
+  toast(`[${members[idx].name}] 가입 승인되었습니다`,'ok');
+  renderAcctAjList();
+}
+function rejectAjMember(empNo){
+  const members=_getAjMembers();
+  const idx=members.findIndex(m=>m.emp_no===empNo); if(idx<0) return;
+  members[idx].status='rejected';
+  _saveAjMembers(members);
+  _patchAjMemberSb(empNo,{status:'rejected'});
+  toast(`[${members[idx].name}] 가입이 거절되었습니다`,'warn');
+  renderAcctAjList();
+}
+
 let _subFilter='all'; // 'all' | 'pending' | 'approved'
 function setSubFilter(f){
   _subFilter=f;
@@ -4256,7 +4318,10 @@ async function doLogin(role){
     const localList = _getAjMembers();
     const local = localList.find(m=>m.emp_no===empNo);
     if(local){
+      if(local.pw_hash==='GOOGLE_AUTH'){ toast('Google 계정으로만 로그인 가능합니다. Google 버튼을 이용하세요.','warn',4000); return; }
       if(local.pw_hash!==pwHash){ toast('비밀번호가 틀렸습니다','err'); shake(); return; }
+      if((local.status||'approved')==='pending'){ toast('가입 승인 대기 중입니다. AJ 관리자에게 문의하세요.','warn',4000); return; }
+      if((local.status||'approved')==='rejected'){ toast('가입이 거절되었습니다.','err'); return; }
       member = local;
     } else {
       // 2) Supabase 시도 (로컬에 없을 때만)
@@ -4264,7 +4329,10 @@ async function doLogin(role){
         const rows = await sbReq('aj_members','GET',null,`?emp_no=eq.${encodeURIComponent(empNo)}`);
         if(!rows||!rows.length){ toast('등록되지 않은 사번입니다. 먼저 회원가입하세요','err'); shake(); return; }
         const remote = rows[0];
+        if(remote.pw_hash==='GOOGLE_AUTH'){ toast('Google 계정으로만 로그인 가능합니다. Google 버튼을 이용하세요.','warn',4000); return; }
         if(remote.pw_hash!==pwHash){ toast('비밀번호가 틀렸습니다','err'); shake(); return; }
+        if((remote.status||'approved')==='pending'){ toast('가입 승인 대기 중입니다. AJ 관리자에게 문의하세요.','warn',4000); return; }
+        if((remote.status||'approved')==='rejected'){ toast('가입이 거절되었습니다.','err'); return; }
         // Supabase에서 받은 멤버를 로컬에도 저장
         localList.push(remote); _saveAjMembers(localList);
         member = remote;
@@ -8294,9 +8362,9 @@ function renderAdmin(){
         <div class="mrow-arr">›</div>
       </div>
       ${isAJ?`
-      <div class="mrow" onclick="openAcctMgr('sub')" style="${(()=>{const cnt=getMembers().filter(m=>(m.role==='sub'||(!m.role&&m.title!=='기술인'))&&(m.status||'approved')==='pending').length;return cnt?'border-color:rgba(245,158,11,.4)':'';})()}">
+      <div class="mrow" onclick="openAcctMgr('aj')" style="${(()=>{const subCnt=getMembers().filter(m=>(m.role==='sub'||(!m.role&&m.title!=='기술인'))&&(m.status||'approved')==='pending').length;const ajCnt=_getAjMembers().filter(m=>(m.status||'approved')==='pending').length;return (subCnt+ajCnt)?'border-color:rgba(245,158,11,.4)':'';})()}">
         <div class="mrow-ico" style="background:rgba(222,31,35,.12);color:rgb(222,31,35)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></div>
-        <div class="mrow-inf"><div class="mrow-title">관리자 계정 관리 ${(()=>{const cnt=getMembers().filter(m=>(m.role==='sub'||(!m.role&&m.title!=='기술인'))&&(m.status||'approved')==='pending').length;return cnt?`<span class="mbr-badge pending">승인대기 ${cnt}</span>`:'';})()} </div><div class="mrow-desc">AJ·협력사 관리자 계정 및 가입 승인 관리</div></div>
+        <div class="mrow-inf"><div class="mrow-title">관리자 계정 관리 ${(()=>{const subCnt=getMembers().filter(m=>(m.role==='sub'||(!m.role&&m.title!=='기술인'))&&(m.status||'approved')==='pending').length;const ajCnt=_getAjMembers().filter(m=>(m.status||'approved')==='pending').length;const cnt=subCnt+ajCnt;return cnt?`<span class="mbr-badge pending">승인대기 ${cnt}</span>`:'';})()} </div><div class="mrow-desc">AJ·협력사 관리자 계정 및 가입 승인 관리</div></div>
         <div class="mrow-arr">›</div>
       </div>
       <div class="mrow" onclick="openEquipMasterSheet()">
@@ -9270,7 +9338,7 @@ ensureAdminAccount().then(()=>initLogin());
     </div>
     <!-- 탭 -->
     <div style="display:flex;gap:0;margin:12px 14px 0;border-bottom:1px solid var(--br)">
-      <button id="acct-tab-aj" onclick="switchAcctTab('aj')" style="flex:1;padding:8px 4px;font-size:12px;font-weight:700;background:none;border:none;border-bottom:2px solid var(--red);color:var(--red);cursor:pointer">AJ관리자</button>
+      <button id="acct-tab-aj" onclick="switchAcctTab('aj')" style="flex:1;padding:8px 4px;font-size:12px;font-weight:700;background:none;border:none;border-bottom:2px solid var(--red);color:var(--red);cursor:pointer">AJ관리자 <span id="aj-pending-cnt" style="display:none;background:#fbbf24;color:#000;border-radius:8px;padding:0 5px;font-size:9px;font-weight:900;margin-left:1px"></span></button>
       <button id="acct-tab-sub" onclick="switchAcctTab('sub')" style="flex:1;padding:8px 4px;font-size:12px;font-weight:500;background:none;border:none;border-bottom:2px solid transparent;color:var(--tx2);cursor:pointer">협력사관리자</button>
       <button id="acct-tab-invite" onclick="switchAcctTab('invite')" style="flex:1;padding:8px 4px;font-size:12px;font-weight:500;background:none;border:none;border-bottom:2px solid transparent;color:var(--tx2);cursor:pointer">초대코드</button>
     </div>
