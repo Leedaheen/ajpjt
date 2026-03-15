@@ -4092,6 +4092,14 @@ function initInputForm(){
   _setRO('f-date',     !isAJ2);
   _setRO('f-starttime',!isAJ2);
   _setRO('f-endtime',  !isAJ2);
+  // 프로젝트 칩 채우기
+  const _opsProjects = getSites().find(s=>s.id===S?.siteId)?.projects||[];
+  const _opsProjEl = document.getElementById('ops-project-chips');
+  const _opsProjRow = document.getElementById('fg-ops-project');
+  if(_opsProjEl && _opsProjRow){
+    _opsProjRow.style.display = _opsProjects.length ? '' : 'none';
+    _opsProjEl.innerHTML = _opsProjects.map(p=>`<div class="chip" onclick="selectOne(this,'ops-project-chips')">${p}</div>`).join('');
+  }
   setInputMode('start');
   updatePendingBanner();
 }
@@ -4138,13 +4146,16 @@ async function submitStart(){
   const date=document.getElementById('f-date').value;
   const equip=document.getElementById('f-equip').value.toUpperCase().trim();
   const floors=[...document.querySelectorAll('#floor-chips .chip.on')].map(c=>c.textContent).join(', ');
+  const project = document.querySelector('#ops-project-chips .chip.on')?.textContent || '';
+  const opsProjects = getSites().find(s=>s.id===S?.siteId)?.projects||[];
   if(!equip){ toast('장비번호를 입력하세요','err'); return; }
+  if(opsProjects.length && !project){ toast('프로젝트를 선택하세요','err'); return; }
   const btn=document.getElementById('btn-start');
   btn.classList.add('loading'); btn.disabled=true;
   const entry={
     id:`${S.siteId}-${date}-${S.company}-${equip}-${Date.now().toString(36)}`,
     siteId:S.siteId, date, company:S.company,
-    floor:floors, equip, name:S.name,
+    floor:floors, equip, name:S.name, project,
     meterStart:+document.getElementById('f-meter-start').value||null,
     meterEnd:null, duration:null,
     startTime:document.getElementById('f-starttime').value,
@@ -4161,6 +4172,7 @@ async function submitStart(){
     document.getElementById('f-meter-start').value='';
     document.getElementById('f-starttime').value=nowHM();
     document.querySelectorAll('#floor-chips .chip.on').forEach(c=>c.classList.remove('on'));
+    document.querySelectorAll('#ops-project-chips .chip.on').forEach(c=>c.classList.remove('on'));
   } catch(e) {
     toast('저장 중 오류가 발생했습니다','err');
   } finally {
@@ -4403,6 +4415,10 @@ function _getInputFormHTML(){
       <div class="fg" style="margin:0"><label class="fg-lbl">날짜 <span class="req">*</span></label><input type="date" class="fg-input" id="f-date"></div>
       <div class="fg" style="margin:0"><label class="fg-lbl">현장</label><div class="fg-display" id="f-site-disp">—</div></div>
       <div class="fg" style="margin:0"><label class="fg-lbl">소속 업체</label><div class="fg-display" id="f-co-disp">—</div></div>
+    </div>
+    <div class="fg" id="fg-ops-project" style="display:none">
+      <label class="fg-lbl">프로젝트 <span class="req">*</span></label>
+      <div class="chips" id="ops-project-chips"></div>
     </div>
     <div class="fg" id="fg-floor">
       <label class="fg-lbl">작업 층수 <span class="req">*</span></label>
@@ -5265,8 +5281,12 @@ function _trCard(r, _unused, canEdit, canMsg){
   const specSummary = specs.length
     ? specs.map(s=>`<span style="font-size:11px;font-weight:700">${s.spec} × ${s.qty}</span>`).join('<br>')
     : (r.equip||'—');
-  const allEquipNos = specs.flatMap(s=>s.equipNos||[]);
-  if(r.ajEquip) allEquipNos.unshift(r.ajEquip);
+  const specEquipSet = new Set(specs.flatMap(s=>s.equipNos||[]));
+  const allEquipNos = [...specEquipSet];
+  if(r.ajEquip){
+    const ajNos = r.ajEquip.split(/[,，\s]+/).map(s=>s.trim()).filter(Boolean);
+    ajNos.filter(n=>!specEquipSet.has(n)).forEach(n=>allEquipNos.unshift(n));
+  }
   const equipShort = allEquipNos.length===0 ? '—'
     : allEquipNos.length<=2 ? allEquipNos.join(', ')
     : allEquipNos.slice(0,2).join(', ')+' ...';
@@ -5280,11 +5300,13 @@ function _trCard(r, _unused, canEdit, canMsg){
         <span style="font-weight:800;font-size:12px;flex-shrink:0">${r.company||'—'}</span>
         <div style="flex-shrink:0;line-height:1.4">${specSummary}</div>
         <span style="font-family:monospace;font-size:11px;color:#60a5fa;flex-shrink:0">${equipShort}</span>
-        ${totalQty>0?`<span style="font-size:10px;color:var(--tx3);flex-shrink:0">총 ${totalQty}대</span>`:''}
       </div>
-      <div style="text-align:right;flex-shrink:0">
-        <div style="font-size:13px;font-weight:900;color:${!st.done&&diff<=1?st.color:'var(--tx)'}">${r.date}</div>
-        <div style="font-size:10px;font-weight:800;color:${st.color}">${st.label}${dDayStr}</div>
+      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+        ${totalQty>0?`<span style="font-size:10px;font-weight:700;color:var(--tx3);flex-shrink:0">총 ${totalQty}대</span>`:''}
+        <div style="text-align:right">
+          <div style="font-size:13px;font-weight:900;color:${!st.done&&diff<=1?st.color:'var(--tx)'}">${r.date}</div>
+          <div style="font-size:10px;font-weight:800;color:${st.color}">${st.label}${dDayStr}</div>
+        </div>
       </div>
       <span id="tr-arrow-${r.id}" style="font-size:12px;color:var(--tx3);transition:transform .2s;flex-shrink:0;align-self:center${isExpanded?';transform:rotate(180deg)':''}">▼</span>
     </div>
@@ -6313,6 +6335,12 @@ function submitTransit(){
     ? (document.getElementById('tr-site-sel')?.value || getSites()[0]?.id || '')
     : S.siteId;
   const project = document.querySelector('#tr-project-chips .chip.on')?.textContent || '';
+  const trSiteProjects = getSites().find(s=>s.id===siteId)?.projects||[];
+  if(typeVal === 'in' && trSiteProjects.length && !project){
+    toast('프로젝트를 선택하세요','err');
+    document.getElementById('tr-project-row')?.scrollIntoView({behavior:'smooth',block:'center'});
+    return;
+  }
   const rec = {
     id: 'tr-' + Date.now().toString(36),
     type: typeVal,
@@ -6408,6 +6436,7 @@ async function submitAS(){
     return;
   }
   if(!equip){ toast('장비번호를 입력하세요','err'); return; }
+  if(!location){ toast('장비 위치를 입력하세요','err'); document.getElementById('as-location')?.focus(); return; }
   if(!desc){ toast('접수 내용을 입력하세요','err'); return; }
   const req = {
     id: `as-${Date.now().toString(36)}`,
@@ -7019,32 +7048,42 @@ function renderAdmin(){
       <div><div class="ap-name">${S.name}</div><div class="ap-role ${role}">${role==='aj'?'AJ 관리자 · 전체 현장':'협력사 관리자 · '+S.company+' · '+S.siteName}</div></div>
     </div>
 
-    ${(isSub||isAJ)?`<div style="background:var(--bg2);border:1px solid var(--br);border-radius:12px;padding:14px;margin-bottom:14px">
-      <div style="font-size:13px;font-weight:800;margin-bottom:12px">📢 공지사항 관리</div>
-      ${isAJ?`
-      <div class="fg" style="margin-bottom:8px">
-        <label class="fg-lbl">대상 현장</label>
-        <select class="fg-input" id="notice-site-sel" style="width:100%">
-          ${getSites().map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}
-        </select>
-      </div>`:''}
-      <div class="fg" style="margin-bottom:8px">
-        <label class="fg-lbl">공지 내용</label>
-        <textarea class="fg-input" id="notice-text" rows="3" placeholder="공지할 내용을 입력하세요..." style="resize:none"></textarea>
-      </div>
-      <button class="btn-full teal" onclick="saveNotice(${isAJ?`document.getElementById('notice-site-sel')?.value||'${S.siteId}'`:`'${S.siteId}'`}, document.getElementById('notice-text').value)" style="margin-bottom:10px">공지 등록</button>
-      <div style="max-height:180px;overflow-y:auto">
-        ${getNotices().filter(n=>isAJ||(n.siteId===S.siteId)).map(n=>`
-        <div style="display:flex;align-items:flex-start;gap:6px;padding:8px;background:var(--bg3);border-radius:8px;margin-bottom:5px">
-          <div style="flex:1">
-            <div style="font-size:11px;color:var(--tx2);margin-bottom:2px">${getSites().find(s=>s.id===n.siteId)?.name||n.siteId} · ${n.createdBy}</div>
-            <div style="font-size:12px">${n.text}</div>
+    ${(isSub||isAJ)?(()=>{
+      const noticeList=getNotices().filter(n=>isAJ||(n.siteId===S.siteId));
+      const noticeCnt=noticeList.filter(n=>n.active).length;
+      return `<div style="background:var(--bg2);border:1px solid var(--br);border-radius:12px;margin-bottom:14px;overflow:hidden">
+        <div onclick="(()=>{const b=document.getElementById('notice-acc-body');const a=document.getElementById('notice-acc-arrow');if(b){const o=b.style.display!=='none';b.style.display=o?'none':'block';a.style.transform=o?'':'rotate(180deg)';}})()" style="display:flex;align-items:center;gap:8px;padding:12px 14px;cursor:pointer">
+          <span style="font-size:13px;font-weight:800;flex:1">📢 공지사항 관리</span>
+          ${noticeCnt>0?`<span style="font-size:10px;background:rgba(34,197,94,.15);color:#22c55e;padding:2px 8px;border-radius:6px;font-weight:700">활성 ${noticeCnt}건</span>`:''}
+          <span id="notice-acc-arrow" style="font-size:12px;color:var(--tx3);transition:transform .2s">▼</span>
+        </div>
+        <div id="notice-acc-body" style="display:none;padding:0 14px 14px;border-top:1px solid var(--br)">
+          ${isAJ?`
+          <div class="fg" style="margin-top:10px;margin-bottom:8px">
+            <label class="fg-lbl">대상 현장</label>
+            <select class="fg-input" id="notice-site-sel" style="width:100%">
+              ${getSites().map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}
+            </select>
+          </div>`:'<div style="height:10px"></div>'}
+          <div class="fg" style="margin-bottom:8px">
+            <label class="fg-lbl">공지 내용</label>
+            <textarea class="fg-input" id="notice-text" rows="2" placeholder="공지할 내용을 입력하세요..." style="resize:none"></textarea>
           </div>
-          <button onclick="toggleNotice('${n.id}')" style="font-size:10px;padding:2px 7px;border-radius:5px;border:1px solid var(--br);background:${n.active?'rgba(34,197,94,.15)':'var(--bg2)'};color:${n.active?'#22c55e':'var(--tx3)'};cursor:pointer;flex-shrink:0">${n.active?'ON':'OFF'}</button>
-          <button onclick="deleteNotice('${n.id}')" style="font-size:12px;background:none;border:none;color:var(--red);cursor:pointer;flex-shrink:0;padding:0 4px">×</button>
-        </div>`).join('')||'<div style="font-size:11px;color:var(--tx3);text-align:center;padding:10px">등록된 공지가 없습니다</div>'}
-      </div>
-    </div>`:''}
+          <button class="btn-full teal" onclick="saveNotice(${isAJ?`document.getElementById('notice-site-sel')?.value||'${S.siteId}'`:`'${S.siteId}'`}, document.getElementById('notice-text').value)" style="margin-bottom:10px">공지 등록</button>
+          <div style="max-height:200px;overflow-y:auto">
+            ${noticeList.map(n=>`
+            <div style="display:flex;align-items:flex-start;gap:6px;padding:8px;background:var(--bg3);border-radius:8px;margin-bottom:5px">
+              <div style="flex:1">
+                <div style="font-size:11px;color:var(--tx2);margin-bottom:2px">${getSites().find(s=>s.id===n.siteId)?.name||n.siteId} · ${n.createdBy}</div>
+                <div style="font-size:12px">${n.text}</div>
+              </div>
+              <button onclick="toggleNotice('${n.id}')" style="font-size:10px;padding:2px 7px;border-radius:5px;border:1px solid var(--br);background:${n.active?'rgba(34,197,94,.15)':'var(--bg2)'};color:${n.active?'#22c55e':'var(--tx3)'};cursor:pointer;flex-shrink:0">${n.active?'ON':'OFF'}</button>
+              <button onclick="deleteNotice('${n.id}')" style="font-size:12px;background:none;border:none;color:var(--red);cursor:pointer;flex-shrink:0;padding:0 4px">×</button>
+            </div>`).join('')||'<div style="font-size:11px;color:var(--tx3);text-align:center;padding:10px">등록된 공지가 없습니다</div>'}
+          </div>
+        </div>
+      </div>`;
+    })():''}
 
     ${isSub?`<div style="background:var(--bg2);border:1px solid var(--br);border-radius:10px;padding:12px;margin-bottom:14px">
       <div style="font-size:11px;font-weight:800;color:var(--tx2);margin-bottom:8px">내 정보 수정</div>
@@ -8210,17 +8249,19 @@ initLogin();
     <!-- 현장 표시 -->
     <div style="font-size:11px;font-weight:700;color:var(--aj);margin-bottom:12px;padding:6px 10px;background:rgba(245,158,11,.1);border-radius:var(--rs)" id="as-site-disp">—</div>
 
-    <div class="fg">
-      <label class="fg-lbl">요청 업체 <span class="req">*</span></label>
-      <input type="text" class="fg-input" id="as-company" placeholder="업체명" autocomplete="off">
-    </div>
-    <div class="fg">
-      <label class="fg-lbl">AJ 장비번호 <span class="req">*</span></label>
-      <input type="text" class="fg-input" id="as-equip" placeholder="장비번호 (쉼표 구분 다중입력: T001, T002)" style="text-transform:uppercase" autocomplete="off">
-    </div>
-    <div class="fg">
-      <label class="fg-lbl">장비 위치</label>
-      <input type="text" class="fg-input" id="as-location" placeholder="예: 1F D-E 41열">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+      <div class="fg" style="margin:0">
+        <label class="fg-lbl">요청 업체 <span class="req">*</span></label>
+        <input type="text" class="fg-input" id="as-company" placeholder="업체명" autocomplete="off">
+      </div>
+      <div class="fg" style="margin:0">
+        <label class="fg-lbl">AJ 장비번호 <span class="req">*</span></label>
+        <input type="text" class="fg-input" id="as-equip" placeholder="T001, T002" style="text-transform:uppercase" autocomplete="off">
+      </div>
+      <div class="fg" style="margin:0">
+        <label class="fg-lbl">장비 위치 <span class="req">*</span></label>
+        <input type="text" class="fg-input" id="as-location" placeholder="예: 1F D-E 41열">
+      </div>
     </div>
     <div class="fg">
       <label class="fg-lbl">접수 내용 <span class="req">*</span></label>
