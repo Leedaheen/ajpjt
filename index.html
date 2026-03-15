@@ -3736,7 +3736,13 @@ async function doLogin(role){
         localList.push(remote); _saveAjMembers(localList);
         member = remote;
       } catch(e){
-        toast('등록되지 않은 사번입니다. 먼저 회원가입하세요','err'); shake(); return;
+        const _em = e?.message||'';
+        const _msg = _em.includes('NO_SB_URL')
+          ? '등록되지 않은 사번입니다. 먼저 회원가입하세요'
+          : _em.includes('Failed to fetch') || _em.includes('NetworkError')
+            ? '서버 연결 실패. 잠시 후 다시 시도하세요'
+            : '등록되지 않은 사번입니다. 먼저 회원가입하세요';
+        toast(_msg,'err'); shake(); return;
       }
     }
     DB.s(K.AJ_MEMBER, member);
@@ -4366,7 +4372,16 @@ async function _pullIdleLogsFromSB(){
 async function _pullAjMembersFromSB(){
   const rows = await sbReq('aj_members','GET',null,'?order=created_at').catch(()=>null);
   if(!Array.isArray(rows)||!rows.length) return;
-  _saveAjMembers(rows);
+  // 서버 데이터 우선, 로컬 전용 항목은 보존 (덮어쓰기 방지)
+  const local = _getAjMembers();
+  const serverEmpNos = new Set(rows.map(r=>r.emp_no));
+  const localOnly = local.filter(m=>!serverEmpNos.has(m.emp_no));
+  // 이전 로그인 캐시(K.AJ_MEMBER)도 복원 (이미 wiped된 경우 복구)
+  const cached = DB.g(K.AJ_MEMBER, null);
+  if(cached?.emp_no && !serverEmpNos.has(cached.emp_no) && !localOnly.some(m=>m.emp_no===cached.emp_no)){
+    localOnly.push(cached);
+  }
+  _saveAjMembers([...rows, ...localOnly]);
 }
 
 /* ── 통합 Config Pull ──────────────────────────────────── */
