@@ -1248,12 +1248,12 @@ textarea.fg-input{height:72px;line-height:1.5;}
       <!-- 로그인 탭 -->
       <div id="aj-pane-login">
         <div class="lg">
-          <label class="lg-label">사번 <span class="req">*</span></label>
-          <input type="text" class="lg-input" id="ajEmpNo" placeholder="사번 입력" autocomplete="off" inputmode="numeric">
+          <label class="lg-label">이름 <span class="req">*</span></label>
+          <input type="text" class="lg-input" id="ajName" placeholder="이름 입력" autocomplete="off">
         </div>
         <div class="lg">
-          <label class="lg-label">비밀번호 <span class="req">*</span></label>
-          <input type="password" class="lg-input" id="ajPw" placeholder="비밀번호" onkeydown="if(event.key==='Enter')doLogin('aj')">
+          <label class="lg-label">연락처 <span class="req">*</span></label>
+          <input type="tel" class="lg-input phone-input" id="ajPhone" placeholder="숫자만 입력" maxlength="11" onkeydown="if(event.key==='Enter')doLogin('aj')">
         </div>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--tx2);padding:6px 0;margin-bottom:4px">
           <input type="checkbox" id="chk-auto-login-aj" checked style="width:16px;height:16px;accent-color:var(--yellow);cursor:pointer;flex-shrink:0">
@@ -3669,14 +3669,88 @@ async function doGoogleAjRegister(){
   const ajTypeChip = document.querySelector('#gl-aj-type-chips .chip.on');
   const ajType = ajTypeChip?.textContent||'관리자';
   if(!name||!phone){ toast('이름과 연락처를 입력하세요','err'); return; }
-  // google_email 기반 중복 체크 (같은 Google 계정으로 중복 신청 방지)
-  const localList = _getAjMembers();
-  if(localList.some(m=>m.google_email===window._glEmail)){ toast('이미 가입 신청된 계정입니다','err'); return; }
+
+  toast('계정 확인 중...','ok',2000);
+
+  // ── Step 1: 이미 이 Google 계정이 연동된 경우 중복 체크 ──
   try{
     const rows = await sbReq('aj_members','GET',null,`?google_email=eq.${encodeURIComponent(window._glEmail)}&limit=1`).catch(()=>null);
-    if(rows?.length){ toast('이미 가입 신청된 계정입니다','err'); return; }
+    if(rows?.length){
+      const _st = rows[0].status||'approved';
+      if(_st==='approved'){
+        // 이미 연동·승인된 계정 → 그냥 로그인
+        const m = rows[0];
+        const ll = _getAjMembers();
+        const idx = ll.findIndex(x=>x.emp_no===m.emp_no);
+        if(idx>=0) ll[idx]=m; else ll.push(m);
+        _saveAjMembers(ll);
+        document.getElementById('modal-glink').style.display='none';
+        DB.s(K.AJ_MEMBER, m);
+        S={ role:'aj', name:m.name, phone:m.phone||'', ajType:m.aj_type||'관리자',
+            company:'AJ네트웍스', siteId:'all', siteName:'전체 현장', loginAt:Date.now(), empNo:m.emp_no };
+        DB.s(K.SESSION, S); DB.s('auto_login', true);
+        toast(`${m.name}님 환영합니다!`,'ok'); enterApp(); return;
+      }
+      toast('이미 가입 신청된 계정입니다. 승인 대기 중입니다.','warn',4000);
+      document.getElementById('modal-glink').style.display='none'; return;
+    }
   } catch{}
-  // 사번 자동 생성 (Google 계정 고유 식별자)
+
+  // ── Step 2: 이름으로 기존 계정 검색 (google_email 미연동 계정) ──
+  await _pullAjMembersFromSB().catch(()=>{});
+  let localList = _getAjMembers();
+
+  // 로컬에서 먼저
+  let existing = localList.find(m => m.name===name && !m.google_email);
+  // 없으면 SB에서 검색 (수동 입력된 계정이 로컬에 없을 수 있음)
+  if(!existing){
+    const sbRows = await sbReq('aj_members','GET',null,
+      `?name=eq.${encodeURIComponent(name)}&limit=5`).catch(()=>null);
+    if(Array.isArray(sbRows)){
+      existing = sbRows.find(r => !r.google_email);
+      if(existing){
+        // 로컬 캐시에도 추가
+        const idx = localList.findIndex(m=>m.emp_no===existing.emp_no);
+        if(idx>=0) localList[idx]=existing; else localList.push(existing);
+        _saveAjMembers(localList);
+      }
+    }
+  }
+
+  if(existing){
+    const _st = existing.status||'approved';
+    if(_st==='rejected'){
+      toast('가입이 거절된 계정입니다. AJ 관리자에게 문의하세요.','err',4000);
+      document.getElementById('modal-glink').style.display='none'; return;
+    }
+    // google_email 연동 (SB + 로컬)
+    const patch = { google_email: window._glEmail };
+    if(phone && !existing.phone) patch.phone = phone;
+    _patchAjMemberSb(existing.emp_no, patch);
+    existing.google_email = window._glEmail;
+    if(patch.phone) existing.phone = phone;
+    const ll = _getAjMembers();
+    const idx2 = ll.findIndex(m=>m.emp_no===existing.emp_no);
+    if(idx2>=0) ll[idx2]=existing; else ll.push(existing);
+    _saveAjMembers(ll);
+
+    document.getElementById('modal-glink').style.display='none';
+
+    if(_st==='approved'){
+      // 즉시 로그인
+      DB.s(K.AJ_MEMBER, existing);
+      S={ role:'aj', name:existing.name, phone:existing.phone||phone, ajType:existing.aj_type||ajType,
+          company:'AJ네트웍스', siteId:'all', siteName:'전체 현장', loginAt:Date.now(), empNo:existing.emp_no };
+      DB.s(K.SESSION, S); DB.s('auto_login', true);
+      toast(`${existing.name}님 환영합니다!`,'ok'); enterApp();
+    } else {
+      // pending → 승인 대기
+      toast('계정이 연동되었습니다. AJ 관리자 승인 후 로그인 가능합니다.','warn',5000);
+    }
+    return;
+  }
+
+  // ── Step 3: 기존 계정 없음 → 신규 pending 계정 생성 ──
   const empNo = 'G' + Date.now().toString(36).toUpperCase();
   const member = {
     emp_no:empNo, name, phone,
@@ -4310,59 +4384,50 @@ async function doLogin(role){
     }
     S={role:'sub',name,title:subTitle||existing?.title||'',phone:subPhone||existing?.phone||'',company:co,siteId:site,siteName:getSites().find(s=>s.id===site)?.name||site,loginAt:Date.now()};
   } else {
-    // AJ 관리자 로그인 — 로컬스토리지 주 저장소, Supabase 폴백
-    const empNo = document.getElementById('ajEmpNo').value.trim();
-    const pw    = document.getElementById('ajPw').value.trim();
+    // AJ 관리자 로그인 — 이름+연락처 기반 조회
+    const ajName  = document.getElementById('ajName').value.trim();
+    const ajPhone = document.getElementById('ajPhone').value.trim();
     const ajRoleChip = document.querySelector('#aj-role-chips .chip.on');
     const ajType = ajRoleChip?.textContent||'관리자';
-    if(!empNo||!pw){ toast('사번과 비밀번호를 입력하세요','err'); return; }
-    const pwHash = await sha256(pw);
-    const shake = ()=>{ const el=document.getElementById('ajPw'); el.classList.add('shake'); setTimeout(()=>el.classList.remove('shake'),500); el.value=''; };
+    if(!ajName||!ajPhone){ toast('이름과 연락처를 입력하세요','err'); return; }
     let member = null;
 
-    // 1) 로그인 전 Supabase에서 최신 멤버 목록 pull (다기기·수동입력 지원)
+    // 1) Supabase에서 최신 목록 pull
     await _pullAjMembersFromSB().catch(()=>{});
 
-    // 2) 로컬 목록에서 확인 (pull 이후)
+    // 2) 로컬에서 이름+연락처로 조회
     let localList = _getAjMembers();
-    const local = localList.find(m=>m.emp_no===empNo);
+    const _find = list => list.find(m=>m.name===ajName && m.phone===ajPhone)
+                       || list.find(m=>m.name===ajName); // 연락처 불일치 시 이름만으로도 허용
+    const local = _find(localList);
     if(local){
-      if(local.pw_hash==='GOOGLE_AUTH'){ toast('Google 계정으로만 로그인 가능합니다. Google 버튼을 이용하세요.','warn',4000); return; }
-      if(local.pw_hash!==pwHash){ toast('비밀번호가 틀렸습니다','err'); shake(); return; }
       if((local.status||'approved')==='pending'){ toast('가입 승인 대기 중입니다. AJ 관리자에게 문의하세요.','warn',4000); return; }
       if((local.status||'approved')==='rejected'){ toast('가입이 거절되었습니다.','err'); return; }
       member = local;
     } else {
-      // 3) 직접 단건 쿼리 (pull이 RLS로 막힌 경우 fallback)
+      // 3) 직접 Supabase 단건 쿼리 (RLS fallback)
       try {
-        const rows = await sbReq('aj_members','GET',null,`?emp_no=eq.${encodeURIComponent(empNo)}`);
+        const rows = await sbReq('aj_members','GET',null,`?name=eq.${encodeURIComponent(ajName)}&limit=5`);
         if(!rows||!rows.length){
-          toast('등록되지 않은 사번입니다. 먼저 회원가입하세요','err'); shake(); return;
+          toast('등록되지 않은 계정입니다. Google로 가입 신청하세요.','err'); return;
         }
-        const remote = rows[0];
-        if(remote.pw_hash==='GOOGLE_AUTH'){ toast('Google 계정으로만 로그인 가능합니다. Google 버튼을 이용하세요.','warn',4000); return; }
-        if(remote.pw_hash!==pwHash){ toast('비밀번호가 틀렸습니다','err'); shake(); return; }
+        const remote = rows.find(r=>r.phone===ajPhone) || rows[0];
         if((remote.status||'approved')==='pending'){ toast('가입 승인 대기 중입니다. AJ 관리자에게 문의하세요.','warn',4000); return; }
         if((remote.status||'approved')==='rejected'){ toast('가입이 거절되었습니다.','err'); return; }
-        // 로컬에도 저장
         localList.push(remote); _saveAjMembers(localList);
         member = remote;
       } catch(e){
         const _em = e?.message||'';
         let _msg;
-        if(_em.includes('NO_SB_URL'))
-          _msg = '서버 연결 정보가 없습니다. 설정에서 Supabase URL/Key를 확인하세요.';
-        else if(_em.includes('Failed to fetch')||_em.includes('NetworkError'))
-          _msg = '서버에 연결할 수 없습니다. 네트워크를 확인하세요.';
-        else if(_em.includes('401')||_em.includes('403'))
-          _msg = '서버 접근 권한 오류입니다. Supabase RLS 설정을 확인하세요.';
-        else
-          _msg = `서버 오류: ${_em.slice(0,80)}`;
-        toast(_msg,'err'); shake(); return;
+        if(_em.includes('NO_SB_URL'))      _msg = '서버 연결 정보가 없습니다. 설정을 확인하세요.';
+        else if(_em.includes('Failed to fetch')||_em.includes('NetworkError')) _msg = '서버에 연결할 수 없습니다.';
+        else if(_em.includes('401')||_em.includes('403')) _msg = '서버 권한 오류. Supabase RLS를 확인하세요.';
+        else _msg = `서버 오류: ${_em.slice(0,80)}`;
+        toast(_msg,'err'); return;
       }
     }
     DB.s(K.AJ_MEMBER, member);
-    S={role:'aj',name:member.name,phone:member.phone||'',ajType:member.aj_type||ajType,company:'AJ네트웍스',siteId:'all',siteName:'전체 현장',loginAt:Date.now(),empNo:member.emp_no};
+    S={role:'aj',name:member.name,phone:member.phone||ajPhone,ajType:member.aj_type||ajType,company:'AJ네트웍스',siteId:'all',siteName:'전체 현장',loginAt:Date.now(),empNo:member.emp_no};
   }
   DB.s(K.SESSION,S);
   // 자동 로그인 설정 저장
