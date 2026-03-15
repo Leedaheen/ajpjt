@@ -1268,10 +1268,6 @@ textarea.fg-input{height:72px;line-height:1.5;}
       <!-- 회원가입 탭 -->
       <div id="aj-pane-register" style="display:none">
         <div class="lg">
-          <label class="lg-label">사번 <span class="req">*</span></label>
-          <input type="text" class="lg-input" id="regEmpNo" placeholder="사번 입력" autocomplete="off" inputmode="numeric">
-        </div>
-        <div class="lg">
           <label class="lg-label">이름 <span class="req">*</span></label>
           <input type="text" class="lg-input" id="regName" placeholder="본인 이름" autocomplete="off">
         </div>
@@ -1291,10 +1287,6 @@ textarea.fg-input{height:72px;line-height:1.5;}
       </div>
       <!-- 비밀번호 변경 탭 -->
       <div id="aj-pane-changepw" style="display:none">
-        <div class="lg">
-          <label class="lg-label">사번 <span class="req">*</span></label>
-          <input type="text" class="lg-input" id="cpEmpNo" placeholder="사번 입력" autocomplete="off" inputmode="numeric">
-        </div>
         <div class="lg">
           <label class="lg-label">이름 <span class="req">*</span></label>
           <input type="text" class="lg-input" id="cpName" placeholder="본인 이름 (본인 확인)" autocomplete="off">
@@ -3812,11 +3804,7 @@ function renderAjMemberList(){
         <span style="font-weight:800;font-size:13px;flex:1">${m.name}</span>
         ${m.emp_no==='admin'?'<span style="font-size:9px;background:rgba(245,158,11,.2);color:#fbbf24;padding:1px 5px;border-radius:4px;font-weight:700">ADMIN</span>':''}
       </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-        <span style="font-size:11px;color:var(--tx3)">사번</span>
-        <span style="font-family:monospace;font-size:12px;font-weight:700">${m.emp_no}</span>
-        ${m.phone?`<span style="font-size:11px;color:var(--tx2);margin-left:4px">${m.phone}</span>`:''}
-      </div>
+      ${m.phone?`<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">${m.phone}</div>`:''}
       <div style="display:flex;gap:6px">
         <button class="btn-ghost" style="flex:1;font-size:10px;padding:4px" onclick="editAjMember(${i})">수정</button>
         <button class="btn-ghost" style="flex:1;font-size:10px;padding:4px;color:#fb923c;border-color:rgba(251,146,60,.3)" onclick="resetAjMemberPw(${i})">PW 초기화</button>
@@ -3826,14 +3814,12 @@ function renderAjMemberList(){
 }
 function showNewAjMemberForm(){
   document.getElementById('aj-mem-idx').value='-1';
-  document.getElementById('aj-mem-empno').value='';
   document.getElementById('aj-mem-name').value='';
   document.getElementById('aj-mem-phone').value='';
   document.getElementById('aj-mem-type').value='관리자';
   document.getElementById('aj-mem-pw').value='';
   document.getElementById('aj-mem-pw').placeholder='비밀번호 (6자 이상)';
   document.getElementById('aj-mem-form-title').textContent='신규 계정 추가';
-  document.getElementById('aj-mem-empno').readOnly=false;
   document.getElementById('aj-member-form').style.display='block';
   document.getElementById('aj-member-list').style.display='none';
   document.getElementById('aj-mem-new-btn').style.display='none';
@@ -3842,31 +3828,28 @@ function editAjMember(idx){
   const m = _getAjMembers()[idx];
   if(!m) return;
   document.getElementById('aj-mem-idx').value=idx;
-  document.getElementById('aj-mem-empno').value=m.emp_no;
   document.getElementById('aj-mem-name').value=m.name;
   document.getElementById('aj-mem-phone').value=m.phone||'';
   document.getElementById('aj-mem-type').value=m.aj_type||'관리자';
   document.getElementById('aj-mem-pw').value='';
   document.getElementById('aj-mem-pw').placeholder='변경 시에만 입력 (6자 이상)';
   document.getElementById('aj-mem-form-title').textContent='계정 수정';
-  document.getElementById('aj-mem-empno').readOnly=true;
   document.getElementById('aj-member-form').style.display='block';
   document.getElementById('aj-member-list').style.display='none';
   document.getElementById('aj-mem-new-btn').style.display='none';
 }
 async function saveAjMember(){
   const idx = +document.getElementById('aj-mem-idx').value;
-  const empNo = document.getElementById('aj-mem-empno').value.trim();
   const name = document.getElementById('aj-mem-name').value.trim();
   const phone = document.getElementById('aj-mem-phone').value.trim();
   const ajType = document.getElementById('aj-mem-type').value;
   const pw = document.getElementById('aj-mem-pw').value;
-  if(!empNo||!name){ toast('사번과 이름은 필수입니다','err'); return; }
+  if(!name){ toast('이름은 필수입니다','err'); return; }
   const members = _getAjMembers();
   const isNew = idx === -1;
-  if(isNew && members.some(m=>m.emp_no===empNo)){ toast('이미 등록된 사번입니다','err'); return; }
   if(isNew && !pw){ toast('신규 계정은 비밀번호를 입력하세요','err'); return; }
   if(pw && pw.length<6){ toast('비밀번호는 6자 이상이어야 합니다','err'); return; }
+  const empNo = isNew ? ('M'+Date.now().toString(36).toUpperCase()) : members[idx].emp_no;
   const member = isNew
     ? {emp_no:empNo, name, phone, pw_hash:await sha256(pw), aj_type:ajType, created_at:new Date().toISOString()}
     : {...members[idx], name, phone, aj_type:ajType};
@@ -3968,7 +3951,7 @@ function renderAcctAjList(){
           }
         </div>
       </div>
-      <div style="font-size:10px;color:var(--tx3);margin-top:3px;padding-left:2px">${isGoogleOnly?'':`사번: <b style="color:var(--tx);font-family:monospace">${m.emp_no}</b> · `}${m.phone?`<span style="color:var(--tx2)">${m.phone}</span>`:'연락처 없음'}${m.google_email?` · <span style="color:#EA4335">${m.google_email}</span>`:''}</div>
+      <div style="font-size:10px;color:var(--tx3);margin-top:3px;padding-left:2px">${m.phone?`<span style="color:var(--tx2)">${m.phone}</span>`:'연락처 없음'}${m.google_email?` · <span style="color:#EA4335">${m.google_email}</span>`:''}</div>
     </div>`;
   }).join('');
 }
@@ -4119,14 +4102,12 @@ function renderAcctInviteCodes(){
 /* ── 통합 관리자 폼 (AJ탭) ── */
 function showNewAjMemberForm2(){
   document.getElementById('acct-aj-idx').value='-1';
-  document.getElementById('acct-aj-empno').value='';
   document.getElementById('acct-aj-name').value='';
   document.getElementById('acct-aj-phone').value='';
   document.getElementById('acct-aj-type').value='관리자';
   document.getElementById('acct-aj-pw').value='';
   document.getElementById('acct-aj-pw').placeholder='비밀번호 (6자 이상)';
   document.getElementById('acct-aj-form-title').textContent='신규 계정 추가';
-  document.getElementById('acct-aj-empno').readOnly=false;
   document.getElementById('acct-aj-form').style.display='block';
   document.getElementById('acct-aj-list').style.display='none';
   document.getElementById('acct-aj-new-btn').style.display='none';
@@ -4134,30 +4115,27 @@ function showNewAjMemberForm2(){
 function editAcctAjMember(idx){
   const m=_getAjMembers()[idx]; if(!m) return;
   document.getElementById('acct-aj-idx').value=idx;
-  document.getElementById('acct-aj-empno').value=m.emp_no;
   document.getElementById('acct-aj-name').value=m.name;
   document.getElementById('acct-aj-phone').value=m.phone||'';
   document.getElementById('acct-aj-type').value=m.aj_type||'관리자';
   document.getElementById('acct-aj-pw').value='';
   document.getElementById('acct-aj-pw').placeholder='변경 시에만 입력';
   document.getElementById('acct-aj-form-title').textContent='계정 수정';
-  document.getElementById('acct-aj-empno').readOnly=true;
   document.getElementById('acct-aj-form').style.display='block';
   document.getElementById('acct-aj-list').style.display='none';
   document.getElementById('acct-aj-new-btn').style.display='none';
 }
 async function saveAcctAjMember(){
   const idx=+document.getElementById('acct-aj-idx').value;
-  const empNo=document.getElementById('acct-aj-empno').value.trim();
   const name=document.getElementById('acct-aj-name').value.trim();
   const phone=document.getElementById('acct-aj-phone').value.trim();
   const ajType=document.getElementById('acct-aj-type').value;
   const pw=document.getElementById('acct-aj-pw').value;
-  if(!empNo||!name){ toast('사번과 이름은 필수입니다','err'); return; }
+  if(!name){ toast('이름은 필수입니다','err'); return; }
   const members=_getAjMembers(); const isNew=idx===-1;
-  if(isNew&&members.some(m=>m.emp_no===empNo)){ toast('이미 등록된 사번입니다','err'); return; }
   if(isNew&&!pw){ toast('신규 계정은 비밀번호를 입력하세요','err'); return; }
   if(pw&&pw.length<6){ toast('비밀번호는 6자 이상이어야 합니다','err'); return; }
+  const empNo=isNew?('M'+Date.now().toString(36).toUpperCase()):members[idx].emp_no;
   const member=isNew?{emp_no:empNo,name,phone,pw_hash:await sha256(pw),aj_type:ajType,created_at:new Date().toISOString()}:{...members[idx],name,phone,aj_type:ajType};
   if(!isNew&&pw) member.pw_hash=await sha256(pw);
   if(isNew) members.unshift(member); else members[idx]=member;
@@ -4273,19 +4251,17 @@ function openASAnalysis(){
 }
 
 async function doAjRegister(){
-  const empNo=document.getElementById('regEmpNo').value.trim();
   const name=document.getElementById('regName').value.trim();
   const phone=document.getElementById('regPhone').value.trim();
   const pw=document.getElementById('regPw').value;
   const pw2=document.getElementById('regPw2').value;
   const ajType=(document.querySelector('#aj-role-chips .chip.on')?.textContent)||'관리자';
-  if(!empNo||!name||!phone||!pw){ toast('필수 항목을 모두 입력하세요','err'); return; }
+  if(!name||!phone||!pw){ toast('필수 항목을 모두 입력하세요','err'); return; }
   if(pw.length<6){ toast('비밀번호는 6자 이상이어야 합니다','err'); return; }
   if(pw!==pw2){ toast('비밀번호가 일치하지 않습니다','err'); return; }
-  // 로컬에서 중복 사번 확인
   const localList=_getAjMembers();
-  if(localList.some(m=>m.emp_no===empNo)){ toast('이미 가입된 사번입니다','err'); return; }
   const pwHash=await sha256(pw);
+  const empNo='M'+Date.now().toString(36).toUpperCase();
   const member={emp_no:empNo,name,phone,pw_hash:pwHash,aj_type:ajType,created_at:new Date().toISOString()};
   // 로컬 저장 (주 저장소)
   localList.push(member); _saveAjMembers(localList);
@@ -4311,29 +4287,27 @@ async function doAjRegister(){
     }
   }
   switchAjTab('login');
-  document.getElementById('ajEmpNo').value=empNo;
-  document.getElementById('ajPw').focus();
+  document.getElementById('ajName').value=name;
+  document.getElementById('ajPhone').focus();
 }
 async function doAjChangePwLogin(){
-  const empNo=document.getElementById('cpEmpNo').value.trim();
   const name=document.getElementById('cpName').value.trim();
   const pw=document.getElementById('cpPw').value;
   const pw2=document.getElementById('cpPw2').value;
-  if(!empNo||!name||!pw){ toast('모든 항목을 입력하세요','err'); return; }
+  if(!name||!pw){ toast('모든 항목을 입력하세요','err'); return; }
   if(pw.length<6){ toast('비밀번호는 6자 이상이어야 합니다','err'); return; }
   if(pw!==pw2){ toast('비밀번호가 일치하지 않습니다','err'); return; }
   const localList=_getAjMembers();
-  const idx=localList.findIndex(m=>m.emp_no===empNo&&m.name===name);
-  if(idx===-1){ toast('사번 또는 이름이 일치하지 않습니다','err'); return; }
+  const idx=localList.findIndex(m=>m.name===name);
+  if(idx===-1){ toast('등록된 이름이 아닙니다','err'); return; }
   const pwHash=await sha256(pw);
   localList[idx].pw_hash=pwHash; _saveAjMembers(localList);
   const cached=DB.g(K.AJ_MEMBER,null);
-  if(cached&&cached.emp_no===empNo){ cached.pw_hash=pwHash; DB.s(K.AJ_MEMBER,cached); }
-  // Supabase 백그라운드 패치 (실패해도 OK)
-  _patchAjMemberSb(empNo,{pw_hash:pwHash});
+  if(cached&&cached.name===name){ cached.pw_hash=pwHash; DB.s(K.AJ_MEMBER,cached); }
+  _patchAjMemberSb(localList[idx].emp_no,{pw_hash:pwHash});
   toast('비밀번호 변경 완료','ok');
   switchAjTab('login');
-  document.getElementById('ajEmpNo').value=empNo;
+  document.getElementById('ajName').value=name;
 }
 
 async function doLogin(role){
@@ -9126,20 +9100,17 @@ async function changePw(){
   const cf=document.getElementById('pw-cfm').value;
   if(nw.length<6){ toast('6자 이상 입력하세요','err'); return; }
   if(nw!==cf){ toast('비밀번호가 일치하지 않습니다','err'); return; }
-  const empNo=S?.empNo;
-  if(!empNo){ toast('사번 정보 없음. 재로그인 후 시도하세요','err'); return; }
+  const memberName=S?.name;
+  if(!memberName){ toast('로그인 정보 없음. 재로그인 후 시도하세요','err'); return; }
   const curHash=await sha256(cur);
-  // 로컬 목록에서 현재 비밀번호 확인
   const localList=_getAjMembers();
-  const idx=localList.findIndex(m=>m.emp_no===empNo);
+  const idx=localList.findIndex(m=>m.name===memberName);
   if(idx!==-1 && localList[idx].pw_hash!==curHash){ toast('현재 비밀번호가 틀렸습니다','err'); return; }
   const newHash=await sha256(nw);
-  // 로컬 저장 (주 저장소)
   if(idx!==-1){ localList[idx].pw_hash=newHash; _saveAjMembers(localList); }
   const cached=DB.g(K.AJ_MEMBER,null);
   if(cached){ cached.pw_hash=newHash; DB.s(K.AJ_MEMBER,cached); }
-  // Supabase 백그라운드 패치 (실패해도 OK)
-  _patchAjMemberSb(empNo,{pw_hash:newHash});
+  if(idx!==-1) _patchAjMemberSb(localList[idx].emp_no,{pw_hash:newHash});
   _closePwSheet();
   toast('비밀번호 변경 완료','ok');
 }
@@ -9450,7 +9421,6 @@ ensureAdminAccount().then(()=>initLogin());
         <div id="acct-aj-form" style="display:none">
           <div style="font-size:14px;font-weight:900;margin-bottom:14px" id="acct-aj-form-title">계정 수정</div>
           <input type="hidden" id="acct-aj-idx" value="-1">
-          <div class="fg"><label class="fg-lbl">사번 <span class="req">*</span></label><input type="text" class="fg-input" id="acct-aj-empno" placeholder="사번 입력" autocomplete="off"></div>
           <div class="fg"><label class="fg-lbl">이름 <span class="req">*</span></label><input type="text" class="fg-input" id="acct-aj-name" placeholder="이름" autocomplete="off"></div>
           <div class="fg"><label class="fg-lbl">연락처</label><input type="tel" class="fg-input phone-input" id="acct-aj-phone" placeholder="010-0000-0000" maxlength="11"></div>
           <div class="fg"><label class="fg-lbl">역할</label>
@@ -9506,10 +9476,6 @@ ensureAdminAccount().then(()=>initLogin());
       <div id="aj-member-form" style="display:none">
         <div style="font-size:14px;font-weight:900;margin-bottom:14px" id="aj-mem-form-title">계정 수정</div>
         <input type="hidden" id="aj-mem-idx" value="-1">
-        <div class="fg">
-          <label class="fg-lbl">사번 <span class="req">*</span></label>
-          <input type="text" class="fg-input" id="aj-mem-empno" placeholder="사번 입력" autocomplete="off">
-        </div>
         <div class="fg">
           <label class="fg-lbl">이름 <span class="req">*</span></label>
           <input type="text" class="fg-input" id="aj-mem-name" placeholder="이름" autocomplete="off">
