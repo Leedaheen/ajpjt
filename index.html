@@ -1855,22 +1855,74 @@ alter table equipment disable row level security;</pre>
 
 <!-- Export sheet -->
 <div class="soverlay" id="sh-export" onclick="if(event.target===this)closeSheet('sh-export')">
-  <div class="sheet">
+  <div class="sheet" style="max-height:90vh;overflow-y:auto">
     <div class="sh-handle"></div>
     <div class="sh-title">데이터 내보내기</div>
-    <div class="lg">
+    <div class="lg" id="export-site-row">
       <label class="lg-label">현장 선택</label>
-      <div class="site-select-wrap"><select class="lg-select" id="export-site"></select></div>
+      <div class="site-select-wrap"><select class="lg-select" id="export-site" onchange="initExportFilters()"></select></div>
     </div>
     <div class="lg">
       <label class="lg-label">데이터 유형</label>
-      <div class="chips" id="export-type-chips" style="margin-top:4px">
-        <div class="chip on" onclick="selectOne(this,'export-type-chips')">가동현황</div>
-        <div class="chip" onclick="selectOne(this,'export-type-chips')">반입반출</div>
-        <div class="chip" onclick="selectOne(this,'export-type-chips')">AS요청</div>
+      <div class="chips" id="export-type-chips" style="margin-top:4px;flex-wrap:wrap">
+        <div class="chip on" onclick="selectExportType(this,'가동현황')">가동현황</div>
+        <div class="chip" onclick="selectExportType(this,'반입반출')">반입반출</div>
+        <div class="chip" onclick="selectExportType(this,'AS요청')">AS요청</div>
+        <div class="chip" onclick="selectExportType(this,'장비사용내역')">장비사용내역</div>
       </div>
     </div>
-    <div class="btn-gap">
+    <!-- 가동현황 필터 -->
+    <div id="export-filter-가동현황">
+      <div style="font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:6px;padding:6px 0 0">필터</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+        <div class="fg" style="margin:0"><label class="fg-lbl">시작일</label><input type="date" class="fg-input" id="ef-ops-from"></div>
+        <div class="fg" style="margin:0"><label class="fg-lbl">종료일</label><input type="date" class="fg-input" id="ef-ops-to"></div>
+      </div>
+      <div class="fg"><label class="fg-lbl">위치 (복수 선택, 미선택=전체)</label>
+        <div class="chips" id="ef-ops-floor" style="flex-wrap:wrap"></div>
+      </div>
+    </div>
+    <!-- 반입반출 필터 -->
+    <div id="export-filter-반입반출" style="display:none">
+      <div style="font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:6px;padding:6px 0 0">필터</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+        <div class="fg" style="margin:0"><label class="fg-lbl">시작일</label><input type="date" class="fg-input" id="ef-tr-from"></div>
+        <div class="fg" style="margin:0"><label class="fg-lbl">종료일</label><input type="date" class="fg-input" id="ef-tr-to"></div>
+      </div>
+      <div class="fg"><label class="fg-lbl">업체 (비워두면 전체)</label><input type="text" class="fg-input" id="ef-tr-company" placeholder="전체"></div>
+      <div class="fg"><label class="fg-lbl">프로젝트 (비워두면 전체)</label><input type="text" class="fg-input" id="ef-tr-project" placeholder="전체"></div>
+      <div class="fg"><label class="fg-lbl">구분 (미선택=전체)</label>
+        <div class="chips" id="ef-tr-type" style="flex-wrap:wrap">
+          <div class="chip" onclick="toggleChip(this)">반입</div>
+          <div class="chip" onclick="toggleChip(this)">반출</div>
+          <div class="chip" onclick="toggleChip(this)">인수인계</div>
+        </div>
+      </div>
+    </div>
+    <!-- AS요청 필터 -->
+    <div id="export-filter-AS요청" style="display:none">
+      <div style="font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:6px;padding:6px 0 0">필터</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+        <div class="fg" style="margin:0"><label class="fg-lbl">시작일</label><input type="date" class="fg-input" id="ef-as-from"></div>
+        <div class="fg" style="margin:0"><label class="fg-lbl">종료일</label><input type="date" class="fg-input" id="ef-as-to"></div>
+      </div>
+      <div class="fg"><label class="fg-lbl">업체 (비워두면 전체)</label><input type="text" class="fg-input" id="ef-as-company" placeholder="전체"></div>
+    </div>
+    <!-- 장비사용내역 필터 -->
+    <div id="export-filter-장비사용내역" style="display:none">
+      <div style="font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:6px;padding:6px 0 0">필터</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+        <div class="fg" style="margin:0"><label class="fg-lbl">시작일</label><input type="date" class="fg-input" id="ef-eq-from"></div>
+        <div class="fg" style="margin:0"><label class="fg-lbl">종료일</label><input type="date" class="fg-input" id="ef-eq-to"></div>
+      </div>
+      <div class="fg"><label class="fg-lbl">업체 (비워두면 전체)</label><input type="text" class="fg-input" id="ef-eq-company" placeholder="전체"></div>
+      <div class="fg"><label class="fg-lbl">프로젝트 (비워두면 전체)</label><input type="text" class="fg-input" id="ef-eq-project" placeholder="전체"></div>
+      <div class="fg"><label class="fg-lbl">제원 (비워두면 전체)</label><input type="text" class="fg-input" id="ef-eq-spec" placeholder="예: 10M"></div>
+      <div class="fg"><label class="fg-lbl">위치 (복수 선택, 미선택=전체)</label>
+        <div class="chips" id="ef-eq-floor" style="flex-wrap:wrap"></div>
+      </div>
+    </div>
+    <div class="btn-gap" style="margin-top:16px">
       <button class="btn-full green" onclick="exportCSV()">CSV로 저장 (엑셀 호환)</button>
       <button class="btn-full" style="background:linear-gradient(135deg,var(--orange),#c2410c)" onclick="exportJSON()">JSON으로 저장</button>
       <button class="btn-ghost" onclick="closeSheet('sh-export')">취소</button>
@@ -3242,6 +3294,249 @@ function closeAjMemberForm(){
   renderAjMemberList();
 }
 
+/* ══════════════════════════════════════════════
+   통합 관리자 계정 관리 (sh-acct-mgr)
+══════════════════════════════════════════════ */
+function openAcctMgr(tab){
+  tab = tab||'aj';
+  openSheet('sh-acct-mgr');
+  setTimeout(()=>switchAcctTab(tab),30);
+}
+function switchAcctTab(tab){
+  ['aj','sub','invite'].forEach(t=>{
+    const pane=document.getElementById('acct-pane-'+t);
+    const btn=document.getElementById('acct-tab-'+t);
+    if(pane) pane.style.display=(t===tab)?'':'none';
+    if(btn){
+      btn.style.borderBottomColor=(t===tab)?'var(--red)':'transparent';
+      btn.style.color=(t===tab)?'var(--red)':'var(--tx2)';
+      btn.style.fontWeight=(t===tab)?'700':'500';
+    }
+  });
+  if(tab==='aj') renderAcctAjList();
+  else if(tab==='sub') renderAcctSubList();
+  else if(tab==='invite') renderAcctInviteCodes();
+}
+function renderAcctAjList(){
+  const el=document.getElementById('acct-aj-list'); if(!el) return;
+  const members=_getAjMembers();
+  if(!members.length){ el.innerHTML='<div style="text-align:center;color:var(--tx3);padding:20px;font-size:12px">등록된 계정이 없습니다</div>'; return; }
+  el.innerHTML=members.map((m,i)=>`
+    <div style="background:var(--bg2);border:1px solid var(--br);border-radius:10px;padding:9px 12px;margin-bottom:7px">
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="font-size:10px;font-weight:800;padding:2px 6px;border-radius:5px;background:${m.aj_type==='관리자'?'rgba(222,31,35,.15)':'rgba(59,130,246,.15)'};color:${m.aj_type==='관리자'?'#f87171':'#60a5fa'};flex-shrink:0">${m.aj_type||'관리자'}</span>
+        <span style="font-weight:800;font-size:12px">${m.name}${m.emp_no==='admin'?' <span style="font-size:9px;background:rgba(245,158,11,.2);color:#fbbf24;padding:1px 5px;border-radius:3px">ADMIN</span>':''}</span>
+        <div style="display:flex;gap:3px;margin-left:auto;flex-shrink:0">
+          <button class="btn-ghost" style="font-size:9px;padding:2px 6px" onclick="editAcctAjMember(${i})">수정</button>
+          <button class="btn-ghost" style="font-size:9px;padding:2px 6px;color:#fb923c;border-color:rgba(251,146,60,.3)" onclick="resetAcctAjPw(${i})">PW초기화</button>
+          ${m.emp_no==='admin'?'':`<button class="btn-ghost" style="font-size:9px;padding:2px 6px;color:#f87171;border-color:rgba(248,113,113,.3)" onclick="deleteAcctAjMember(${i})">삭제</button>`}
+        </div>
+      </div>
+      <div style="font-size:10px;color:var(--tx3);margin-top:3px;padding-left:2px">사번: <b style="color:var(--tx);font-family:monospace">${m.emp_no}</b>${m.phone?` · <span style="color:var(--tx2)">${m.phone}</span>`:''}</div>
+    </div>`).join('');
+}
+function renderAcctSubList(){
+  const el=document.getElementById('acct-sub-list'); if(!el) return;
+  const siteId=S?.siteId==='all'?null:S?.siteId;
+  const members=getMembers().filter(m=>!siteId||m.siteId===siteId);
+  if(!members.length){ el.innerHTML='<div style="text-align:center;color:var(--tx3);padding:20px;font-size:12px">가입된 협력사 관리자가 없습니다</div>'; return; }
+  el.innerHTML=members.map((m,i)=>`
+    <div style="background:var(--bg2);border:1px solid var(--br);border-radius:10px;padding:9px 12px;margin-bottom:7px">
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="font-weight:800;font-size:12px;flex:1">${m.name}</span>
+        <button class="btn-ghost" style="font-size:9px;padding:2px 6px;color:#f87171;border-color:rgba(248,113,113,.3)" onclick="deleteAcctSubMember(${i})">탈퇴처리</button>
+      </div>
+      <div style="font-size:10px;color:var(--tx3);margin-top:3px">${m.company} · ${getSites().find(s=>s.id===m.siteId)?.name||m.siteId}</div>
+      ${m.phone?`<div style="font-size:10px;color:var(--tx2);margin-top:1px">${m.phone}</div>`:''}
+      <div style="font-size:10px;color:var(--tx3);margin-top:1px">가입: ${new Date(m.joinedAt).toLocaleDateString('ko-KR')}</div>
+    </div>`).join('');
+}
+function deleteAcctSubMember(idx){
+  const siteId=S?.siteId==='all'?null:S?.siteId;
+  const all=getMembers();
+  const filtered=all.filter(m=>!siteId||m.siteId===siteId);
+  const m=filtered[idx]; if(!m) return;
+  if(!confirm(`[${m.name}] 협력사 관리자를 탈퇴 처리하시겠습니까?`)) return;
+  const newAll=all.filter(a=>!(a.name===m.name&&a.siteId===m.siteId&&a.company===m.company));
+  saveMembers(newAll);
+  toast('탈퇴 처리되었습니다','ok');
+  renderAcctSubList();
+}
+function renderAcctInviteCodes(){
+  const el=document.getElementById('acct-invite-codes'); if(!el) return;
+  autoRotateInvite();
+  const sites=getSites();
+  if(!sites.length){ el.innerHTML='<div style="text-align:center;color:var(--tx3);padding:20px;font-size:12px">등록된 현장이 없습니다</div>'; return; }
+  el.innerHTML=sites.map(s=>{
+    const code=DB.g(K.INVITE_SITE+s.id,null)||DB.g(K.INVITE,'')||'(미설정)';
+    return `<div style="margin-bottom:10px;padding:10px;background:var(--bg2);border:1px solid var(--br);border-radius:8px">
+      <div style="font-size:11px;font-weight:700;margin-bottom:6px">${s.name}</div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span id="acct-invite-${s.id}" style="font-family:monospace;font-size:13px;font-weight:900;flex:1;padding:8px;background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.2);border-radius:6px;color:#60a5fa">${code}</span>
+        <button onclick="copyText(document.getElementById('acct-invite-${s.id}').textContent)" style="font-size:10px;padding:5px 10px;background:rgba(96,165,250,.15);border:1px solid rgba(96,165,250,.3);border-radius:6px;color:#60a5fa;cursor:pointer">복사</button>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <input type="text" id="acct-new-code-${s.id}" placeholder="새 코드 입력 (6자 이상)" style="flex:1;padding:6px 8px;font-size:11px;background:var(--bg3);border:1px solid var(--br);border-radius:4px;color:var(--tx)">
+        <button onclick="saveInviteCodeSite('${s.id}',document.getElementById('acct-new-code-${s.id}')?.value)" style="padding:5px 10px;font-size:10px;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);border-radius:4px;color:rgb(99,102,241);cursor:pointer;white-space:nowrap">저장</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+/* ── 통합 관리자 폼 (AJ탭) ── */
+function showNewAjMemberForm2(){
+  document.getElementById('acct-aj-idx').value='-1';
+  document.getElementById('acct-aj-empno').value='';
+  document.getElementById('acct-aj-name').value='';
+  document.getElementById('acct-aj-phone').value='';
+  document.getElementById('acct-aj-type').value='관리자';
+  document.getElementById('acct-aj-pw').value='';
+  document.getElementById('acct-aj-pw').placeholder='비밀번호 (6자 이상)';
+  document.getElementById('acct-aj-form-title').textContent='신규 계정 추가';
+  document.getElementById('acct-aj-empno').readOnly=false;
+  document.getElementById('acct-aj-form').style.display='block';
+  document.getElementById('acct-aj-list').style.display='none';
+  document.getElementById('acct-aj-new-btn').style.display='none';
+}
+function editAcctAjMember(idx){
+  const m=_getAjMembers()[idx]; if(!m) return;
+  document.getElementById('acct-aj-idx').value=idx;
+  document.getElementById('acct-aj-empno').value=m.emp_no;
+  document.getElementById('acct-aj-name').value=m.name;
+  document.getElementById('acct-aj-phone').value=m.phone||'';
+  document.getElementById('acct-aj-type').value=m.aj_type||'관리자';
+  document.getElementById('acct-aj-pw').value='';
+  document.getElementById('acct-aj-pw').placeholder='변경 시에만 입력';
+  document.getElementById('acct-aj-form-title').textContent='계정 수정';
+  document.getElementById('acct-aj-empno').readOnly=true;
+  document.getElementById('acct-aj-form').style.display='block';
+  document.getElementById('acct-aj-list').style.display='none';
+  document.getElementById('acct-aj-new-btn').style.display='none';
+}
+async function saveAcctAjMember(){
+  const idx=+document.getElementById('acct-aj-idx').value;
+  const empNo=document.getElementById('acct-aj-empno').value.trim();
+  const name=document.getElementById('acct-aj-name').value.trim();
+  const phone=document.getElementById('acct-aj-phone').value.trim();
+  const ajType=document.getElementById('acct-aj-type').value;
+  const pw=document.getElementById('acct-aj-pw').value;
+  if(!empNo||!name){ toast('사번과 이름은 필수입니다','err'); return; }
+  const members=_getAjMembers(); const isNew=idx===-1;
+  if(isNew&&members.some(m=>m.emp_no===empNo)){ toast('이미 등록된 사번입니다','err'); return; }
+  if(isNew&&!pw){ toast('신규 계정은 비밀번호를 입력하세요','err'); return; }
+  if(pw&&pw.length<6){ toast('비밀번호는 6자 이상이어야 합니다','err'); return; }
+  const member=isNew?{emp_no:empNo,name,phone,pw_hash:await sha256(pw),aj_type:ajType,created_at:new Date().toISOString()}:{...members[idx],name,phone,aj_type:ajType};
+  if(!isNew&&pw) member.pw_hash=await sha256(pw);
+  if(isNew) members.unshift(member); else members[idx]=member;
+  _saveAjMembers(members); _syncAjMemberSb(member);
+  toast(isNew?'계정이 추가되었습니다':'계정이 수정되었습니다','ok');
+  closeAcctAjForm();
+}
+async function resetAcctAjPw(idx){
+  const members=_getAjMembers(); const m=members[idx]; if(!m) return;
+  const newPw=prompt(`[${m.name}] 새 비밀번호 입력 (6자 이상):`); if(!newPw) return;
+  if(newPw.length<6){ toast('비밀번호는 6자 이상이어야 합니다','err'); return; }
+  members[idx].pw_hash=await sha256(newPw);
+  _saveAjMembers(members); _patchAjMemberSb(m.emp_no,{pw_hash:members[idx].pw_hash});
+  toast(`[${m.name}] 비밀번호가 초기화되었습니다`,'ok');
+}
+function deleteAcctAjMember(idx){
+  const members=_getAjMembers(); const m=members[idx]; if(!m) return;
+  if(m.emp_no==='admin'){ toast('admin 계정은 삭제할 수 없습니다','err'); return; }
+  if(!confirm(`[${m.name}] 계정을 삭제하시겠습니까?`)) return;
+  members.splice(idx,1); _saveAjMembers(members);
+  toast('계정이 삭제되었습니다','ok'); renderAcctAjList();
+}
+function closeAcctAjForm(){
+  document.getElementById('acct-aj-form').style.display='none';
+  document.getElementById('acct-aj-list').style.display='block';
+  document.getElementById('acct-aj-new-btn').style.display='block';
+  renderAcctAjList();
+}
+
+/* ══════════════════════════════════════════════
+   AS 현황 분석 (AJ 전용)
+══════════════════════════════════════════════ */
+function openASAnalysis(){
+  const siteId=S?.siteId==='all'?null:S?.siteId;
+  const reqs=getAsReqs().filter(r=>!siteId||r.siteId===siteId);
+  const total=reqs.length;
+  const pending=reqs.filter(r=>!r.status||r.status==='대기'||r.status==='접수').length;
+  const inProg=reqs.filter(r=>r.status==='진행중'||r.status==='부품대기').length;
+  const resolved=reqs.filter(r=>r.status==='완료'||r.status==='처리완료').length;
+  // 고장유형별
+  const byType={};
+  reqs.forEach(r=>{ const t=r.faultType||r.type||'기타'; byType[t]=(byType[t]||0)+1; });
+  const topTypes=Object.entries(byType).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  // 업체별
+  const byCo={};
+  reqs.forEach(r=>{ const c=r.company||'미등록'; byCo[c]=(byCo[c]||0)+1; });
+  const topCos=Object.entries(byCo).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  // 장비별
+  const byEquip={};
+  reqs.forEach(r=>{ if(!r.equip) return; r.equip.split(/[,\s]+/).forEach(e=>{ const eq=e.trim().toUpperCase(); if(eq) byEquip[eq]=(byEquip[eq]||0)+1; }); });
+  const topEquips=Object.entries(byEquip).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  // 월별 (최근 6개월)
+  const monthly={};
+  reqs.forEach(r=>{ const d=r.date||r.created_at?.slice(0,10)||''; if(!d) return; const ym=d.slice(0,7); monthly[ym]=(monthly[ym]||0)+1; });
+  const sortedMonths=Object.keys(monthly).sort().slice(-6);
+  // 평균 처리시간
+  let totalMs=0,cnt=0;
+  reqs.forEach(r=>{
+    if(r.resolvedAt&&r.created_at&&(r.status==='완료'||r.status==='처리완료')){
+      const diff=new Date(r.resolvedAt)-new Date(r.created_at); if(diff>0){ totalMs+=diff; cnt++; }
+    }
+  });
+  const avgDays=cnt>0?(totalMs/cnt/86400000).toFixed(1):'—';
+  const bar=(entries,maxVal,c1,c2)=>entries.map(([k,v])=>`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+      <div style="font-size:11px;color:var(--tx);width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0">${k}</div>
+      <div style="flex:1;background:var(--bg3);border-radius:3px;overflow:hidden;height:14px">
+        <div style="width:${Math.round(v/maxVal*100)}%;height:100%;background:linear-gradient(90deg,${c1},${c2})"></div>
+      </div>
+      <div style="font-size:11px;font-weight:700;color:var(--tx2);min-width:20px;text-align:right">${v}</div>
+    </div>`).join('');
+  const mMax=sortedMonths.length?Math.max(...sortedMonths.map(m=>monthly[m]),1):1;
+  document.getElementById('adm-content').innerHTML=`
+    <div style="display:flex;align-items:center;gap:8px;padding:14px 14px 0;margin-bottom:10px">
+      <button class="btn-ghost" style="padding:5px 10px;font-size:11px" onclick="renderAdmin()">← 뒤로</button>
+      <div style="font-size:14px;font-weight:800">AS 현황 분석</div>
+      <div style="font-size:10px;color:var(--tx3);margin-left:auto">총 ${total}건</div>
+    </div>
+    <div style="padding:0 14px 14px">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:14px">
+        <div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:8px;padding:8px;text-align:center">
+          <div style="font-size:20px;font-weight:900;color:#60a5fa">${pending}</div><div style="font-size:10px;color:var(--tx3)">대기</div>
+        </div>
+        <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:8px;padding:8px;text-align:center">
+          <div style="font-size:20px;font-weight:900;color:#fbbf24">${inProg}</div><div style="font-size:10px;color:var(--tx3)">진행중</div>
+        </div>
+        <div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:8px;padding:8px;text-align:center">
+          <div style="font-size:20px;font-weight:900;color:#22c55e">${resolved}</div><div style="font-size:10px;color:var(--tx3)">완료</div>
+        </div>
+        <div style="background:rgba(148,163,184,.08);border:1px solid rgba(148,163,184,.15);border-radius:8px;padding:8px;text-align:center">
+          <div style="font-size:20px;font-weight:900;color:var(--tx2)">${avgDays}</div><div style="font-size:10px;color:var(--tx3)">평균일(완료)</div>
+        </div>
+      </div>
+      ${topTypes.length?`<div style="background:var(--bg2);border:1px solid var(--br);border-radius:10px;padding:12px;margin-bottom:10px">
+        <div style="font-size:12px;font-weight:800;margin-bottom:10px">고장 유형별</div>
+        ${bar(topTypes,topTypes[0]?.[1]||1,'#f87171','#dc2626')}
+      </div>`:''}
+      ${topCos.length?`<div style="background:var(--bg2);border:1px solid var(--br);border-radius:10px;padding:12px;margin-bottom:10px">
+        <div style="font-size:12px;font-weight:800;margin-bottom:10px">업체별 AS 건수</div>
+        ${bar(topCos,topCos[0]?.[1]||1,'#60a5fa','#2563eb')}
+      </div>`:''}
+      ${topEquips.length?`<div style="background:var(--bg2);border:1px solid var(--br);border-radius:10px;padding:12px;margin-bottom:10px">
+        <div style="font-size:12px;font-weight:800;margin-bottom:10px">장비별 AS 건수 (Top 5)</div>
+        ${bar(topEquips,topEquips[0]?.[1]||1,'#a78bfa','#7c3aed')}
+      </div>`:''}
+      ${sortedMonths.length?`<div style="background:var(--bg2);border:1px solid var(--br);border-radius:10px;padding:12px;margin-bottom:10px">
+        <div style="font-size:12px;font-weight:800;margin-bottom:10px">월별 AS 추이 (최근 6개월)</div>
+        ${bar(sortedMonths.map(m=>[m,monthly[m]]),mMax,'#34d399','#059669')}
+      </div>`:''}
+      ${total===0?'<div style="text-align:center;color:var(--tx3);padding:30px;font-size:12px">AS 요청 데이터가 없습니다</div>':''}
+    </div>`;
+}
+
 async function doAjRegister(){
   const empNo=document.getElementById('regEmpNo').value.trim();
   const name=document.getElementById('regName').value.trim();
@@ -4429,13 +4724,15 @@ function shareInviteCodeSite(siteId, siteName){
     fallback();
   }
 }
-function saveInviteCodeSite(siteId){
-  const inp = document.getElementById('new-code-'+siteId);
-  const code = inp?.value.trim();
+function saveInviteCodeSite(siteId, codeOverride){
+  const inp = document.getElementById('new-code-'+siteId) || document.getElementById('acct-new-code-'+siteId);
+  const code = (codeOverride !== undefined ? codeOverride : inp?.value || '').trim();
   if(!code || code.length < 6){ toast('6자 이상 입력하세요','err'); return; }
   DB.s(K.INVITE_SITE + siteId, code);
-  document.getElementById('invite-code-'+siteId).textContent = code;
-  inp.value = '';
+  // 양쪽 표시 엘리먼트 업데이트
+  const dispEl = document.getElementById('invite-code-'+siteId) || document.getElementById('acct-invite-'+siteId);
+  if(dispEl) dispEl.textContent = code;
+  if(inp) inp.value = '';
   toast('초대코드가 변경되었습니다','ok');
 }
 // 기존 함수명 호환성 유지
@@ -7177,7 +7474,8 @@ function renderAdmin(){
     <div style="padding:14px">
     <div class="admin-profile ${role}">
       <div class="ap-avi ${role}">${role==='aj'?'AJ':'담당'}</div>
-      <div><div class="ap-name">${S.name}</div><div class="ap-role ${role}">${role==='aj'?'AJ 관리자 · 전체 현장':'협력사 관리자 · '+S.company+' · '+S.siteName}</div></div>
+      <div style="flex:1"><div class="ap-name">${S.name}</div><div class="ap-role ${role}">${role==='aj'?'AJ 관리자 · 전체 현장':'협력사 관리자 · '+S.company+' · '+S.siteName}</div></div>
+      ${isAJ?`<button onclick="openSheet('sh-pw')" style="font-size:9px;padding:3px 8px;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);border-radius:5px;color:#fbbf24;cursor:pointer;font-weight:600;white-space:nowrap;flex-shrink:0">🔐 비번변경</button>`:''}
     </div>
 
     ${(isSub||isAJ)?(()=>{
@@ -7268,12 +7566,7 @@ function renderAdmin(){
       </div>
       <div class="mrow" onclick="openSheet('sh-company')">
         <div class="mrow-ico" style="background:rgba(59,139,255,.12);color:rgb(59,139,255)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg></div>
-        <div class="mrow-inf"><div class="mrow-title">업체 관리 (전체)</div><div class="mrow-desc">현장별 업체 추가·삭제·장비수 설정</div></div>
-        <div class="mrow-arr">›</div>
-      </div>
-      <div class="mrow" onclick="openSheet('sh-invite')">
-        <div class="mrow-ico" style="background:rgba(20,184,166,.12);color:rgb(20,184,166)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="M21 2l-9.6 9.6"/><path d="M15.5 7.5l3 3L22 7l-3-3"/></svg></div>
-        <div class="mrow-inf"><div class="mrow-title">협력사 관리자 초대코드</div><div class="mrow-desc">협력사 관리자 가입용 초대코드 설정</div></div>
+        <div class="mrow-inf"><div class="mrow-title">장비 수량 관리</div><div class="mrow-desc">현장별 업체·장비 수량 추가·수정</div></div>
         <div class="mrow-arr">›</div>
       </div>
       <div class="mrow" onclick="openSheet('sh-alert')">
@@ -7289,25 +7582,15 @@ function renderAdmin(){
         <div class="mrow-arr">›</div>
       </div>
       `:''}
-      <div class="mrow" onclick="openSheet('sh-export')">
+      <div class="mrow" onclick="openExportSheet()">
         <div class="mrow-ico" style="background:rgba(34,197,94,.12);color:rgb(34,197,94)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
         <div class="mrow-inf"><div class="mrow-title">데이터 내보내기</div><div class="mrow-desc">CSV / JSON 다운로드</div></div>
         <div class="mrow-arr">›</div>
       </div>
       ${isAJ?`
-      <div class="mrow" onclick="openSheet('sh-pw')">
-        <div class="mrow-ico" style="background:rgba(245,158,11,.12);color:rgb(245,158,11)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></div>
-        <div class="mrow-inf"><div class="mrow-title">AJ 관리자 비밀번호 변경</div><div class="mrow-desc">초기 비밀번호 반드시 변경하세요</div></div>
-        <div class="mrow-arr">›</div>
-      </div>
-      <div class="mrow" onclick="openAjMemberMgr()">
-        <div class="mrow-ico" style="background:rgba(222,31,35,.12);color:rgb(222,31,35)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/><line x1="18" y1="8" x2="23" y2="13"/><line x1="23" y1="8" x2="18" y2="13"/></svg></div>
-        <div class="mrow-inf"><div class="mrow-title">AJ 관리자 계정 관리</div><div class="mrow-desc">AJ 관리자·기사 계정 추가·수정·삭제</div></div>
-        <div class="mrow-arr">›</div>
-      </div>
-      <div class="mrow" onclick="openMemberMgr()">
-        <div class="mrow-ico" style="background:rgba(99,102,241,.12);color:rgb(99,102,241)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></div>
-        <div class="mrow-inf"><div class="mrow-title">협력사 관리자 목록</div><div class="mrow-desc">가입된 협력사 관리자 정보 수정·탈퇴 처리</div></div>
+      <div class="mrow" onclick="openAcctMgr('aj')">
+        <div class="mrow-ico" style="background:rgba(222,31,35,.12);color:rgb(222,31,35)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></div>
+        <div class="mrow-inf"><div class="mrow-title">관리자 계정 관리</div><div class="mrow-desc">AJ·협력사 관리자 계정 및 초대코드 관리</div></div>
         <div class="mrow-arr">›</div>
       </div>
       <div class="mrow" onclick="openEquipMasterSheet()">
@@ -7315,9 +7598,9 @@ function renderAdmin(){
         <div class="mrow-inf"><div class="mrow-title">반입 장비 마스터</div><div class="mrow-desc">현재 현장 반입 중 장비 목록 · 자동완성 데이터 관리</div></div>
         <div class="mrow-arr">›</div>
       </div>
-      <div class="mrow" onclick="openASList()">
-        <div class="mrow-ico" style="background:rgba(220,38,38,.12);color:rgb(220,38,38)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg></div>
-        <div class="mrow-inf"><div class="mrow-title">AS 요청 목록</div><div class="mrow-desc">${getAsReqs().filter(r=>(!siteId||r.siteId===siteId)&&r.status==='대기').length}건 대기 중</div></div>
+      <div class="mrow" onclick="openASAnalysis()">
+        <div class="mrow-ico" style="background:rgba(220,38,38,.12);color:rgb(220,38,38)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><polyline points="9 11 12 14 16 10"/></svg></div>
+        <div class="mrow-inf"><div class="mrow-title">AS 현황 분석</div><div class="mrow-desc">AS 요청 통계 · 유형별 분석</div></div>
         <div class="mrow-arr">›</div>
       </div>
       `:''}
@@ -7966,77 +8249,117 @@ function clearNotifs(){ const ns=DB.g(K.NOTIFS,[]); ns.forEach(n=>n.read=true); 
 /* ═══════════════════════════════════════════
    EXPORT
 ═══════════════════════════════════════════ */
+function openExportSheet(){
+  openSheet('sh-export');
+  setTimeout(()=>initExportFilters(),50);
+}
+/* ── 내보내기 필터 헬퍼 ── */
+function selectExportType(el, type){
+  selectOne(el,'export-type-chips');
+  ['가동현황','반입반출','AS요청','장비사용내역'].forEach(t=>{
+    const panel=document.getElementById('export-filter-'+t);
+    if(panel) panel.style.display=(t===type)?'':'none';
+  });
+}
+function toggleChip(el){ el.classList.toggle('on'); }
+function initExportFilters(){
+  const siteId=document.getElementById('export-site')?.value||'';
+  // 가동현황 / 장비사용내역 위치 칩 채우기
+  const logs=getLogs().filter(l=>!siteId||l.siteId===siteId);
+  const floors=[...new Set(logs.map(l=>l.floor).filter(Boolean).flatMap(f=>f.split(/[,\s]+/).map(s=>s.trim()).filter(Boolean)))].sort();
+  ['ef-ops-floor','ef-eq-floor'].forEach(cid=>{
+    const el=document.getElementById(cid); if(!el) return;
+    el.innerHTML=floors.map(f=>`<div class="chip" onclick="toggleChip(this)">${f}</div>`).join('');
+  });
+}
 function exportCSV(){
-  const siteId=document.getElementById('export-site')?.value;
+  const siteId=document.getElementById('export-site')?.value||'';
   const typeChip=document.querySelector('#export-type-chips .chip.on')?.textContent||'가동현황';
-  let rows=[], h=[], filename='';
+  let data=[], h=[], rows=[], filename='내보내기';
 
-  if(typeChip==='가동현황'){
-    const logs=getLogs().filter(l=>!siteId||l.siteId===siteId);
-    if(!logs.length){ toast('내보낼 데이터가 없습니다','err'); return; }
-    h=['날짜','현장','업체','층수','장비번호','신청자','상태','시작시간','종료시간','사용시간(h)','계기시작','계기종료','미가동사유','입력시각'];
-    rows=logs.map(l=>[
-      l.date, l.siteId, l.company, l.floor, l.equip, l.name,
-      l.status==='start'?'사용중':'완료',
-      l.startTime||'', l.endTime||'', l.duration||'',
-      l.meterStart||'', l.meterEnd||'', l.reason||'',
-      new Date(l.ts).toLocaleString('ko-KR'),
-    ]);
-    filename='가동현황';
-  } else if(typeChip==='반입반출'){
-    const recs=getTransit().filter(r=>!siteId||r.siteId===siteId);
-    if(!recs.length){ toast('반입반출 데이터가 없습니다','err'); return; }
-    h=['날짜','구분','현장','업체','제원','AJ장비번호','신청자','신청자연락처','양중담당','양중연락처','비고','상태','댓글1','댓글2','댓글3'];
-    rows=recs.map(r=>{
-      const msgs = r.ajMsgs||[];
-      const fmtMsg = (m) => m ? `[${m.author||''}] ${m.text||''}` : '';
-      return [
-        r.date, r.type==='in'?'반입':'반출', r.siteId, r.company,
-        (r.specs||[]).map(s=>s.spec+'×'+s.qty).join('|'),
-        r.ajEquip||'', r.recorder||'', r.reporterPhone||'',
-        r.managerName||'', r.managerPhone||'', r.note||'', r.status||'',
-        fmtMsg(msgs[0]), fmtMsg(msgs[1]), fmtMsg(msgs[2]),
-      ];
+  const _inRange=(dateStr,fromId,toId)=>{
+    const from=document.getElementById(fromId)?.value; const to=document.getElementById(toId)?.value;
+    if(from&&dateStr<from) return false;
+    if(to&&dateStr>to) return false;
+    return true;
+  };
+
+  if(typeChip==='반입반출'){
+    const company=(document.getElementById('ef-tr-company')?.value||'').trim().toLowerCase();
+    const project=(document.getElementById('ef-tr-project')?.value||'').trim().toLowerCase();
+    const selTypes=[...document.querySelectorAll('#ef-tr-type .chip.on')].map(c=>c.textContent);
+    data=getTransit().filter(r=>{
+      if(!siteId||r.siteId===siteId);else if(r.siteId!==siteId) return false;
+      if(!_inRange(r.date||'','ef-tr-from','ef-tr-to')) return false;
+      if(company&&!(r.company||'').toLowerCase().includes(company)) return false;
+      if(project&&!(r.project||'').toLowerCase().includes(project)) return false;
+      if(selTypes.length){
+        const rType=r.type==='in'?'반입':r.type==='out'?'반출':'인수인계';
+        if(!selTypes.includes(rType)) return false;
+      }
+      return true;
     });
+    h=['날짜','구분','현장','업체','제원','신청인','연락처','상태','프로젝트','메모'];
+    rows=data.map(r=>[r.date||'',r.type==='in'?'반입':r.type==='out'?'반출':'인수인계',r.siteName||'',r.company||'',(r.specs||[]).map(s=>s.spec+'×'+s.qty).join('/')||r.equip||'',r.reporterName||r.recorder||'',r.reporterPhone||'',r.status||'',r.project||'',r.note||'']);
     filename='반입반출';
   } else if(typeChip==='AS요청'){
-    const reqs=getAsReqs().filter(r=>!siteId||r.siteId===siteId);
-    if(!reqs.length){ toast('AS 데이터가 없습니다','err'); return; }
-    h=['신청일','신청시간','현장','업체','장비번호','위치','유형','접수내용','신청인','신청인연락처','상태','자재수급시간','정비기사','처리완료일시','처리메모'];
-    rows=reqs.map(r=>[
-      r.date,
-      r.requestedAt?new Date(r.requestedAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}):'',
-      r.siteId||'', r.company, r.equip, r.location||'',
-      r.type||'', r.desc||'', r.reporterName||r.reporter||'',
-      r.reporterPhone||'', r.status,
-      r.materialAt?new Date(r.materialAt).toLocaleString('ko-KR'):'',
-      r.techName||'',
-      r.resolvedAt?new Date(r.resolvedAt).toLocaleString('ko-KR'):'',
-      r.resolvedNote||'',
-    ]);
+    const company=(document.getElementById('ef-as-company')?.value||'').trim().toLowerCase();
+    data=getAsReqs().filter(r=>{
+      if(siteId&&r.siteId!==siteId) return false;
+      if(!_inRange(r.date||r.created_at?.slice(0,10)||'','ef-as-from','ef-as-to')) return false;
+      if(company&&!(r.company||'').toLowerCase().includes(company)) return false;
+      return true;
+    });
+    h=['날짜','현장','업체','장비','위치','고장유형','내용','신청인','연락처','처리상태','처리일','기사','비고'];
+    rows=data.map(r=>[r.date||'',r.siteName||'',r.company||'',r.equip||'',r.location||'',r.faultType||r.type||'',r.description||r.desc||'',r.reporterName||r.reporter||'',r.reporterPhone||'',r.status||'',r.resolvedAt?new Date(r.resolvedAt).toLocaleDateString('ko-KR'):'',r.techName||'',r.resolveNote||r.resolvedNote||'']);
     filename='AS요청';
+  } else if(typeChip==='장비사용내역'){
+    const company=(document.getElementById('ef-eq-company')?.value||'').trim().toLowerCase();
+    const project=(document.getElementById('ef-eq-project')?.value||'').trim().toLowerCase();
+    const spec=(document.getElementById('ef-eq-spec')?.value||'').trim().toLowerCase();
+    const selFloors=[...document.querySelectorAll('#ef-eq-floor .chip.on')].map(c=>c.textContent);
+    data=getEquipMaster().filter(e=>{
+      if(siteId&&e.siteId!==siteId) return false;
+      if(!_inRange(e.in_date||'','ef-eq-from','ef-eq-to')) return false;
+      if(company&&!(e.company||'').toLowerCase().includes(company)) return false;
+      if(project&&!(e.project||'').toLowerCase().includes(project)) return false;
+      if(spec&&!(e.spec||'').toLowerCase().includes(spec)) return false;
+      if(selFloors.length&&!selFloors.some(f=>(e.location||'').includes(f))) return false;
+      return true;
+    });
+    h=['장비번호','제원','모델','업체','현장','상태','반입일','반출일','프로젝트','위치'];
+    rows=data.map(e=>[e.equip_no||e.equipNo||'',e.spec||'',e.model||'',e.company||'',e.site_name||e.siteName||'',e.status||'',e.in_date||'',e.out_date||'',e.project||'',e.location||'']);
+    filename='장비사용내역';
+  } else {
+    // 가동현황
+    const selFloors=[...document.querySelectorAll('#ef-ops-floor .chip.on')].map(c=>c.textContent);
+    data=getLogs().filter(l=>{
+      if(siteId&&l.siteId!==siteId) return false;
+      if(!_inRange(l.date||'','ef-ops-from','ef-ops-to')) return false;
+      if(selFloors.length){
+        const lFloors=(l.floor||'').split(/[,\s]+/).map(s=>s.trim()).filter(Boolean);
+        if(!selFloors.some(f=>lFloors.includes(f))) return false;
+      }
+      return true;
+    });
+    h=['날짜','현장','업체','층수','장비번호','기사','상태','시작시간','종료시간','가동시간(h)','계기(시작)','계기(종료)','비고'];
+    rows=data.map(l=>[l.date||'',l.siteName||l.site_name||'',l.company||'',l.floor||'',l.equip||'',l.name||l.recorder||'',l.status||'',l.startTime||'',l.endTime||'',l.duration??'',l.meterStart??'',l.meterEnd??'',l.reason||'']);
+    filename='가동현황';
   }
-
   if(!rows.length){ toast('내보낼 데이터가 없습니다','err'); return; }
-  const csvRows=[h,...rows].map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(','));
+  const csvRows=[h,...rows].map(row=>row.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(','));
   const blob=new Blob(['\uFEFF'+csvRows.join('\n')],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`${filename}_${siteId||'전체'}_${today()}.csv`; a.click();
   closeSheet('sh-export'); toast('📄 CSV 저장됨','ok');
 }
 function exportJSON(){
-  const siteId=document.getElementById('export-site')?.value;
+  const siteId=document.getElementById('export-site')?.value||'';
   const typeChip=document.querySelector('#export-type-chips .chip.on')?.textContent||'가동현황';
   let data, filename;
-  if(typeChip==='반입반출'){
-    data=getTransit().filter(r=>!siteId||r.siteId===siteId);
-    filename='반입반출';
-  } else if(typeChip==='AS요청'){
-    data=getAsReqs().filter(r=>!siteId||r.siteId===siteId);
-    filename='AS요청';
-  } else {
-    data=getLogs().filter(l=>!siteId||l.siteId===siteId);
-    filename='가동현황';
-  }
+  if(typeChip==='반입반출'){ data=getTransit().filter(r=>!siteId||r.siteId===siteId); filename='반입반출'; }
+  else if(typeChip==='AS요청'){ data=getAsReqs().filter(r=>!siteId||r.siteId===siteId); filename='AS요청'; }
+  else if(typeChip==='장비사용내역'){ data=getEquipMaster().filter(e=>!siteId||e.siteId===siteId); filename='장비사용내역'; }
+  else { data=getLogs().filter(l=>!siteId||l.siteId===siteId); filename='가동현황'; }
   const blob=new Blob([JSON.stringify({exported:new Date().toISOString(),siteId,data},null,2)],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`${filename}_${siteId||'전체'}_${today()}.json`; a.click();
   closeSheet('sh-export'); toast('📦 JSON 저장됨','ok');
@@ -8173,6 +8496,59 @@ migrateFromV2();
 // admin 계정 초기 생성 후 로그인 화면 진입
 ensureAdminAccount().then(()=>initLogin());
 </script>
+
+<!-- 관리자 계정 관리 (통합) sheet -->
+<div class="soverlay" id="sh-acct-mgr" onclick="if(event.target===this)closeSheet('sh-acct-mgr')">
+  <div class="sheet" style="max-height:92vh;overflow-y:auto">
+    <div class="sh-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 14px 0">
+      <div class="sh-title" style="margin:0;padding:0">관리자 계정 관리</div>
+      <button onclick="closeSheet('sh-acct-mgr')" style="background:none;border:none;font-size:20px;color:var(--tx2);cursor:pointer;line-height:1;padding:4px 8px">✕</button>
+    </div>
+    <!-- 탭 -->
+    <div style="display:flex;gap:0;margin:12px 14px 0;border-bottom:1px solid var(--br)">
+      <button id="acct-tab-aj" onclick="switchAcctTab('aj')" style="flex:1;padding:8px 4px;font-size:12px;font-weight:700;background:none;border:none;border-bottom:2px solid var(--red);color:var(--red);cursor:pointer">AJ관리자</button>
+      <button id="acct-tab-sub" onclick="switchAcctTab('sub')" style="flex:1;padding:8px 4px;font-size:12px;font-weight:500;background:none;border:none;border-bottom:2px solid transparent;color:var(--tx2);cursor:pointer">협력사관리자</button>
+      <button id="acct-tab-invite" onclick="switchAcctTab('invite')" style="flex:1;padding:8px 4px;font-size:12px;font-weight:500;background:none;border:none;border-bottom:2px solid transparent;color:var(--tx2);cursor:pointer">초대코드</button>
+    </div>
+    <div style="padding:14px">
+      <!-- AJ 관리자 탭 -->
+      <div id="acct-pane-aj">
+        <div id="acct-aj-list"></div>
+        <button id="acct-aj-new-btn" class="btn-full" style="margin-top:8px" onclick="showNewAjMemberForm2()">+ 신규 계정 추가</button>
+        <div id="acct-aj-form" style="display:none">
+          <div style="font-size:14px;font-weight:900;margin-bottom:14px" id="acct-aj-form-title">계정 수정</div>
+          <input type="hidden" id="acct-aj-idx" value="-1">
+          <div class="fg"><label class="fg-lbl">사번 <span class="req">*</span></label><input type="text" class="fg-input" id="acct-aj-empno" placeholder="사번 입력" autocomplete="off"></div>
+          <div class="fg"><label class="fg-lbl">이름 <span class="req">*</span></label><input type="text" class="fg-input" id="acct-aj-name" placeholder="이름" autocomplete="off"></div>
+          <div class="fg"><label class="fg-lbl">연락처</label><input type="tel" class="fg-input phone-input" id="acct-aj-phone" placeholder="010-0000-0000" maxlength="11"></div>
+          <div class="fg"><label class="fg-lbl">역할</label>
+            <select class="fg-select" id="acct-aj-type">
+              <option value="관리자">관리자</option>
+              <option value="정비기사">정비기사</option>
+            </select>
+          </div>
+          <div class="fg"><label class="fg-lbl">비밀번호</label><input type="password" class="fg-input" id="acct-aj-pw" placeholder="비밀번호 (6자 이상)"></div>
+          <div style="display:flex;gap:8px;margin-top:14px">
+            <button class="btn-full" style="background:var(--bg2);color:var(--tx2);border:1px solid var(--br)" onclick="closeAcctAjForm()">취소</button>
+            <button class="btn-full" onclick="saveAcctAjMember()">저장</button>
+          </div>
+        </div>
+      </div>
+      <!-- 협력사 관리자 탭 -->
+      <div id="acct-pane-sub" style="display:none">
+        <div id="acct-sub-list"></div>
+      </div>
+      <!-- 초대코드 탭 -->
+      <div id="acct-pane-invite" style="display:none">
+        <div style="font-size:11px;color:var(--tx3);margin-bottom:12px;padding:8px 10px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.15);border-radius:8px">
+          매월 1일 자동으로 새 코드가 생성됩니다.
+        </div>
+        <div id="acct-invite-codes"></div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- AJ 관리자 계정 관리 sheet -->
 <div class="soverlay" id="sh-aj-members" onclick="if(event.target===this)closeSheet('sh-aj-members')">
