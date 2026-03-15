@@ -1371,12 +1371,12 @@ textarea.fg-input{height:72px;line-height:1.5;}
       </div>
     </div>
     <div class="lg">
-      <label class="lg-label">사번 <span class="req">*</span></label>
-      <input type="text" class="lg-input" id="glEmpNo" placeholder="사번 입력" autocomplete="off" inputmode="numeric">
-    </div>
-    <div class="lg">
       <label class="lg-label">이름 <span class="req">*</span></label>
       <input type="text" class="lg-input" id="glName" placeholder="이름 입력">
+    </div>
+    <div class="lg">
+      <label class="lg-label">연락처 <span class="req">*</span></label>
+      <input type="tel" class="lg-input phone-input" id="glPhone" placeholder="숫자만 입력" maxlength="11">
     </div>
     <div class="lg">
       <label class="lg-label">직무 유형 <span class="req">*</span></label>
@@ -3596,21 +3596,24 @@ async function doGoogleProfileSubmit(){
 /* ── Google 이메일로 AJ 멤버 조회 후 로그인 ── */
 async function _doGoogleAjLogin(email, googleName){
   toast('Google 계정 확인 중...','ok',2000);
-  const localList = _getAjMembers();
-  // 1) 로컬 목록에서 google_email 일치 확인
-  let member = localList.find(m=>m.google_email===email);
+  let member = null;
+  // 1) Supabase에서 최신 데이터 먼저 조회 (승인 상태 동기화 보장)
+  try {
+    const rows = await sbReq('aj_members','GET',null,
+      `?google_email=eq.${encodeURIComponent(email)}&limit=1`);
+    if(rows?.length){
+      member = rows[0];
+      // 로컬 캐시 갱신
+      const localList = _getAjMembers();
+      const idx = localList.findIndex(m=>m.emp_no===member.emp_no);
+      if(idx>=0) localList[idx]=member; else localList.push(member);
+      _saveAjMembers(localList);
+    }
+  } catch {}
+  // 2) Supabase 실패(네트워크 등) 시 로컬 캐시 폴백
   if(!member){
-    // 2) Supabase에서 확인 (다기기 지원)
-    try {
-      const rows = await sbReq('aj_members','GET',null,
-        `?google_email=eq.${encodeURIComponent(email)}&limit=1`);
-      if(rows?.length){
-        member = rows[0];
-        const idx = localList.findIndex(m=>m.emp_no===member.emp_no);
-        if(idx>=0) localList[idx]=member; else localList.push(member);
-        _saveAjMembers(localList);
-      }
-    } catch {}
+    const localList = _getAjMembers();
+    member = localList.find(m=>m.google_email===email);
   }
   if(member){
     const _st = member.status||'approved';
@@ -3642,8 +3645,8 @@ function _showGoogleLinkModal(email, googleName){
   window._glEmail = email;
   document.getElementById('gl-email').textContent = email;
   document.getElementById('gl-gname').textContent = googleName || email.split('@')[0];
-  document.getElementById('glEmpNo').value = '';
   document.getElementById('glName').value = googleName || '';
+  document.getElementById('glPhone').value = '';
   toggleGlAjType('관리자'); // chip 초기화
   document.getElementById('modal-glink').style.display = 'flex';
 }
@@ -3661,20 +3664,22 @@ function toggleGlAjType(type){
 
 /* Google AJ 관리자 가입 신청 */
 async function doGoogleAjRegister(){
-  const empNo  = document.getElementById('glEmpNo').value.trim();
   const name   = document.getElementById('glName').value.trim();
+  const phone  = document.getElementById('glPhone').value.trim();
   const ajTypeChip = document.querySelector('#gl-aj-type-chips .chip.on');
   const ajType = ajTypeChip?.textContent||'관리자';
-  if(!empNo||!name){ toast('사번과 이름을 입력하세요','err'); return; }
+  if(!name||!phone){ toast('이름과 연락처를 입력하세요','err'); return; }
+  // google_email 기반 중복 체크 (같은 Google 계정으로 중복 신청 방지)
   const localList = _getAjMembers();
-  if(localList.some(m=>m.emp_no===empNo)){ toast('이미 등록된 사번입니다','err'); return; }
-  // Supabase 중복 체크
+  if(localList.some(m=>m.google_email===window._glEmail)){ toast('이미 가입 신청된 계정입니다','err'); return; }
   try{
-    const rows = await sbReq('aj_members','GET',null,`?emp_no=eq.${encodeURIComponent(empNo)}&limit=1`).catch(()=>null);
-    if(rows?.length){ toast('이미 등록된 사번입니다','err'); return; }
+    const rows = await sbReq('aj_members','GET',null,`?google_email=eq.${encodeURIComponent(window._glEmail)}&limit=1`).catch(()=>null);
+    if(rows?.length){ toast('이미 가입 신청된 계정입니다','err'); return; }
   } catch{}
+  // 사번 자동 생성 (Google 계정 고유 식별자)
+  const empNo = 'G' + Date.now().toString(36).toUpperCase();
   const member = {
-    emp_no:empNo, name, phone:'',
+    emp_no:empNo, name, phone,
     pw_hash:'GOOGLE_AUTH',
     aj_type:ajType,
     google_email:window._glEmail,
@@ -3869,7 +3874,7 @@ function renderAcctAjList(){
           }
         </div>
       </div>
-      <div style="font-size:10px;color:var(--tx3);margin-top:3px;padding-left:2px">사번: <b style="color:var(--tx);font-family:monospace">${m.emp_no}</b>${m.phone?` · <span style="color:var(--tx2)">${m.phone}</span>`:''}${m.google_email?` · <span style="color:#EA4335">${m.google_email}</span>`:''}</div>
+      <div style="font-size:10px;color:var(--tx3);margin-top:3px;padding-left:2px">${isGoogleOnly?'':`사번: <b style="color:var(--tx);font-family:monospace">${m.emp_no}</b> · `}${m.phone?`<span style="color:var(--tx2)">${m.phone}</span>`:'연락처 없음'}${m.google_email?` · <span style="color:#EA4335">${m.google_email}</span>`:''}</div>
     </div>`;
   }).join('');
 }
