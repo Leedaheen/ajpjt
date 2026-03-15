@@ -4314,8 +4314,12 @@ async function doLogin(role){
     const pwHash = await sha256(pw);
     const shake = ()=>{ const el=document.getElementById('ajPw'); el.classList.add('shake'); setTimeout(()=>el.classList.remove('shake'),500); el.value=''; };
     let member = null;
-    // 1) 로컬 목록에서 확인
-    const localList = _getAjMembers();
+
+    // 1) 로그인 전 Supabase에서 최신 멤버 목록 pull (다기기·수동입력 지원)
+    await _pullAjMembersFromSB().catch(()=>{});
+
+    // 2) 로컬 목록에서 확인 (pull 이후)
+    let localList = _getAjMembers();
     const local = localList.find(m=>m.emp_no===empNo);
     if(local){
       if(local.pw_hash==='GOOGLE_AUTH'){ toast('Google 계정으로만 로그인 가능합니다. Google 버튼을 이용하세요.','warn',4000); return; }
@@ -4324,25 +4328,31 @@ async function doLogin(role){
       if((local.status||'approved')==='rejected'){ toast('가입이 거절되었습니다.','err'); return; }
       member = local;
     } else {
-      // 2) Supabase 시도 (로컬에 없을 때만)
+      // 3) 직접 단건 쿼리 (pull이 RLS로 막힌 경우 fallback)
       try {
         const rows = await sbReq('aj_members','GET',null,`?emp_no=eq.${encodeURIComponent(empNo)}`);
-        if(!rows||!rows.length){ toast('등록되지 않은 사번입니다. 먼저 회원가입하세요','err'); shake(); return; }
+        if(!rows||!rows.length){
+          toast('등록되지 않은 사번입니다. 먼저 회원가입하세요','err'); shake(); return;
+        }
         const remote = rows[0];
         if(remote.pw_hash==='GOOGLE_AUTH'){ toast('Google 계정으로만 로그인 가능합니다. Google 버튼을 이용하세요.','warn',4000); return; }
         if(remote.pw_hash!==pwHash){ toast('비밀번호가 틀렸습니다','err'); shake(); return; }
         if((remote.status||'approved')==='pending'){ toast('가입 승인 대기 중입니다. AJ 관리자에게 문의하세요.','warn',4000); return; }
         if((remote.status||'approved')==='rejected'){ toast('가입이 거절되었습니다.','err'); return; }
-        // Supabase에서 받은 멤버를 로컬에도 저장
+        // 로컬에도 저장
         localList.push(remote); _saveAjMembers(localList);
         member = remote;
       } catch(e){
         const _em = e?.message||'';
-        const _msg = _em.includes('NO_SB_URL')
-          ? '등록되지 않은 사번입니다. 먼저 회원가입하세요'
-          : _em.includes('Failed to fetch') || _em.includes('NetworkError')
-            ? '서버 연결 실패. 잠시 후 다시 시도하세요'
-            : '등록되지 않은 사번입니다. 먼저 회원가입하세요';
+        let _msg;
+        if(_em.includes('NO_SB_URL'))
+          _msg = '서버 연결 정보가 없습니다. 설정에서 Supabase URL/Key를 확인하세요.';
+        else if(_em.includes('Failed to fetch')||_em.includes('NetworkError'))
+          _msg = '서버에 연결할 수 없습니다. 네트워크를 확인하세요.';
+        else if(_em.includes('401')||_em.includes('403'))
+          _msg = '서버 접근 권한 오류입니다. Supabase RLS 설정을 확인하세요.';
+        else
+          _msg = `서버 오류: ${_em.slice(0,80)}`;
         toast(_msg,'err'); shake(); return;
       }
     }
