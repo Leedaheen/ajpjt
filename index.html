@@ -1782,11 +1782,11 @@ alter table equipment disable row level security;</pre>
     <div class="sh-handle"></div>
     <div class="sh-title">현장 관리</div>
     <div class="sites-list" id="site-mgr-list"></div>
-    <div style="display:flex;gap:8px;margin-bottom:10px">
-      <input type="text" class="lg-input" id="new-site-name" placeholder="현장명 (예: P5 복합동(골조))">
+    <div style="display:flex;gap:6px;margin-bottom:10px;align-items:center">
+      <input type="text" class="lg-input" id="new-site-name" placeholder="현장명 (예: P5 복합동(골조))" style="flex:0 0 calc(85% - 3px)">
+      <button class="btn-full" onclick="addSite()" style="flex:0 0 calc(15% - 3px);padding:10px 0;white-space:nowrap;font-size:12px">추가</button>
     </div>
     <div class="btn-gap">
-      <button class="btn-full" onclick="addSite()">+ 현장 추가</button>
       <button class="btn-ghost" onclick="closeSheet('sh-sites')">닫기</button>
     </div>
   </div>
@@ -3604,7 +3604,7 @@ async function _syncToSupabase(){
         manager_phone:    t.managerPhone||'',
         manager_location: t.managerLocation||'',
         note:             t.note||'',
-        status:           t.cancelled?'취소':(t.done?'완료':'대기'),
+        status:           t.status || (t.cancelled?'취소':(t.done?'완료':'대기')),
         messages:         JSON.stringify(t.ajMsgs||[]),
         created_at:       t.createdAt ? new Date(t.createdAt).toISOString() : new Date().toISOString(),
         updated_at:       t.updatedAt  ? new Date(t.updatedAt).toISOString()  : new Date(t.createdAt||Date.now()).toISOString()
@@ -3697,50 +3697,101 @@ async function _syncToSupabase(){
 
 async function _pullRecentFromSupabase(){
   const lastSync = DB.g('last_sync', null);
-  if(!lastSync) return; // 첫 동기화 전이면 스킵
-  const since = new Date(new Date(lastSync).getTime() - 60000).toISOString(); // 1분 여유
-  // transit 최근 변경분
-  const trRows = await sbReq('transit','GET',null,`?updated_at=gte.${encodeURIComponent(since)}&order=updated_at.desc&limit=100`).catch(()=>[]);
+  const localTrCount = getTransit().length;
+  const fullPull = !lastSync || localTrCount === 0;
+  const since = fullPull
+    ? new Date(Date.now() - 90*24*60*60*1000).toISOString()
+    : new Date(new Date(lastSync).getTime() - 60000).toISOString();
+
+  // transit pull
+  const trRows = await sbReq('transit','GET',null,
+    `?updated_at=gte.${encodeURIComponent(since)}&order=updated_at.desc&limit=500`
+  ).catch(()=>[]);
   if(Array.isArray(trRows) && trRows.length){
     const localTr = getTransit();
-    let merged = false;
+    let changed = false;
     for(const sr of trRows){
       const idx = localTr.findIndex(r => r.id === sr.record_id);
       const serverTs = new Date(sr.updated_at||sr.created_at||0).getTime();
       if(idx >= 0){
         const localTs = localTr[idx].updatedAt || localTr[idx].createdAt || 0;
         if(serverTs > localTs){
-          // 서버가 더 최신 → 로컬 status/messages 갱신 (핵심 필드만)
-          localTr[idx] = {...localTr[idx], done: sr.status==='완료', cancelled: sr.status==='취소',
+          // 서버가 더 최신 — 핵심 필드 갱신
+          const rawSt = sr.status||'';
+          const mappedSt = rawSt==='완료'
+            ? (localTr[idx].type==='in'?'반입완료':'반출완료')
+            : rawSt==='대기'?'예정': rawSt||localTr[idx].status;
+          localTr[idx] = {...localTr[idx],
+            status: mappedSt,
+            ajEquip: sr.aj_equip || localTr[idx].ajEquip,
             ajMsgs: (() => { try{ return JSON.parse(sr.messages||'[]'); }catch{ return localTr[idx].ajMsgs||[]; } })(),
+            dispatch: sr.dispatch || localTr[idx].dispatch,
             updatedAt: serverTs, synced: true };
-          merged = true;
+          changed = true;
         }
+      } else if(fullPull){
+        // 없는 레코드 추가
+        const rawSt = sr.status||'';
+        const rawType = sr.type==='반입'?'in':sr.type==='반출'?'out':sr.type;
+        const mappedSt = rawSt==='완료'
+          ? (rawType==='in'?'반입완료':'반출완료')
+          : rawSt==='대기'?'예정': rawSt||'예정';
+        localTr.push({
+          id: sr.record_id, date: sr.date, type: rawType,
+          siteId: sr.site_id, company: sr.company,
+          ajEquip: sr.aj_equip||'',
+          reporterName: sr.reporter_name||'', reporterPhone: sr.reporter_phone||'',
+          managerName: sr.manager_name||'', managerPhone: sr.manager_phone||'',
+          managerLocation: sr.manager_location||'', note: sr.note||'',
+          status: mappedSt,
+          ajMsgs: (() => { try{ return JSON.parse(sr.messages||'[]'); }catch{ return []; } })(),
+          dispatch: sr.dispatch||'',
+          createdAt: sr.created_at ? new Date(sr.created_at).getTime() : Date.now(),
+          updatedAt: serverTs, synced: true
+        });
+        changed = true;
       }
     }
-    if(merged){ await saveTransit(localTr); _cache.transit=null; }
+    if(changed){ await saveTransit(localTr); _cache.transit=null; _cache.transitBySite=null; }
   }
-  // AS 최근 변경분
-  const asRows = await sbReq('as_requests','GET',null,`?updated_at=gte.${encodeURIComponent(since)}&order=updated_at.desc&limit=100`).catch(()=>[]);
+
+  // AS pull (기존 로직 유지 + fullPull 추가)
+  const asRows = await sbReq('as_requests','GET',null,
+    `?updated_at=gte.${encodeURIComponent(since)}&order=updated_at.desc&limit=200`
+  ).catch(()=>[]);
   if(Array.isArray(asRows) && asRows.length){
     const localAs = getAsReqs();
-    let merged = false;
+    let changed = false;
     for(const sr of asRows){
       const idx = localAs.findIndex(r => r.id === sr.record_id);
       const serverTs = new Date(sr.updated_at||sr.created_at||0).getTime();
       if(idx >= 0){
         const localTs = localAs[idx].updatedAt || localAs[idx].createdAt || 0;
         if(serverTs > localTs){
-          localAs[idx] = {...localAs[idx], status: sr.status||localAs[idx].status,
+          localAs[idx] = {...localAs[idx],
+            status: sr.status||localAs[idx].status,
             techName: sr.tech_name||localAs[idx].techName,
             resolvedNote: sr.resolve_note||localAs[idx].resolvedNote,
             resolvedAt: sr.resolved_at ? new Date(sr.resolved_at).getTime() : localAs[idx].resolvedAt,
             updatedAt: serverTs, synced: true };
-          merged = true;
+          changed = true;
         }
+      } else if(fullPull){
+        localAs.push({
+          id: sr.record_id, date: sr.date, siteId: sr.site_id, company: sr.company,
+          equip: sr.equip||'', location: sr.location||'',
+          type: sr.fault_type||'기타', desc: sr.description||'',
+          reporterName: sr.reporter_name||'', reporterPhone: sr.reporter_phone||'',
+          status: sr.status||'대기', techName: sr.tech_name||'',
+          resolvedNote: sr.resolve_note||'',
+          resolvedAt: sr.resolved_at ? new Date(sr.resolved_at).getTime() : null,
+          createdAt: sr.created_at ? new Date(sr.created_at).getTime() : Date.now(),
+          updatedAt: serverTs, synced: true
+        });
+        changed = true;
       }
     }
-    if(merged){ await saveAsReqs(localAs); _cache.asReqs=null; }
+    if(changed){ await saveAsReqs(localAs); _cache.asReqs=null; _cache.asBySite=null; }
   }
 }
 
@@ -5050,9 +5101,10 @@ function _trCard(r, _unused, canEdit, canMsg){
   const _olderBlock = _olderCnt > 0
     ? '<div id="'+_accordId+'" style="display:none">'+_olderHtml+'</div>'
     : '';
+  const _myAvBg = S?.role==='aj' ? 'linear-gradient(135deg,#DE1F23,#9f1214)' : 'linear-gradient(135deg,var(--blue),#1d4ed8)';
   const _commentBox = _canAddMsg
     ? '<div style="display:flex;gap:8px;align-items:center;padding-top:8px;border-top:1px solid rgba(222,31,35,.15)">'
-      + '<div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--blue),#1d4ed8);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:900;color:white;flex-shrink:0">'+_myInitials+'</div>'
+      + '<div style="width:28px;height:28px;border-radius:50%;background:'+_myAvBg+';display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:900;color:white;flex-shrink:0">'+_myInitials+'</div>'
       + '<input type="text" id="tr-cmt-'+r.id+'" data-rid="'+r.id+'" placeholder="메시지 입력... (Enter)" onkeydown="if(event.keyCode===13){_addTransitMsg(this.dataset.rid);this.blur();}" style="flex:1;padding:7px 12px;font-size:11px;background:var(--bg2);border:1px solid var(--br);border-radius:20px;color:var(--tx);outline:none">'
       + '<button data-rid="'+r.id+'" onclick="_addTransitMsg(this.dataset.rid)" style="width:30px;height:30px;border-radius:50%;background:#DE1F23;border:none;cursor:pointer;font-size:14px;color:white;flex-shrink:0">↑</button>'
       + '</div>'
@@ -5074,11 +5126,16 @@ function _trCard(r, _unused, canEdit, canMsg){
   if (canEdit && !st.done && !alreadyDone(r)) {
     const completeBtnLabel = isIn ? '✅ 반입완료' : '✅ 반출완료';
     const completeBtnColor = isIn ? '#22c55e' : '#fb923c';
+    const dispatchBtnLabel = r.dispatch ? '🚗 배차정보 확인하기' : '🚗 배차정보 입력';
+    const dispatchBtnColor = r.dispatch ? '#4ade80' : 'var(--tx2)';
     actionHtml =
       `<div style="display:flex;gap:6px;margin-top:4px;border-top:1px solid var(--br);padding-top:8px">` +
       `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:${completeBtnColor};border-color:${completeBtnColor}40;font-weight:700" onclick="completeTransit('${r.id}')">${completeBtnLabel}</button>` +
       `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px" onclick="editTransitDate('${r.id}')">날짜변경</button>` +
       `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:#f87171;border-color:rgba(248,113,113,.3)" onclick="cancelTransit('${r.id}')">취소</button>` +
+      `</div>` +
+      `<div style="margin-top:5px">` +
+      `<button class="btn-ghost" style="width:100%;font-size:10px;padding:5px;color:${dispatchBtnColor}" onclick="openDispatchPopup('${r.id}')">${dispatchBtnLabel}</button>` +
       `</div>`;
   } else if (canEdit && (alreadyDone(r) || st.done) && r.status !== '취소') {
     // 완료 후 안내만 (장비번호 수정은 specBlock 입력란에서)
@@ -5117,6 +5174,56 @@ function _trCard(r, _unused, canEdit, canMsg){
     + '</div>';
 }
 
+
+// ── 배차정보 팝업 ─────────────────────────────────────────────
+function openDispatchPopup(id){
+  const recs = getTransit();
+  const r = recs.find(x=>x.id===id);
+  if(!r) return;
+  const existing = r.dispatch || '';
+  const isAJ = S?.role==='aj';
+
+  // 기존 팝업 제거
+  document.getElementById('dispatch-popup')?.remove();
+
+  const pop = document.createElement('div');
+  pop.id = 'dispatch-popup';
+  pop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;display:flex;align-items:flex-end;justify-content:center;padding-bottom:env(safe-area-inset-bottom)';
+  pop.innerHTML = `
+    <div style="background:var(--bg1);border-radius:20px 20px 0 0;padding:20px 16px;width:100%;max-width:480px;max-height:70vh;overflow-y:auto">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <span style="font-size:14px;font-weight:800">🚗 배차정보</span>
+        <button onclick="document.getElementById('dispatch-popup').remove()" style="background:none;border:none;font-size:20px;color:var(--tx2);cursor:pointer;padding:4px">✕</button>
+      </div>
+      <div style="font-size:11px;color:var(--tx3);margin-bottom:10px">${r.company} · ${r.date}</div>
+      ${isAJ ? `
+      <textarea id="dispatch-input" rows="6" placeholder="배차 차량, 기사명, 연락처, 차량번호 등 입력..."
+        style="width:100%;box-sizing:border-box;padding:10px;font-size:12px;line-height:1.6;background:var(--bg2);border:1px solid var(--br);border-radius:8px;color:var(--tx);resize:none;outline:none">${existing}</textarea>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button onclick="saveDispatch('${id}')" style="flex:1;padding:10px;background:#DE1F23;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">저장</button>
+        <button onclick="document.getElementById('dispatch-popup').remove()" style="flex:1;padding:10px;background:var(--bg2);color:var(--tx2);border:1px solid var(--br);border-radius:8px;font-size:13px;cursor:pointer">닫기</button>
+      </div>` : `
+      <div style="padding:12px;background:var(--bg2);border:1px solid var(--br);border-radius:8px;font-size:12px;line-height:1.8;color:var(--tx);white-space:pre-wrap">${existing || '(배차정보 없음)'}</div>
+      <button onclick="document.getElementById('dispatch-popup').remove()" style="width:100%;margin-top:12px;padding:10px;background:var(--bg2);color:var(--tx2);border:1px solid var(--br);border-radius:8px;font-size:13px;cursor:pointer">닫기</button>`}
+    </div>`;
+  pop.addEventListener('click', e => { if(e.target===pop) pop.remove(); });
+  document.body.appendChild(pop);
+}
+
+async function saveDispatch(id){
+  const inp = document.getElementById('dispatch-input');
+  if(!inp) return;
+  const dispatch = inp.value.trim();
+  const recs = getTransit();
+  const rec = recs.find(r=>r.id===id);
+  if(!rec){ toast('레코드를 찾을 수 없습니다','err'); return; }
+  rec.dispatch = dispatch;
+  rec.synced = false;
+  await saveTransit(recs);
+  document.getElementById('dispatch-popup')?.remove();
+  toast(dispatch ? '배차정보 저장됨' : '배차정보 삭제됨', 'ok');
+  renderTransit();
+}
 
 function shareTransitKakao(recId){
   const recs = getTransit();
@@ -5234,6 +5341,29 @@ function _renderSpecBlock(r, canEdit) {
   // 반입 카드 + 편집 권한: 제원별 장비번호 입력란 표시 (한번에 저장)
   if (isIn && canEdit) {
     const rid = r.id;
+    const allHaveNos = specs.every(s => s.equipNos && s.equipNos.length > 0);
+    const isEditMode = !allHaveNos || (window._specEditMode && window._specEditMode.get(rid));
+    // ── 읽기 전용 모드: 장비번호 이미 저장됨 → 텍스트 표시 + "수정" 버튼
+    if (!isEditMode) {
+      const specLines = specs.map(s => {
+        let line = s.spec + (s.model ? ' (' + s.model + ')' : '') + ' ×' + s.qty;
+        if (s.equipNos && s.equipNos.length)
+          line += ' <span style="font-family:monospace;color:#60a5fa;font-weight:900">' + s.equipNos.join(', ') + '</span>';
+        return line;
+      }).join('<br>');
+      return `<div style="margin-bottom:8px;padding:8px 10px;background:rgba(96,165,250,.04);border:1px solid rgba(96,165,250,.15);border-radius:8px">
+        <div style="font-size:10px;font-weight:700;color:#60a5fa;margin-bottom:6px">🏷 제원별 장비번호</div>
+        <div style="font-size:12px;font-weight:700;line-height:2;margin-bottom:6px">${specLines}</div>
+        <div style="display:flex;justify-content:flex-end">
+          <button onclick="if(!window._specEditMode)window._specEditMode=new Map();window._specEditMode.set('${rid}',true);renderTransit();"
+            style="padding:5px 14px;font-size:11px;font-weight:700;background:rgba(96,165,250,.18);
+              border:1px solid rgba(96,165,250,.35);border-radius:6px;color:#60a5fa;cursor:pointer;white-space:nowrap">
+            ✏️ 수정
+          </button>
+        </div>
+      </div>`;
+    }
+    // ── 편집 모드: 장비번호 입력란 표시
     const rows = specs.map((s, idx) => {
       const hasNos = s.equipNos && s.equipNos.length;
       const nosVal = hasNos ? s.equipNos.join(', ') : '';
@@ -5326,6 +5456,8 @@ async function _saveAllSpecEquip(recordId) {
   }
   // 버튼 텍스트 변경 (1.5초 후 카드 재렌더)
   if (btn) { btn.innerHTML = '✅ 저장완료'; btn.style.background = 'rgba(34,197,94,.15)'; btn.style.borderColor = 'rgba(34,197,94,.35)'; btn.style.color = '#4ade80'; btn.disabled = false; }
+  // 편집 모드 플래그 초기화 → 재렌더 시 읽기 전용으로 표시
+  if (window._specEditMode) window._specEditMode.delete(recordId);
   // 카드 re-render (입력란 border 색 갱신 위해)
   setTimeout(() => renderTransit(), 1500);
 }
@@ -5520,7 +5652,7 @@ function _resetTransitForm(){
   const trn = document.getElementById('tr-reporter-name');
   if(trn) trn.value = S?.name||'';
   const trp = document.getElementById('tr-reporter-phone');
-  if(trp) trp.value = S?.phone||'';
+  if(trp) trp.value = S?.phone || DB.g('last_reporter_phone','') || '';
   const tmn = document.getElementById('tr-manager-name');
   if(tmn) tmn.value = '';
   const tmt = document.getElementById('tr-manager-title');
@@ -5581,8 +5713,10 @@ function _updateSpecModelVisibility(){
   // 인수인계 ↔ 반입/반출 섹션 전환
   const basicSec    = document.getElementById('tr-basic-section');
   const handoverSec = document.getElementById('tr-handover-section');
+  const companyFg   = document.getElementById('tr-company-fg');
   if (basicSec)    basicSec.style.display    = isHandover ? 'none' : '';
   if (handoverSec) handoverSec.style.display = isHandover ? '' : 'none';
+  if (companyFg)   companyFg.style.display   = isHandover ? 'none' : '';
 
   if (isHandover) {
     // 반입 전용 프로젝트 칩 숨기기
@@ -5977,6 +6111,7 @@ function submitTransit(){
   const records = getTransit();
   records.unshift(rec);
   saveTransit(records);
+  DB.s('last_reporter_phone', reporterPhone_raw || reporterPhone || '');
 
   // 반입 신청 시 장비번호가 있으면 마스터에 미리 등록 (예정 상태로)
   if (typeVal === 'in' && equipVal) {
@@ -7535,31 +7670,32 @@ initLogin();
       <div style="font-size:10px;color:var(--tx3);margin-top:4px">해당 없으면 선택하지 않아도 됩니다</div>
     </div>
 
-    <!-- 반입/반출 요청일 -->
-    <div class="fg">
-      <label class="fg-lbl">반입/반출 요청일 <span class="req">*</span></label>
-      <input type="date" class="fg-input" id="tr-date">
-    </div>
-
-    <!-- 현장 선택 (AJ 전체 현장 모드 시 표시) -->
-    <div class="fg" id="tr-site-row" style="display:none">
-      <label class="fg-lbl">현장 선택 <span class="req">*</span></label>
-      <div class="site-select-wrap"><select class="fg-select" id="tr-site-sel" onchange="_updateProjectChips()"></select></div>
+    <!-- 요청일 / 현장 / 업체명 같은 행 -->
+    <div style="display:flex;flex-wrap:wrap;gap:6px">
+      <div class="fg" style="flex:1;min-width:90px;margin-bottom:8px">
+        <label class="fg-lbl">반입/반출 요청일 <span class="req">*</span></label>
+        <input type="date" class="fg-input" id="tr-date">
+      </div>
+      <!-- 현장 선택 (AJ 전체 현장 모드 시 표시) -->
+      <div class="fg" id="tr-site-row" style="display:none;flex:1;min-width:90px;margin-bottom:8px">
+        <label class="fg-lbl">현장 선택 <span class="req">*</span></label>
+        <div class="site-select-wrap"><select class="fg-select" id="tr-site-sel" onchange="_updateProjectChips()"></select></div>
+      </div>
+      <!-- 업체명 -->
+      <div class="fg" id="tr-company-fg" style="flex:1;min-width:90px;margin-bottom:8px">
+        <label class="fg-lbl">업체명 <span class="req">*</span></label>
+        <input type="text" class="fg-input" id="tr-company" placeholder="업체명 입력">
+      </div>
     </div>
 
     <!-- ─── 반입/반출 전용 섹션 ─── -->
     <div id="tr-basic-section">
-    <!-- 업체명 -->
-    <div class="fg">
-      <label class="fg-lbl">업체명 <span class="req">*</span></label>
-      <input type="text" class="fg-input" id="tr-company" placeholder="업체명 입력">
-    </div>
 
     <!-- 제원 목록 -->
     <div class="fg">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
         <label class="fg-lbl" style="margin:0;flex:1">제원 / 수량 <span class="req">*</span></label>
-        <button class="btn-ghost" style="width:20%;font-size:11px;padding:4px 0;text-align:center;flex-shrink:0" onclick="_trAddSpecRow()">+ 추가</button>
+        <button class="btn-ghost" style="width:10%;font-size:11px;padding:4px 0;text-align:center;flex-shrink:0" onclick="_trAddSpecRow()">+ 추가</button>
       </div>
       <div id="tr-specs-list"></div>
     </div>
