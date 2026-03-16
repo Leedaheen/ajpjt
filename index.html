@@ -675,7 +675,6 @@ input,select,button,textarea{font-family:inherit;}
    PAGE: LOG
 ═══════════════════════════════════════════ */
 .log-sticky{
-  position:sticky;top:0;z-index:10;background:var(--bg);
   padding:10px 14px 8px;border-bottom:1px solid var(--br2);
 }
 .floor-filter-row{margin-top:5px;padding-top:5px;border-top:1px solid var(--br2);}
@@ -1480,7 +1479,7 @@ textarea.fg-input{height:72px;line-height:1.5;}
         <!-- Company list -->
         <div class="shd">
           <span class="shd-title">업체별 현황</span>
-          <span class="shd-more" id="homeRankBtn" onclick="guardTab('pg-analysis')" style="display:none">순위보기 →</span>
+          <span class="shd-more" id="homeRankBtn" onclick="goTab('pg-ops');setTimeout(()=>setOpsTab('ana',document.getElementById('opst-ana')),80)" style="display:none">순위보기 →</span>
         </div>
         <div class="co-list" id="coList"></div>
         <div style="height:16px"></div>
@@ -1972,11 +1971,20 @@ create index if not exists idx_aj_status on aj_members(status);</pre>
         <label class="lg-label">알림 기준 시간</label>
         <input type="time" class="lg-input" id="alert-time" value="15:00">
       </div>
-      <div class="lg" style="margin-bottom:0">
+      <div class="lg" style="margin-bottom:10px">
         <label class="lg-label" style="margin-bottom:8px">알림 대상</label>
         <div class="chips">
           <div class="chip on" id="ac-noinput" onclick="this.classList.toggle('on')">미입력 업체</div>
           <div class="chip on" id="ac-noend"   onclick="this.classList.toggle('on')">미종료 장비</div>
+        </div>
+      </div>
+      <div class="lg" style="margin-bottom:0">
+        <label class="lg-label" style="margin-bottom:8px">알림 수신 대상</label>
+        <div class="chips">
+          <div class="chip" id="ac-role-tech"   onclick="this.classList.toggle('on')">기술인</div>
+          <div class="chip on" id="ac-role-sub" onclick="this.classList.toggle('on')">협력사담당자</div>
+          <div class="chip on" id="ac-role-aj"  onclick="this.classList.toggle('on')">AJ관리자</div>
+          <div class="chip" id="ac-role-ajtech"  onclick="this.classList.toggle('on')">AJ정비기사</div>
         </div>
       </div>
     </div>
@@ -2721,6 +2729,111 @@ function _sbLogToLocal(r) {
     ts:         r.created_at ? new Date(r.created_at).getTime() : 0,
     synced:     true,
   };
+}
+
+function _getSiteManager(siteId){
+  if(!siteId) return null;
+  const mbrs=getMembers();
+  return mbrs.find(m=>m.siteId===siteId&&(m.title||'').includes('소장'))||
+         mbrs.find(m=>m.siteId===siteId&&m.role==='sub')||null;
+}
+function _sbTransitToLocal(row){
+  const specs=_parseSpecString(row.equip_specs||'');
+  return {
+    id:             row.record_id||String(row.id),
+    date:           row.date,
+    type:           row.type==='반입'?'in':row.type==='반출'?'out':row.type,
+    siteId:         row.site_id,
+    siteName:       row.site_name,
+    company:        row.company,
+    equip:          row.equip_specs,
+    specs:          specs,
+    ajEquip:        row.aj_equip,
+    reporterName:   row.reporter_name,
+    reporterPhone:  row.reporter_phone,
+    managerName:    row.manager_name,
+    managerPhone:   row.manager_phone,
+    managerLocation:row.manager_location,
+    note:           row.note,
+    status:         row.status,
+    ajMsgs:         (()=>{try{return JSON.parse(row.messages||'[]');}catch{return[];}}()),
+    synced:         true,
+    createdAt:      row.created_at?new Date(row.created_at).getTime():Date.now(),
+    ts:             row.created_at?new Date(row.created_at).getTime():Date.now(),
+  };
+}
+function _sbAsToLocal(row){
+  return {
+    id:           row.record_id||String(row.id),
+    date:         row.date,
+    siteId:       row.site_id,
+    siteName:     row.site_name,
+    company:      row.company,
+    equip:        row.equip,
+    location:     row.location,
+    type:         row.fault_type,
+    faultType:    row.fault_type,
+    desc:         row.description,
+    reporterName: row.reporter_name,
+    reporterPhone:row.reporter_phone,
+    status:       row.status||'대기',
+    techName:     row.tech_name,
+    techPhone:    row.tech_phone,
+    resolvedAt:   row.resolved_at?new Date(row.resolved_at).getTime():null,
+    resolveNote:  row.resolve_note,
+    requestedAt:  row.requested_at?new Date(row.requested_at).getTime():null,
+    materialAt:   row.material_at?new Date(row.material_at).getTime():null,
+    synced:       true,
+    createdAt:    row.created_at?new Date(row.created_at).getTime():Date.now(),
+    ts:           row.created_at?new Date(row.created_at).getTime():Date.now(),
+  };
+}
+let _lastFetchTs=0;
+async function _fetchFromSB(){
+  const sbUrl=DB.g(K.SB_URL,'');
+  if(!sbUrl||!S) return false;
+  try{
+    const siteId=S?.siteId==='all'?null:S?.siteId;
+    const siteFilter=siteId?`&site_id=eq.${encodeURIComponent(siteId)}`:'';
+    const since=new Date(); since.setDate(since.getDate()-30);
+    const sinceStr=since.toISOString();
+    const [trRows,asRows]=await Promise.all([
+      sbReq('transit','GET',null,`?select=*&created_at=gte.${sinceStr}${siteFilter}&order=created_at.desc&limit=200`),
+      sbReq('as_requests','GET',null,`?select=*${siteFilter}&order=created_at.desc&limit=200`),
+    ]);
+    let changed=false;
+    if(Array.isArray(trRows)&&trRows.length){
+      const local=getTransit();
+      const localMap=new Map(local.map(t=>[t.id,t]));
+      for(const row of trRows){
+        const lid=row.record_id||String(row.id);
+        const loc=localMap.get(lid);
+        if(!loc){ local.unshift(_sbTransitToLocal(row)); changed=true; }
+        else if(!loc.synced){ loc.synced=true; changed=true; }
+        else if(row.status&&loc.status!==row.status){ loc.status=row.status; changed=true; }
+      }
+      if(changed) await saveTransit(local);
+    }
+    let asChanged=false;
+    if(Array.isArray(asRows)&&asRows.length){
+      const localAs=getAsReqs();
+      const localAsMap=new Map(localAs.map(a=>[a.id,a]));
+      for(const row of asRows){
+        const lid=row.record_id||String(row.id);
+        const loc=localAsMap.get(lid);
+        if(!loc){ localAs.unshift(_sbAsToLocal(row)); asChanged=true; }
+        else if(!loc.synced){ loc.synced=true; asChanged=true; }
+        else if(row.status&&loc.status!==row.status){ loc.status=row.status; asChanged=true; }
+      }
+      if(asChanged){ changed=true; await saveAsReqs(localAs); }
+    }
+    _lastFetchTs=Date.now();
+    if(changed){
+      if(curPg==='pg-transit') renderTransit();
+      if(curPg==='pg-as') renderASPage();
+    }
+    return changed;
+  }catch(e){ console.warn('[_fetchFromSB]',e); return false; }
 }
 
 // ── localStorage 용량 모니터링 ─────────────────────────────
@@ -4117,10 +4230,10 @@ function openASAnalysis(){
     </div>`).join('');
   const mMax=sortedMonths.length?Math.max(...sortedMonths.map(m=>monthly[m]),1):1;
   document.getElementById('adm-content').innerHTML=`
-    <div style="display:flex;align-items:center;gap:8px;padding:14px 14px 0;margin-bottom:10px">
-      <button class="btn-ghost" style="padding:5px 10px;font-size:11px" onclick="renderAdmin()">← 뒤로</button>
-      <div style="font-size:14px;font-weight:800">AS 현황 분석</div>
-      <div style="font-size:10px;color:var(--tx3);margin-left:auto">총 ${total}건</div>
+    <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:14px 14px 0;margin-bottom:10px">
+      <button class="btn-ghost" style="padding:2px 6px;font-size:9px;justify-self:start;white-space:nowrap" onclick="renderAdmin()">← 뒤로</button>
+      <div style="font-size:14px;font-weight:800;text-align:center">AS 현황 분석</div>
+      <div style="font-size:10px;color:var(--tx3);justify-self:end">총 ${total}건</div>
     </div>
     <div style="padding:0 14px 14px">
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:14px">
@@ -4415,7 +4528,10 @@ function enterApp(){
       syncNow().catch(()=>{});
     });
   setInterval(check3PMAlert, 60000);
-  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible' && S) syncNow(); });
+  setInterval(()=>{ if(S&&document.visibilityState==='visible') _fetchFromSB().catch(()=>{}); }, 30000);
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState==='visible'&&S){ syncNow(); _fetchFromSB().catch(()=>{}); }
+  });
   setTimeout(_initScrollTopBtn, 400);
 }
 
@@ -4552,26 +4668,29 @@ function _initScrollTopBtn(){
   if(!btn) return;
   function _check(){
     if(!btn) return;
-    const asCont = document.getElementById('as-content');
     let scrolled = false;
-    if(curPg === 'pg-as' && asCont){
-      scrolled = asCont.scrollTop > 280;
+    if(curPg === 'pg-as'){
+      const asCont = document.getElementById('as-content');
+      if(asCont) scrolled = asCont.scrollTop > 280;
+    } else if(curPg === 'pg-ops' && curOpsTab === 'log'){
+      const logPanel = document.getElementById('ops-log-panel');
+      if(logPanel) scrolled = logPanel.scrollTop > 280;
     } else {
       const pg = document.getElementById(curPg);
       if(pg) scrolled = pg.scrollTop > 280;
     }
     btn.style.display = scrolled ? '' : 'none';
   }
-  ['pg-transit','pg-ops'].forEach(id=>{
-    document.getElementById(id)?.addEventListener('scroll', _check, {passive:true});
-  });
+  document.getElementById('pg-transit')?.addEventListener('scroll', _check, {passive:true});
   document.getElementById('as-content')?.addEventListener('scroll', _check, {passive:true});
+  document.getElementById('ops-log-panel')?.addEventListener('scroll', _check, {passive:true});
   window._checkScrollTop = _check;
 }
 function _scrollTop(){
-  const el = curPg === 'pg-as'
-    ? document.getElementById('as-content')
-    : document.getElementById(curPg);
+  let el;
+  if(curPg === 'pg-as') el = document.getElementById('as-content');
+  else if(curPg === 'pg-ops' && curOpsTab === 'log') el = document.getElementById('ops-log-panel');
+  else el = document.getElementById(curPg);
   el?.scrollTo({top:0, behavior:'smooth'});
   const btn = document.getElementById('scroll-top-btn');
   if(btn) btn.style.display = 'none';
@@ -4586,8 +4705,8 @@ function goTab(pgId){
   document.getElementById(PG_NT[pgId])?.classList.add('on');
   if(pgId==='pg-home')    renderHome();
   if(pgId==='pg-ops')     initOpsPanel(curOpsTab);
-  if(pgId==='pg-transit') renderTransit();
-  if(pgId==='pg-as')      renderASPage();
+  if(pgId==='pg-transit'){ renderTransit(); if(Date.now()-_lastFetchTs>5000) _fetchFromSB().catch(()=>{}); }
+  if(pgId==='pg-as'){      renderASPage();  if(Date.now()-_lastFetchTs>5000) _fetchFromSB().catch(()=>{}); }
   if(pgId==='pg-admin')   renderAdmin();
 }
 
@@ -5669,35 +5788,36 @@ function renderOpsLog(){
 
 function _getLogPanelHTML(){
   return `<div class="log-sticky">
-    <input class="log-search" id="log-q" placeholder="업체·장비번호·사용자 검색..." oninput="onLogSearch()">
-    <div style="display:grid;grid-template-columns:70% 30%;gap:6px;margin-bottom:6px;align-items:center">
+    <div class="fchips floor-filter-row" id="floor-filter-chips" style="margin-bottom:6px">
+      <div class="floor-fc on" data-floor="" onclick="toggleFloorF('')">전체층</div>
+      <div class="floor-fc" data-floor="모듈동" onclick="toggleFloorF('모듈동')">모듈동</div>
+      <div class="floor-fc" data-floor="1F 외곽" onclick="toggleFloorF('1F 외곽')">1F 외곽</div>
+      <div class="floor-fc" data-floor="1F" onclick="toggleFloorF('1F')">1F</div>
+      <div class="floor-fc" data-floor="2F" onclick="toggleFloorF('2F')">2F</div>
+      <div class="floor-fc" data-floor="3F" onclick="toggleFloorF('3F')">3F</div>
+      <div class="floor-fc" data-floor="4F" onclick="toggleFloorF('4F')">4F</div>
+      <div class="floor-fc" data-floor="5F" onclick="toggleFloorF('5F')">5F</div>
+      <div class="floor-fc" data-floor="6F" onclick="toggleFloorF('6F')">6F</div>
+      <div class="floor-fc" data-floor="7F" onclick="toggleFloorF('7F')">7F</div>
+      <div class="floor-fc" data-floor="8F" onclick="toggleFloorF('8F')">8F</div>
+      <div class="floor-fc" data-floor="기타" onclick="toggleFloorF('기타')">기타</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr auto;gap:6px;margin-bottom:6px;align-items:center">
       <div style="display:flex;gap:4px;align-items:center;min-width:0">
         <input type="date" class="fg-input" id="log-date-from" style="flex:1;padding:5px 6px;font-size:11px;min-width:0" onchange="renderLog()">
         <span style="color:var(--tx3);font-size:11px;flex-shrink:0">~</span>
         <input type="date" class="fg-input" id="log-date-to" style="flex:1;padding:5px 6px;font-size:11px;min-width:0" onchange="renderLog()">
       </div>
-      <button class="btn-ghost" style="width:100%;padding:5px 4px;font-size:10px;white-space:nowrap" onclick="clearDateRange()">초기화</button>
+      <select id="log-status-sel" class="fg-select" style="padding:5px 8px;font-size:11px" onchange="setLFSel(this.value)">
+        <option value="all">전체 상태</option>
+        <option value="open">사용중</option>
+        <option value="done">종료</option>
+        <option value="today">오늘</option>
+      </select>
     </div>
-    <div class="fchips">
-      <div class="fc on" onclick="setLF('all',this)">전체</div>
-      <div class="fc" onclick="setLF('open',this)">사용중</div>
-      <div class="fc" onclick="setLF('done',this)">종료</div>
-      <div class="fc" onclick="setLF('today',this)">오늘</div>
-      <div class="fc" onclick="setLF('mine',this)">내 입력</div>
-    </div>
-    <div class="fchips floor-filter-row" id="floor-filter-chips">
-      <div class="floor-fc on" onclick="setFloorF('',this)">전체층</div>
-      <div class="floor-fc" onclick="setFloorF('모듈동',this)">모듈동</div>
-      <div class="floor-fc" onclick="setFloorF('1F 외곽',this)">1F 외곽</div>
-      <div class="floor-fc" onclick="setFloorF('1F',this)">1F</div>
-      <div class="floor-fc" onclick="setFloorF('2F',this)">2F</div>
-      <div class="floor-fc" onclick="setFloorF('3F',this)">3F</div>
-      <div class="floor-fc" onclick="setFloorF('4F',this)">4F</div>
-      <div class="floor-fc" onclick="setFloorF('5F',this)">5F</div>
-      <div class="floor-fc" onclick="setFloorF('6F',this)">6F</div>
-      <div class="floor-fc" onclick="setFloorF('7F',this)">7F</div>
-      <div class="floor-fc" onclick="setFloorF('8F',this)">8F</div>
-      <div class="floor-fc" onclick="setFloorF('기타',this)">기타</div>
+    <div style="display:grid;grid-template-columns:85% 15%;gap:6px;align-items:stretch">
+      <input class="log-search" id="log-q" placeholder="업체·장비번호·사용자 검색..." oninput="onLogSearch()" style="margin-bottom:0">
+      <button class="btn-ghost" style="padding:0;font-size:10px;white-space:nowrap" onclick="clearAllFilters()">초기화</button>
     </div>
   </div>
   <div class="log-body" id="log-body"></div>`;
@@ -6000,6 +6120,7 @@ function _asCard(r, canAct){
   const idx = getAsReqs().findIndex(x=>x.id===r.id);
   const isAJ = S?.role==='aj';
   const isEngineer = isAJ && S?.ajType==='정비기사';
+  const _asMgr = _getSiteManager(r.siteId);
 
   // 상태 색상
   const stCol = r.status==='처리완료'?'#4ade80':r.status==='자재수급중'?'#f59e0b':'#f87171';
@@ -6024,6 +6145,7 @@ function _asCard(r, canAct){
         <span style="padding:1px 6px;border-radius:4px;background:rgba(248,113,113,.12);color:#f87171;font-size:9px;font-weight:700;margin-left:4px">${r.type||r.faultType||'기타'}</span>
       </div>
       <div class="lc-time">${r.date}${r.requestedAt?` <span style="font-size:9px;color:var(--tx3)">${new Date(r.requestedAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})}</span>`:''}</div>
+      ${_asMgr&&_asMgr.phone?`<a href="tel:${_asMgr.phone}" style="font-size:9px;font-weight:700;color:#60a5fa;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.3);border-radius:6px;padding:3px 8px;text-decoration:none;flex-shrink:0;margin-left:4px">📞 소장</a>`:''}
     </div>
 
     <!-- 장비번호·위치·신청인·통화하기·날짜시간 한 줄 -->
@@ -6048,7 +6170,8 @@ function _asCard(r, canAct){
     <div style="margin-top:8px;border-top:1px solid var(--br);padding-top:8px">
       <div style="font-size:10px;color:var(--tx3);margin-bottom:6px;font-weight:700">처리 업데이트</div>
       <!-- 댓글 입력 -->
-      <div style="display:flex;gap:6px;margin-bottom:8px">
+      <div style="display:flex;gap:6px;margin-bottom:8px;align-items:center">
+        <div style="width:26px;height:26px;border-radius:50%;background:var(--blue);color:#fff;font-size:9px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">${(S?.company||S?.name||'').slice(0,2)||'AJ'}</div>
         <input type="text" placeholder="댓글 입력 (Enter 또는 등록 버튼)" id="astech-cmt-${r.id}"
           onkeydown="if(event.keyCode===13){_addASComment('${r.id}');}"
           style="flex:1;padding:5px 8px;font-size:11px;background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);color:var(--tx)">
@@ -6563,7 +6686,7 @@ function _trCard(r, _unused, canEdit, canMsg){
   const repTel = r.reporterPhone ? '<a href="tel:'+r.reporterPhone+'" style="color:#60a5fa;font-weight:700;text-decoration:none">통화하기</a>' : '';
   if(repLine||repTel){
     let repParts = [];
-    if(repLine) repParts.push('<b>'+repLine+'</b>');
+    if(repLine) repParts.push('<b style="color:var(--tx)">'+repLine+'</b>');
     if(repTel)  repParts.push(repTel);
     if(r.note)  repParts.push('<span style="color:var(--tx2)">'+r.note+'</span>');
     contactHtml += '<div style="grid-column:1/-1;display:flex;align-items:center;gap:4px;flex-wrap:wrap"><span style="color:var(--tx3);flex-shrink:0">신청자</span><span style="color:var(--tx3);flex-shrink:0">:</span>'+repParts.join(_sep)+'</div>';
@@ -7933,7 +8056,7 @@ function startBrowse(){
    LOG — 가상 스크롤 (청크 렌더링)
 ═══════════════════════════════════════════ */
 let logFilter='all';
-let floorFilter='';
+let floorFilter=[];
 let _logDebTimer=null;
 
 function setLF(f,el){
@@ -7943,12 +8066,21 @@ function setLF(f,el){
   renderLog();
 }
 
-function setFloorF(f,el){
-  floorFilter=f;
-  document.querySelectorAll('#floor-filter-chips .floor-fc').forEach(c=>c.classList.remove('on'));
-  el.classList.add('on');
+function toggleFloorF(f){
+  if(f===''){
+    floorFilter=[];
+  } else {
+    const i=floorFilter.indexOf(f);
+    if(i>=0) floorFilter.splice(i,1);
+    else floorFilter.push(f);
+  }
+  document.querySelectorAll('#floor-filter-chips .floor-fc').forEach(c=>{
+    const cf=c.dataset.floor||'';
+    c.classList.toggle('on', cf===''?!floorFilter.length:floorFilter.includes(cf));
+  });
   renderLog();
 }
+function setLFSel(v){ logFilter=v; renderLog(); }
 
 // 검색 디바운스 (타이핑 중 불필요 렌더 방지)
 function onLogSearch(){
@@ -7965,6 +8097,15 @@ const LOG_PAGE_SIZE=200; // 서버에서 한 번에 가져올 최대 건수
 function clearDateRange(){
   document.getElementById('log-date-from').value='';
   document.getElementById('log-date-to').value='';
+  renderLog();
+}
+function clearAllFilters(){
+  document.getElementById('log-date-from').value='';
+  document.getElementById('log-date-to').value='';
+  floorFilter=[];
+  logFilter='all';
+  const sel=document.getElementById('log-status-sel'); if(sel) sel.value='all';
+  document.querySelectorAll('#floor-filter-chips .floor-fc').forEach((c,i)=>c.classList.toggle('on',i===0));
   renderLog();
 }
 
@@ -8000,7 +8141,7 @@ async function _doRenderLog(){
     if(logFilter==='done')  f=f.filter(l=>l.status==='end');
     if(logFilter==='today') f=f.filter(l=>l.date===td);
     if(logFilter==='mine'&&S) f=f.filter(l=>l.name===S.name&&l.company===S.company);
-    if(floorFilter) f=f.filter(l=>(l.floor||'').includes(floorFilter));
+    if(floorFilter.length) f=f.filter(l=>floorFilter.some(ff=>(l.floor||'').includes(ff)));
     f=f.filter(l=>l.type!=='idle');
 
     _logFiltered=f; _logChunkIdx=0;
@@ -8398,6 +8539,7 @@ function saveNotice(siteId, text){
   notices.unshift({id:'notice-'+Date.now().toString(36), siteId, text:text.trim(), createdBy:S.name, createdAt:Date.now(), active:true});
   saveNotices(notices);
   renderNoticeBar();
+  addNotif({icon:'📢', title:'공지 등록', desc:text.trim().slice(0,60), ts:Date.now()});
   toast('공지가 등록되었습니다','ok');
   renderAdmin();
 }
@@ -9112,6 +9254,12 @@ function saveAlertSettings(){
   const t=document.getElementById('alert-time').value;
   const s=DB.g(K.SETTINGS,{});
   s.alertTime=t||'15:00';
+  s.alertRoles={
+    tech:   !!document.getElementById('ac-role-tech')?.classList.contains('on'),
+    sub:    !!document.getElementById('ac-role-sub')?.classList.contains('on'),
+    aj:     !!document.getElementById('ac-role-aj')?.classList.contains('on'),
+    ajtech: !!document.getElementById('ac-role-ajtech')?.classList.contains('on'),
+  };
   DB.s(K.SETTINGS,s);
   _pushSettingsToSB().catch(()=>{});
   toast('✅ 알림 설정 저장됨','ok');
@@ -9294,10 +9442,17 @@ function openNotifSheet(){
   const el=document.getElementById('notif-list');
   el.innerHTML=!ns.length
     ?`<div class="empty" style="padding:30px 0"><div class="empty-ico">🔕</div><div class="empty-txt">알림이 없습니다</div></div>`
-    :ns.slice(0,20).map(n=>`<div class="nitem ${!n.read?'unread':''}"><div class="nitem-ico">${n.icon||'📢'}</div><div><div class="nitem-title">${n.title||''}</div><div class="nitem-desc">${n.desc||''}</div><div class="nitem-time">${new Date(n.ts).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div></div></div>`).join('');
+    :ns.slice(0,20).map((n,i)=>`<div class="nitem ${!n.read?'unread':''}" style="position:relative;padding-right:32px"><div class="nitem-ico">${n.icon||'📢'}</div><div style="flex:1;min-width:0"><div class="nitem-title">${n.title||''}</div><div class="nitem-desc">${n.desc||''}</div><div class="nitem-time">${new Date(n.ts).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div></div><button onclick="deleteNotif(${i})" style="position:absolute;top:6px;right:8px;background:none;border:none;color:var(--tx3);font-size:13px;cursor:pointer;padding:2px;line-height:1" title="삭제">✕</button></div>`).join('');
   openSheet('sh-notif');
 }
 function clearNotifs(){ const ns=DB.g(K.NOTIFS,[]); ns.forEach(n=>n.read=true); DB.s(K.NOTIFS,ns); document.getElementById('ndot').classList.remove('on'); }
+function deleteNotif(idx){
+  const ns=DB.g(K.NOTIFS,[]);
+  ns.splice(idx,1);
+  DB.s(K.NOTIFS,ns);
+  if(!ns.some(n=>!n.read)) document.getElementById('ndot').classList.remove('on');
+  openNotifSheet();
+}
 
 /* ═══════════════════════════════════════════
    EXPORT
