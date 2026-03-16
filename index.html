@@ -4815,14 +4815,11 @@ async function _syncToSupabase(){
     }
   }
 
-  // 6. AJ 멤버 동기화 (로컬 → Supabase upsert, 다기기 로그인 지원)
-  //    push 먼저 → pull(merge)로 다른 기기 계정 반영 순서 보장
-  const _ajMemsSync = _getAjMembers().filter(m => m.emp_no && m.pw_hash);
-  if (_ajMemsSync.length) {
-    await sbBatchUpsert('aj_members', _ajMemsSync).catch(e => console.warn('[sync] aj_members push 실패:', e));
-  }
+  // 6. AJ 멤버 push 제거 — status 등 서버 변경값 덮어쓰기 방지
+  //    개별 저장(_syncAjMemberSb/_patchAjMemberSb)에서 SB에 직접 반영,
+  //    pull은 아래 _pullConfigFromSB() 내 _pullAjMembersFromSB()에서 수행
 
-  // ── 설정 데이터 pull (sites/companies/notices/settings/invite/idle) ──
+  // ── 설정 데이터 pull (sites/companies/notices/settings/invite/idle/aj_members) ──
   await _pullConfigFromSB().catch(e => console.warn('[config pull] 실패:', e));
 
   // ── 다른 기기 변경사항 pull (충돌 방지) ─────────────────
