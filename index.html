@@ -6534,15 +6534,27 @@ function _trCard(r, _unused, canEdit, canMsg){
 
   // 신청인/양중 담당자 정보
   let contactHtml = '';
-  // 신청자: 이름 + 연락처 한 줄
+  const _sep = '<span style="color:var(--br);margin:0 2px">/</span>';
+  // 신청자: 신청자 : 이름 / [통화하기] / 비고내용
   const repLine = (r.recorder||r.reporterName||'');
-  const repPhone = r.reporterPhone ? '<a href="tel:'+r.reporterPhone+'" style="color:#60a5fa;font-weight:600;text-decoration:none">'+r.reporterPhone+'</a>' : '';
-  if(repLine||repPhone) contactHtml += '<div style="grid-column:1/-1;display:flex;align-items:center;gap:6px"><span style="color:var(--tx3)">신청자</span><b>'+repLine+'</b>'+(repPhone?' · '+repPhone:'')+'</div>';
-  // 양중담당: 이름(직함) + 연락처 한 줄
-  const mgrLine = r.managerName ? r.managerName + (r.managerTitle?' ('+r.managerTitle+')':'') : '';
-  const mgrPhone = r.managerPhone ? '<a href="tel:'+r.managerPhone+'" style="color:#60a5fa;font-weight:600;text-decoration:none">'+r.managerPhone+'</a>' : '';
-  if(mgrLine||mgrPhone) contactHtml += '<div style="grid-column:1/-1;display:flex;align-items:center;gap:6px"><span style="color:var(--tx3)">양중담당</span><b>'+mgrLine+'</b>'+(mgrPhone?' · '+mgrPhone:'')+(r.managerLocation?' · <span style="color:var(--tx2)">'+r.managerLocation+'</span>':'')+'</div>';
-  if (r.note) contactHtml += '<div style="grid-column:1/-1;color:var(--tx3);font-size:10px">비고: ' + r.note + '</div>';
+  const repTel = r.reporterPhone ? '<a href="tel:'+r.reporterPhone+'" style="color:#60a5fa;font-weight:700;text-decoration:none">통화하기</a>' : '';
+  if(repLine||repTel){
+    let repParts = [];
+    if(repLine) repParts.push('<b>'+repLine+'</b>');
+    if(repTel)  repParts.push(repTel);
+    if(r.note)  repParts.push('<span style="color:var(--tx2)">'+r.note+'</span>');
+    contactHtml += '<div style="grid-column:1/-1;display:flex;align-items:center;gap:4px;flex-wrap:wrap"><span style="color:var(--tx3);flex-shrink:0">신청자</span><span style="color:var(--tx3);flex-shrink:0">:</span>'+repParts.join(_sep)+'</div>';
+  }
+  // 양중담당: 양중담당 : 이름 / 직급 / [통화하기] / 양중위치
+  const mgrTel = r.managerPhone ? '<a href="tel:'+r.managerPhone+'" style="color:#60a5fa;font-weight:700;text-decoration:none">통화하기</a>' : '';
+  if(r.managerName||mgrTel){
+    let mgrParts = [];
+    if(r.managerName)    mgrParts.push('<b>'+r.managerName+'</b>');
+    if(r.managerTitle)   mgrParts.push('<span style="color:var(--tx2)">'+r.managerTitle+'</span>');
+    if(mgrTel)           mgrParts.push(mgrTel);
+    if(r.managerLocation) mgrParts.push('<span style="color:var(--tx2)">'+r.managerLocation+'</span>');
+    contactHtml += '<div style="grid-column:1/-1;display:flex;align-items:center;gap:4px;flex-wrap:wrap"><span style="color:var(--tx3);flex-shrink:0">양중담당</span><span style="color:var(--tx3);flex-shrink:0">:</span>'+mgrParts.join(_sep)+'</div>';
+  }
 
   // ── 댓글 스레드 (최대 5개) ──
   const _msgs = r.ajMsgs && r.ajMsgs.length ? r.ajMsgs : (r.ajMsg ? [{text:r.ajMsg,author:S?.name||'AJ',ts:0}] : []);
@@ -6611,11 +6623,8 @@ function _trCard(r, _unused, canEdit, canMsg){
   if (canEdit && !st.done && !alreadyDone(r)) {
     const completeBtnLabel = isIn ? '반입완료' : '반출완료';
     const completeBtnColor = isIn ? '#22c55e' : '#fb923c';
-    const dispatchBtnLabel = r.dispatch ? '배차정보 ✓' : '배차정보';
-    const dispatchBtnColor = r.dispatch ? '#4ade80' : 'var(--tx2)';
     actionHtml =
       `<div style="display:flex;gap:6px;margin-top:4px;border-top:1px solid var(--br);padding-top:8px">` +
-      `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:${dispatchBtnColor};border-color:${r.dispatch?'rgba(74,222,128,.35)':'var(--br)'}" onclick="openDispatchPopup('${r.id}')">${dispatchBtnLabel}</button>` +
       `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:#f87171;border-color:rgba(248,113,113,.3)" onclick="cancelTransit('${r.id}')">취소</button>` +
       `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:${completeBtnColor};border-color:${completeBtnColor}40;font-weight:700" onclick="completeTransit('${r.id}')">${completeBtnLabel}</button>` +
       `</div>`;
@@ -6700,9 +6709,11 @@ function _dispatchRowHtml(idx, d={}){
       <span style="font-size:11px;font-weight:700;color:var(--tx3)">${idx+1}번 차량</span>
       <button onclick="this.closest('.dispatch-row').remove()" style="margin-left:auto;background:none;border:none;color:#f87171;font-size:16px;cursor:pointer;line-height:1;padding:0 4px">×</button>
     </div>
-    <input type="text" class="fg-input disp-driver" value="${d.driver||''}" placeholder="기사 성명" style="margin-bottom:6px">
-    <input type="text" class="fg-input disp-carno" value="${d.carNo||''}" placeholder="차량번호 (예: 12가3456)" style="margin-bottom:6px">
-    <input type="tel" class="fg-input phone-input disp-phone" value="${d.phone||''}" placeholder="연락처 (숫자만)" maxlength="11">
+    <div style="display:flex;gap:6px">
+      <input type="text" class="fg-input disp-driver" value="${d.driver||''}" placeholder="기사 성명" style="flex:1;min-width:0">
+      <input type="text" class="fg-input disp-carno" value="${d.carNo||''}" placeholder="차량번호" style="flex:1;min-width:0">
+      <input type="tel" class="fg-input phone-input disp-phone" value="${d.phone||''}" placeholder="연락처" maxlength="11" style="flex:1;min-width:0">
+    </div>
   </div>`;
 }
 function _dispatchAddRow(){
@@ -6919,14 +6930,11 @@ function _renderSpecBlock(r, canEdit) {
       return `<div style="margin-bottom:8px;padding:8px 10px;background:rgba(96,165,250,.04);border:1px solid rgba(96,165,250,.15);border-radius:8px">
         <div style="font-size:10px;font-weight:700;color:#60a5fa;margin-bottom:6px">🏷 제원별 장비번호</div>
         <div style="font-size:12px;font-weight:700;line-height:2;margin-bottom:6px">${specLines}</div>
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
+        <div style="display:flex;flex-direction:column;gap:5px">
           <button onclick="var t=window['_copyData_${rid}'];if(navigator.clipboard){navigator.clipboard.writeText(t).then(()=>toast('복사됨','ok')).catch(()=>{});}else{var e=document.createElement('textarea');e.value=t;document.body.appendChild(e);e.select();document.execCommand('copy');e.remove();toast('복사됨','ok');}"
-            style="padding:4px 12px;font-size:10px;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.25);border-radius:6px;color:#60a5fa;cursor:pointer">📋 복사</button>
+            style="width:100%;padding:5px 0;font-size:11px;font-weight:700;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.25);border-radius:6px;color:#60a5fa;cursor:pointer">복사</button>
           <button onclick="if(!window._specEditMode)window._specEditMode=new Map();window._specEditMode.set('${rid}',true);renderTransit();"
-            style="padding:5px 14px;font-size:11px;font-weight:700;background:rgba(96,165,250,.18);
-              border:1px solid rgba(96,165,250,.35);border-radius:6px;color:#60a5fa;cursor:pointer;white-space:nowrap">
-            수정
-          </button>
+            style="width:100%;padding:5px 0;font-size:11px;font-weight:700;background:rgba(96,165,250,.18);border:1px solid rgba(96,165,250,.35);border-radius:6px;color:#60a5fa;cursor:pointer">수정</button>
         </div>
       </div>`;
     }
@@ -6956,7 +6964,6 @@ function _renderSpecBlock(r, canEdit) {
       <div style="display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-top:6px;padding-top:6px;border-top:1px solid rgba(96,165,250,.12)">
         <button class="btn-ghost" style="font-size:10px;padding:4px 10px;color:${_dispColor}" onclick="openDispatchPopup('${rid}')">${_dispLabel}</button>
         <button class="btn-ghost" style="font-size:10px;padding:4px 10px" onclick="editTransitDate('${rid}')">날짜변경</button>
-        <button onclick="copyInInfo('${rid}')" style="padding:4px 10px;font-size:10px;background:rgba(96,165,250,.15);border:1px solid rgba(96,165,250,.3);border-radius:6px;color:#60a5fa;cursor:pointer;font-weight:700;white-space:nowrap">복사</button>
         <button id="${btnId}" onclick="_saveAllSpecEquip('${rid}')"
           style="padding:4px 10px;font-size:11px;font-weight:700;background:rgba(96,165,250,.18);
             border:1px solid rgba(96,165,250,.35);border-radius:6px;color:#60a5fa;cursor:pointer;white-space:nowrap;flex-shrink:0">
@@ -7403,6 +7410,7 @@ function _submitHandover(date) {
   records.unshift(rec);
   saveTransit(records);
   _applyHandoverToEquipMaster(rec).catch(()=>{});
+  _syncToSupabase().catch(e => console.warn('[submitHandover sync]', e));
   toast('인수인계 등록 완료', 'ok');
   closeSheet('sh-transit-form');
   renderTransit();
@@ -7756,6 +7764,7 @@ function submitTransit(){
 
   addNotif({icon:'📦', title:`반입/반출 신청: ${company}`, desc:`${typeChip.textContent} · ${date}`});
   toast(typeChip.textContent + ' 신청이 등록되었습니다', 'ok');
+  _syncToSupabase().catch(e => console.warn('[submitTransit sync]', e));
   closeSheet('sh-transit-form');
   renderTransit();
 }
@@ -7832,6 +7841,7 @@ async function submitAS(){
   const reqs = getAsReqs(); reqs.unshift(req); saveAsReqs(reqs);
   addNotif({icon:'🔧', title:`AS신청: ${equip}`, desc:`${company} — ${desc.slice(0,30)}`});
   toast('AS 신청이 등록되었습니다','ok');
+  _syncToSupabase().catch(e => console.warn('[submitAS sync]', e));
   updateASBadge();
   closeSheet('sh-as');
   if(curPg==='pg-as') renderASPage();
