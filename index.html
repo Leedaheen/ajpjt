@@ -3588,51 +3588,20 @@ async function doGoogleProfileSubmit(){
 /* ── Google 이메일로 AJ 멤버 조회 후 로그인 ── */
 async function _doGoogleAjLogin(email, googleName){
   toast('Google 계정 확인 중...','ok',2000);
-
-  // 1) SB 전체 pull → 로컬 캐시에 수동 입력 계정(google_email=NULL)까지 모두 반영
   await _pullAjMembersFromSB().catch(()=>{});
   const list = _getAjMembers();
-
-  // 2) google_email 일치 계정 중 approved 우선
+  // google_email 일치 계정 중 approved 우선 선택
   const byEmail = list.filter(m => m.google_email === email);
-  let member = byEmail.find(m => (m.status||'approved') === 'approved') || byEmail[0] || null;
-
-  // 3) 없거나 pending → 이름으로 approved 계정 검색 후 google_email 연동
-  if(!member || (member.status||'approved') === 'pending'){
-    const searchName = member?.name || googleName;
-    if(searchName){
-      const byName = list.find(m =>
-        m.name === searchName &&
-        (m.status||'approved') !== 'pending' &&
-        (m.status||'approved') !== 'rejected' &&
-        m.emp_no !== member?.emp_no
-      );
-      if(byName){
-        if(!byName.google_email){
-          byName.google_email = email;
-          _patchAjMemberSb(byName.emp_no, {google_email: email});
-          _saveAjMembers(list);
-        }
-        member = byName;
-      }
-    }
-  }
-
-  // 4) 여전히 없으면 → 가입 신청 모달
+  const member = byEmail.find(m => (m.status||'approved') === 'approved') || byEmail[0] || null;
   if(!member){ _showGoogleLinkModal(email, googleName); return; }
-
   const _st = member.status||'approved';
   if(_st==='pending'){ toast('가입 승인 대기 중입니다. AJ 관리자에게 문의하세요.','warn',4000); return; }
   if(_st==='rejected'){ toast('가입이 거절되었습니다. AJ 관리자에게 문의하세요.','err',4000); return; }
-
-  // 5) 로그인 성공
   DB.s(K.AJ_MEMBER, member);
   S={ role:'aj', name:member.name, phone:member.phone||'', ajType:member.aj_type||'관리자',
       company:'AJ네트웍스', siteId:'all', siteName:'전체 현장', loginAt:Date.now(), empNo:member.emp_no };
-  DB.s(K.SESSION, S);
-  DB.s('auto_login', true);
-  toast(`${member.name}님 환영합니다!`,'ok');
-  enterApp();
+  DB.s(K.SESSION, S); DB.s('auto_login', true);
+  toast(`${member.name}님 환영합니다!`,'ok'); enterApp();
 }
 
 /* Google 가입 신청 모달 열기 */
@@ -3664,97 +3633,27 @@ async function doGoogleAjRegister(){
   const ajTypeChip = document.querySelector('#gl-aj-type-chips .chip.on');
   const ajType = ajTypeChip?.textContent||'관리자';
   if(!name||!phone){ toast('이름과 연락처를 입력하세요','err'); return; }
-
-  toast('계정 확인 중...','ok',2000);
-
-  // ── Step 1: 이미 이 Google 계정이 연동된 경우 중복 체크 ──
-  try{
-    const rows = await sbReq('aj_members','GET',null,`?google_email=eq.${encodeURIComponent(window._glEmail)}&limit=1`).catch(()=>null);
-    if(rows?.length){
-      const _st = rows[0].status||'approved';
-      if(_st==='approved'){
-        // 이미 연동·승인된 계정 → 그냥 로그인
-        const m = rows[0];
-        const ll = _getAjMembers();
-        const idx = ll.findIndex(x=>x.emp_no===m.emp_no);
-        if(idx>=0) ll[idx]=m; else ll.push(m);
-        _saveAjMembers(ll);
-        document.getElementById('modal-glink').style.display='none';
-        DB.s(K.AJ_MEMBER, m);
-        S={ role:'aj', name:m.name, phone:m.phone||'', ajType:m.aj_type||'관리자',
-            company:'AJ네트웍스', siteId:'all', siteName:'전체 현장', loginAt:Date.now(), empNo:m.emp_no };
-        DB.s(K.SESSION, S); DB.s('auto_login', true);
-        toast(`${m.name}님 환영합니다!`,'ok'); enterApp(); return;
-      }
-      toast('이미 가입 신청된 계정입니다. 승인 대기 중입니다.','warn',4000);
-      document.getElementById('modal-glink').style.display='none'; return;
-    }
-  } catch{}
-
-  // ── Step 2: 이름으로 기존 계정 검색 (google_email 미연동 계정) ──
+  // 이미 이 Google 계정으로 가입된 경우 처리
   await _pullAjMembersFromSB().catch(()=>{});
-  let localList = _getAjMembers();
-
-  // 로컬에서 먼저
-  let existing = localList.find(m => m.name===name && !m.google_email);
-  // 없으면 SB에서 검색 (수동 입력된 계정이 로컬에 없을 수 있음)
-  if(!existing){
-    const sbRows = await sbReq('aj_members','GET',null,
-      `?name=eq.${encodeURIComponent(name)}&limit=5`).catch(()=>null);
-    if(Array.isArray(sbRows)){
-      existing = sbRows.find(r => !r.google_email);
-      if(existing){
-        // 로컬 캐시에도 추가
-        const idx = localList.findIndex(m=>m.emp_no===existing.emp_no);
-        if(idx>=0) localList[idx]=existing; else localList.push(existing);
-        _saveAjMembers(localList);
-      }
-    }
-  }
-
-  if(existing){
-    const _st = existing.status||'approved';
-    if(_st==='rejected'){
-      toast('가입이 거절된 계정입니다. AJ 관리자에게 문의하세요.','err',4000);
-      document.getElementById('modal-glink').style.display='none'; return;
-    }
-    // google_email 연동 (SB + 로컬)
-    const patch = { google_email: window._glEmail };
-    if(phone && !existing.phone) patch.phone = phone;
-    _patchAjMemberSb(existing.emp_no, patch);
-    existing.google_email = window._glEmail;
-    if(patch.phone) existing.phone = phone;
-    const ll = _getAjMembers();
-    const idx2 = ll.findIndex(m=>m.emp_no===existing.emp_no);
-    if(idx2>=0) ll[idx2]=existing; else ll.push(existing);
-    _saveAjMembers(ll);
-
-    document.getElementById('modal-glink').style.display='none';
-
+  const localList = _getAjMembers();
+  const dup = localList.find(m => m.google_email === window._glEmail);
+  if(dup){
+    const _st = dup.status||'approved';
     if(_st==='approved'){
-      // 즉시 로그인
-      DB.s(K.AJ_MEMBER, existing);
-      S={ role:'aj', name:existing.name, phone:existing.phone||phone, ajType:existing.aj_type||ajType,
-          company:'AJ네트웍스', siteId:'all', siteName:'전체 현장', loginAt:Date.now(), empNo:existing.emp_no };
+      document.getElementById('modal-glink').style.display='none';
+      DB.s(K.AJ_MEMBER, dup);
+      S={ role:'aj', name:dup.name, phone:dup.phone||'', ajType:dup.aj_type||'관리자',
+          company:'AJ네트웍스', siteId:'all', siteName:'전체 현장', loginAt:Date.now(), empNo:dup.emp_no };
       DB.s(K.SESSION, S); DB.s('auto_login', true);
-      toast(`${existing.name}님 환영합니다!`,'ok'); enterApp();
-    } else {
-      // pending → 승인 대기
-      toast('계정이 연동되었습니다. AJ 관리자 승인 후 로그인 가능합니다.','warn',5000);
+      toast(`${dup.name}님 환영합니다!`,'ok'); enterApp(); return;
     }
-    return;
+    toast('이미 가입 신청된 계정입니다. 승인 대기 중입니다.','warn',4000);
+    document.getElementById('modal-glink').style.display='none'; return;
   }
-
-  // ── Step 3: 기존 계정 없음 → 신규 pending 계정 생성 ──
+  // 신규 pending 계정 생성
   const empNo = 'G' + Date.now().toString(36).toUpperCase();
-  const member = {
-    emp_no:empNo, name, phone,
-    pw_hash:'GOOGLE_AUTH',
-    aj_type:ajType,
-    google_email:window._glEmail,
-    status:'pending',
-    created_at:new Date().toISOString()
-  };
+  const member = { emp_no:empNo, name, phone, pw_hash:'GOOGLE_AUTH', aj_type:ajType,
+    google_email:window._glEmail, status:'pending', created_at:new Date().toISOString() };
   localList.push(member);
   _saveAjMembers(localList);
   _syncAjMemberSb(member);
