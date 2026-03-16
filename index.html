@@ -6120,8 +6120,6 @@ function _asCard(r, canAct){
   const idx = getAsReqs().findIndex(x=>x.id===r.id);
   const isAJ = S?.role==='aj';
   const isEngineer = isAJ && S?.ajType==='정비기사';
-  const _asMgr = _getSiteManager(r.siteId);
-
   // 상태 색상
   const stCol = r.status==='처리완료'?'#4ade80':r.status==='자재수급중'?'#f59e0b':'#f87171';
   const stBg  = r.status==='처리완료'?'rgba(74,222,128,.15)':r.status==='자재수급중'?'rgba(245,158,11,.15)':'rgba(248,113,113,.15)';
@@ -6145,7 +6143,6 @@ function _asCard(r, canAct){
         <span style="padding:1px 6px;border-radius:4px;background:rgba(248,113,113,.12);color:#f87171;font-size:9px;font-weight:700;margin-left:4px">${r.type||r.faultType||'기타'}</span>
       </div>
       <div class="lc-time">${r.date}${r.requestedAt?` <span style="font-size:9px;color:var(--tx3)">${new Date(r.requestedAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})}</span>`:''}</div>
-      ${_asMgr&&_asMgr.phone?`<a href="tel:${_asMgr.phone}" style="font-size:9px;font-weight:700;color:#60a5fa;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.3);border-radius:6px;padding:3px 8px;text-decoration:none;flex-shrink:0;margin-left:4px">📞 소장</a>`:''}
     </div>
 
     <!-- 장비번호·위치·신청인·통화하기·날짜시간 한 줄 -->
