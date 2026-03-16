@@ -4159,32 +4159,20 @@ async function doAjRegister(){
   if(!name||!phone||!pw){ toast('필수 항목을 모두 입력하세요','err'); return; }
   if(pw.length<6){ toast('비밀번호는 6자 이상이어야 합니다','err'); return; }
   if(pw!==pw2){ toast('비밀번호가 일치하지 않습니다','err'); return; }
-  const localList=_getAjMembers();
   const pwHash=await sha256(pw);
   const empNo='M'+Date.now().toString(36).toUpperCase();
-  const member={emp_no:empNo,name,phone,pw_hash:pwHash,aj_type:ajType,created_at:new Date().toISOString()};
-  // 로컬 저장 (주 저장소)
-  localList.push(member); _saveAjMembers(localList);
-  DB.s(K.AJ_MEMBER, member);
-  // Supabase 동기화 (await — 서버 저장 여부 사용자에게 피드백)
-  // 비밀번호는 SHA-256 해시(pw_hash)로만 저장됩니다
+  const member={emp_no:empNo,name,phone,pw_hash:pwHash,aj_type:ajType,status:'pending',created_at:new Date().toISOString()};
+  // 서버 우선 저장 — 성공 후 로컬 캐시 갱신
   try {
-    await sbBatchUpsert('aj_members', [member]);
-    toast('가입 완료! 서버에 저장되었습니다 ✓','ok');
-  } catch(sbErr) {
-    if (sbErr?.message === 'NO_SB_URL') {
-      toast('가입 완료 (Supabase 미설정 — 이 기기에서만 로그인 가능)','warn');
-    } else {
-      console.warn('[AJ Register] Supabase 저장 실패:', sbErr?.message);
-      // 5초 후 1회 자동 재시도 (실패해도 다음 syncNow에서 재시도)
-      setTimeout(async () => {
-        try {
-          await sbBatchUpsert('aj_members', [member]);
-          toast('서버 저장 완료 (재시도 성공) ✓','ok');
-        } catch { /* syncNow에서 자동 재처리 */ }
-      }, 5000);
-      toast('가입 완료! 단, 서버 저장 지연 중 — 잠시 후 자동 재시도됩니다.','warn');
-    }
+    await sbBatchUpsert('aj_members',[member]);
+    const localList=_getAjMembers();
+    localList.push(member); _saveAjMembers(localList);
+    toast('가입 신청 완료! AJ 관리자 승인 후 로그인 가능합니다 ✓','ok',4000);
+  } catch(e){
+    const _em=e?.message||'';
+    if(_em==='NO_SB_URL') toast('서버 연결 정보가 없습니다. 관리자에게 문의하세요.','err',4000);
+    else toast(`가입 실패: ${_em.slice(0,80)||'서버 오류'}. 잠시 후 다시 시도해주세요.`,'err',4000);
+    return;
   }
   switchAjTab('login');
   document.getElementById('ajName').value=name;
@@ -4197,15 +4185,22 @@ async function doAjChangePwLogin(){
   if(!name||!pw){ toast('모든 항목을 입력하세요','err'); return; }
   if(pw.length<6){ toast('비밀번호는 6자 이상이어야 합니다','err'); return; }
   if(pw!==pw2){ toast('비밀번호가 일치하지 않습니다','err'); return; }
+  // 서버에서 최신 목록 pull 후 이름으로 조회
+  await _pullAjMembersFromSB().catch(()=>{});
   const localList=_getAjMembers();
   const idx=localList.findIndex(m=>m.name===name);
-  if(idx===-1){ toast('등록된 이름이 아닙니다','err'); return; }
+  if(idx===-1){ toast('등록된 이름이 아닙니다. 서버에서도 찾을 수 없습니다.','err'); return; }
   const pwHash=await sha256(pw);
-  localList[idx].pw_hash=pwHash; _saveAjMembers(localList);
-  const cached=DB.g(K.AJ_MEMBER,null);
-  if(cached&&cached.name===name){ cached.pw_hash=pwHash; DB.s(K.AJ_MEMBER,cached); }
-  _patchAjMemberSb(localList[idx].emp_no,{pw_hash:pwHash});
-  toast('비밀번호 변경 완료','ok');
+  // 서버 우선 패치 → 로컬 캐시 갱신
+  try {
+    await sbReq('aj_members','PATCH',{pw_hash:pwHash},`?emp_no=eq.${encodeURIComponent(localList[idx].emp_no)}`);
+    localList[idx].pw_hash=pwHash; _saveAjMembers(localList);
+    const cached=DB.g(K.AJ_MEMBER,null);
+    if(cached&&cached.name===name){ cached.pw_hash=pwHash; DB.s(K.AJ_MEMBER,cached); }
+    toast('비밀번호 변경 완료 ✓','ok');
+  } catch(e){
+    toast(`비밀번호 변경 실패: ${e?.message?.slice(0,60)||'서버 오류'}`,'err',4000); return;
+  }
   switchAjTab('login');
   document.getElementById('ajName').value=name;
 }
@@ -4250,16 +4245,32 @@ async function doLogin(role){
     const subPw2=document.getElementById('subPw2')?.value||'';
     if(!site||!co||!name||!subPhone||!subPw){ toast('현장·업체·이름·연락처·비밀번호를 입력해주세요','err'); return; }
     if(subPw.length<6){ toast('비밀번호는 6자 이상이어야 합니다','err'); return; }
-    const members=getMembers();
-    // 이미 가입된 멤버 확인 (이름+업체+현장)
-    const existing=members.find(m=>m.name===name&&m.company===co&&m.siteId===site&&m.role!=='tech'&&m.title!=='기술인');
+    // 서버에서 먼저 조회 — 로컬 캐시는 fallback
+    let existing=null;
+    try {
+      const rows=await sbReq('members','GET',null,
+        `?name=eq.${encodeURIComponent(name)}&company=eq.${encodeURIComponent(co)}&site_id=eq.${encodeURIComponent(site)}&role=neq.tech&limit=5`);
+      if(Array.isArray(rows)&&rows.length){
+        const r=rows[0];
+        existing={id:r.record_id,name:r.name,company:r.company,siteId:r.site_id,
+          siteName:r.site_name,phone:r.phone,title:r.title,role:r.role||'sub',
+          status:r.status||'approved',google_email:r.google_email||'',pw_hash:r.pw_hash||'',
+          joinedAt:new Date(r.joined_at||Date.now()).getTime(),synced:true};
+        // 로컬 캐시 갱신
+        const _all=getMembers();
+        const _idx=_all.findIndex(m=>m.id===existing.id);
+        if(_idx>=0) _all[_idx]={..._all[_idx],...existing}; else _all.push(existing);
+        saveMembers(_all);
+      }
+    } catch(e){
+      console.warn('[sub login] SB 조회 실패, 로컬 fallback:',e?.message);
+      existing=getMembers().find(m=>m.name===name&&m.company===co&&m.siteId===site&&m.role!=='tech'&&m.title!=='기술인')||null;
+    }
     if(existing){
       const st=existing.status||'approved';
       if(st==='pending'){ toast('가입 승인 대기 중입니다. AJ관리자에게 문의하세요.','warn',4000); return; }
       if(st==='rejected'){ toast('가입이 거절되었습니다. AJ관리자에게 문의하세요.','err'); return; }
-      // Google 계정 확인
       if(existing.pw_hash==='GOOGLE_AUTH'){ toast('이 계정은 Google 로그인을 사용하세요.','err',4000); return; }
-      // 비밀번호 검증
       if(existing.pw_hash){
         const hash=await sha256(subPw);
         if(hash!==existing.pw_hash){ toast('비밀번호가 틀렸습니다.','err'); return; }
@@ -4273,21 +4284,28 @@ async function doLogin(role){
       const _newMbr={id:'sub-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),
         name,company:co,siteId:site,siteName:getSites().find(s=>s.id===site)?.name||site,
         phone:subPhone,title:subTitle,role:'sub',status:'pending',google_email:'',
-        pw_hash:pwHash, joinedAt:Date.now(),synced:false};
-      members.push(_newMbr);
-      saveMembers(members);
-      addNotif({icon:'',title:`신규 관리자 가입신청: ${co}`,
-        desc:`${co} ${name}님이 가입을 신청했습니다. 승인이 필요합니다.`});
-      const _sm=Object.fromEntries(getSites().map(s=>[s.id,s.name]));
-      sbReq('members','POST',[{
-        record_id:_newMbr.id,name:_newMbr.name,company:_newMbr.company,
-        site_id:_newMbr.siteId,site_name:_sm[_newMbr.siteId]||'',
-        phone:_newMbr.phone,title:_newMbr.title,pw_hash:pwHash,
-        role:'sub',status:'pending',google_email:'',
-        joined_at:new Date(_newMbr.joinedAt).toISOString()
-      }],'?on_conflict=record_id').then(()=>{_newMbr.synced=true;saveMembers(getMembers());}).catch(()=>{});
-      toast('가입 신청 완료! AJ관리자 승인 후 로그인 가능합니다.','ok',4000);
-      return; // 승인 전 로그인 불가
+        pw_hash:pwHash,joinedAt:Date.now(),synced:false};
+      // 서버 우선 저장 — 성공 후 로컬 캐시 갱신
+      try {
+        const _sm=Object.fromEntries(getSites().map(s=>[s.id,s.name]));
+        await sbReq('members','POST',[{
+          record_id:_newMbr.id,name:_newMbr.name,company:_newMbr.company,
+          site_id:_newMbr.siteId,site_name:_sm[_newMbr.siteId]||'',
+          phone:_newMbr.phone,title:_newMbr.title,pw_hash:pwHash,
+          role:'sub',status:'pending',google_email:'',
+          joined_at:new Date(_newMbr.joinedAt).toISOString()
+        }],'?on_conflict=record_id');
+        _newMbr.synced=true;
+        const _all=getMembers(); _all.push(_newMbr); saveMembers(_all);
+        addNotif({icon:'',title:`신규 관리자 가입신청: ${co}`,
+          desc:`${co} ${name}님이 가입을 신청했습니다. 승인이 필요합니다.`});
+        toast('가입 신청 완료! AJ관리자 승인 후 로그인 가능합니다 ✓','ok',4000);
+      } catch(e){
+        const _em=e?.message||'';
+        if(_em==='NO_SB_URL') toast('서버 연결 정보가 없습니다. 관리자에게 문의하세요.','err',4000);
+        else toast(`가입 신청 실패: ${_em.slice(0,80)||'서버 오류'}`,'err',4000);
+      }
+      return;
     }
     S={role:'sub',name,title:subTitle||existing?.title||'',phone:subPhone||existing?.phone||'',company:co,siteId:site,siteName:getSites().find(s=>s.id===site)?.name||site,loginAt:Date.now()};
   } else {
