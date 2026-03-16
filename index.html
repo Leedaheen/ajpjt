@@ -3349,8 +3349,8 @@ async function ensureAdminAccount(){
   // 신규 생성 시 Supabase에도 저장 (다기기 로그인 지원)
   _syncAjMemberSb(admin);
 }
-function _syncAjMemberSb(member){ // Supabase 백그라운드 upsert (실패 무시)
-  sbBatchUpsert('aj_members',[member]).catch(()=>{});
+function _syncAjMemberSb(member){ // Supabase 백그라운드 upsert
+  sbBatchUpsert('aj_members',[member]).catch(e=>console.warn('[SB] aj_members upsert 실패:',e?.message));
 }
 function _patchAjMemberSb(empNo,patch){ // Supabase 백그라운드 패치 (실패 무시)
   sbReq('aj_members','PATCH',patch,`?emp_no=eq.${encodeURIComponent(empNo)}`).catch(()=>{});
@@ -3668,9 +3668,15 @@ async function doGoogleAjRegister(){
     google_email:window._glEmail, status:'pending', created_at:new Date().toISOString() };
   localList.push(member);
   _saveAjMembers(localList);
-  _syncAjMemberSb(member);
   document.getElementById('modal-glink').style.display='none';
-  toast('가입 신청 완료! 기존 AJ 관리자 승인 후 로그인 가능합니다.','ok',4000);
+  // Supabase 저장 (await — 실패 시 사용자에게 피드백)
+  try {
+    await sbBatchUpsert('aj_members', [member]);
+    toast('가입 신청 완료! AJ 관리자 승인 후 로그인 가능합니다 ✓','ok',4000);
+  } catch(e) {
+    console.error('[Google Register] SB 저장 실패:', e?.message);
+    toast(`가입 신청 완료(로컬 저장). 단, 서버 저장 실패: ${e?.message||'네트워크 오류'}`, 'warn', 5000);
+  }
 }
 
 /* ── AJ 관리자 계정 관리 UI ── */
