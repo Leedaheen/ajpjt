@@ -2152,9 +2152,9 @@ document.addEventListener('input', function(e){
 ═══════════════════════════════════════════ */
 /* ── Supabase 기본 연결 정보 (앱 배포 시 고정값) ── */
 /* 이 값이 있으면 localStorage 설정 없이도 항상 연결됩니다 */
-const SB_DEFAULT_URL = 'https://dmjelqvpcsafottblvwx.supabase.co';
+const SB_DEFAULT_URL = 'https://jqhlxbarstqsnizquxeu.supabase.co';
 const GOOGLE_DEFAULT_CLIENT_ID = '1075257837095-jrdnlfql4s4emh4mmhnjcvhomon6f3kk.apps.googleusercontent.com';
-const SB_DEFAULT_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRtamVscXZwY3NhZm90dGJsdnd4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQxOTAzNDcsImV4cCI6MjA1OTc2NjM0N30.Z8NfPAVbUz7BIi9ifS9bdVFXUYj6dgu00pwP6THNA8A';
+const SB_DEFAULT_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpxaGx4YmFyc3Rxc25penF1eGV1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI4Njg1NzIsImV4cCI6MjA4ODQ0NDU3Mn0.VIEcG6t2xRr6BUka5dOECTxND2dAW4g8UjhOjn09Ef4';
 
 const K = {
   SITES:   'sites_v3',
@@ -2190,11 +2190,6 @@ const DB = {
     try {
       const v = localStorage.getItem(k);
       const stored = v ? JSON.parse(v) : null;
-      // SB_URL / SB_KEY: 구버전 URL 감지 시 자동 교체
-      if (k === 'sb_url' && stored === 'https://jqhlxbarstqsnizquxeu.supabase.co') {
-        localStorage.removeItem(k);
-        return SB_DEFAULT_URL;
-      }
       // SB_URL / SB_KEY: localStorage 없으면 하드코딩 기본값 사용
       if (stored !== null && stored !== '') return stored;
       if (k === 'sb_url'      && SB_DEFAULT_URL) return SB_DEFAULT_URL;
