@@ -4593,27 +4593,39 @@ async function sbReq(table, method='GET', data=null, query=''){
   const url = DB.g(K.SB_URL,'');
   const key  = DB.g(K.SB_KEY,'');
   if(!url || !key) throw new Error('NO_SB_URL');
-  const endpoint = `${url}/rest/v1/${table}${query}`;
-  const prefer = method==='POST' ? 'resolution=merge-duplicates,return=minimal'
-               : method==='PATCH' ? 'return=minimal' : '';
-  const opts = {
-    method,
-    headers: {
-      'apikey': key,
-      'Authorization': `Bearer ${key}`,
-      'Content-Type': 'application/json',
-      ...(prefer ? { 'Prefer': prefer } : {})
+  const _exec = async () => {
+    const endpoint = `${url}/rest/v1/${table}${query}`;
+    const prefer = method==='POST' ? 'resolution=merge-duplicates,return=minimal'
+                 : method==='PATCH' ? 'return=minimal' : '';
+    const opts = {
+      method,
+      headers: {
+        'apikey': key,
+        'Authorization': `Bearer ${key}`,
+        'Content-Type': 'application/json',
+        ...(prefer ? { 'Prefer': prefer } : {})
+      }
+    };
+    if(data) opts.body = JSON.stringify(data);
+    const r = await fetch(endpoint, opts);
+    if(!r.ok){
+      const err = await r.text();
+      throw new Error(`SB ${r.status}: ${err}`);
     }
+    if(method==='DELETE'||method==='PATCH') return null;
+    const ct = r.headers.get('content-type')||'';
+    return ct.includes('json') ? r.json() : null;
   };
-  if(data) opts.body = JSON.stringify(data);
-  const r = await fetch(endpoint, opts);
-  if(!r.ok){
-    const err = await r.text();
-    throw new Error(`SB ${r.status}: ${err}`);
+  try {
+    return await _exec();
+  } catch(e) {
+    // PGRST205: 스키마 캐시 미갱신 → 3초 후 1회 자동 재시도
+    if(e?.message?.includes('PGRST205')){
+      await new Promise(r => setTimeout(r, 3000));
+      return await _exec();
+    }
+    throw e;
   }
-  if(method==='DELETE'||method==='PATCH') return null;
-  const ct = r.headers.get('content-type')||'';
-  return ct.includes('json') ? r.json() : null;
 }
 
 // 배치 upsert — SB_BATCH 단위로 분할 전송
