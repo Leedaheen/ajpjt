@@ -3044,14 +3044,15 @@ function setupEquipAutocomplete(inputId, opts = {}) {
     .equip-ac-dd {
       display: none;
       position: fixed;
-      background: var(--card);
-      border: 1px solid var(--border);
+      background: var(--bg2, #1e1e2e);
+      border: 1px solid var(--br, rgba(255,255,255,.1));
       border-radius: 10px;
-      box-shadow: 0 8px 24px rgba(0,0,0,.35);
+      box-shadow: 0 8px 32px rgba(0,0,0,.55);
       z-index: 9999;
       max-height: 220px;
       overflow-y: auto;
       margin-top: 4px;
+      backdrop-filter: none;
     }
     .equip-ac-item {
       padding: 9px 12px;
@@ -4746,7 +4747,6 @@ async function _syncToSupabase(){
         meter_end:   String(l.meterEnd||''),
         off_reason:  l.offReason||'',
         created_at:  l.createdAt ? new Date(l.createdAt).toISOString() : new Date(l.ts||Date.now()).toISOString(),
-        updated_at:  l.updatedAt  ? new Date(l.updatedAt).toISOString()  : new Date(l.ts||Date.now()).toISOString()
       }));
       await sbBatchUpsert('logs', rows);
       await IDB.markSynced('logs', unsyncLogs.map(l=>l.id)).catch(()=>{});
@@ -4774,7 +4774,6 @@ async function _syncToSupabase(){
         status:           t.status || (t.cancelled?'취소':(t.done?'완료':'대기')),
         messages:         JSON.stringify(t.ajMsgs||[]),
         created_at:       t.createdAt ? new Date(t.createdAt).toISOString() : new Date().toISOString(),
-        updated_at:       t.updatedAt  ? new Date(t.updatedAt).toISOString()  : new Date(t.createdAt||Date.now()).toISOString()
       }));
       await sbBatchUpsert('transit', rows);
       await IDB.markSynced('transit', unsyncTr.map(t=>t.id)).catch(()=>{});
@@ -5187,15 +5186,45 @@ async function _syncToGS(){
 
 async function pushToGS(entry){
   const sbUrl = DB.g(K.SB_URL,'');
-  try{
-    if(sbUrl){
-      await _syncToSupabase();
-      entry.synced=true;  // Supabase 저장 성공 시 동기화 완료 표시
-    } else {
+  if(sbUrl){
+    // ── 서버 직접 저장 (로컬 우선 아님) ──
+    try{
+      const siteMap=Object.fromEntries(getSites().map(s=>[s.id,s.name]));
+      const row={
+        record_id:   entry.id||'',
+        date:        entry.date||'',
+        site_id:     entry.siteId||'',
+        site_name:   siteMap[entry.siteId]||entry.siteId||'',
+        company:     entry.company||'',
+        floor:       entry.floor||'',
+        equip:       entry.equip||'',
+        recorder:    entry.name||entry.recorder||'',
+        status:      entry.status||'',
+        start_time:  entry.startTime||'',
+        end_time:    entry.endTime||'',
+        used_hours:  entry.duration||0,
+        meter_start: String(entry.meterStart||''),
+        meter_end:   String(entry.meterEnd||''),
+        off_reason:  entry.offReason||'',
+        created_at:  entry.createdAt?new Date(entry.createdAt).toISOString():new Date(entry.ts||Date.now()).toISOString(),
+      };
+      await sbBatchUpsert('logs',[row]);
+      entry.synced=true;
+    } catch(e){
+      console.warn('[pushToGS Supabase]',e);
+      entry.synced=false;
+      scheduleRetrySync();
+    }
+  } else {
+    // ── Google Sheets 폴백 ──
+    try{
       await gsReq('addLogs',{logs:[entry]});
       entry.synced=true;
+    } catch{
+      entry.synced=false;
+      scheduleRetrySync();
     }
-  } catch{ entry.synced=false; scheduleRetrySync(); }
+  }
 }
 
 let _retrySyncTimer=null;
@@ -5441,8 +5470,7 @@ async function submitStart(){
     await saveLog(entry);          // IDB 단건 저장
     // 장비별 층수 데이터 수집 (새 층수로 덮어쓰기)
     if(equip && floors){ const _fm=DB.g('equip_floors',{}); _fm[equip]={floor:floors,detail:locationDetail}; DB.s('equip_floors',_fm); }
-    await pushToGS(entry);         // Supabase/GS 즉시 push
-    _syncToSupabase().catch(e => console.warn('[submitStart sync]', e)); // 즉시 추가 동기화
+    await pushToGS(entry);         // Supabase 직접 저장 (실패 시 로컬 + 재시도 예약)
     toast(entry.synced?'사용 신청 완료':'로컬 저장 (미연동)', entry.synced?'ok':'warn');
     updatePendingBanner(); updateLogBadge();
     document.getElementById('f-equip').value='';
@@ -5849,7 +5877,7 @@ function renderASPage(){
   <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
     <input class="log-search" placeholder="장비번호·업체명·내용 검색..." value="${_asSearchQ}"
       oninput="_asSearchQ=this.value; renderASPage()" style="flex:1;margin:0">
-    ${!isGuest?`<button onclick="openASSheet()" style="font-size:11px;font-weight:800;padding:7px 12px;border-radius:8px;background:linear-gradient(135deg,#dc2626,#b91c1c);color:white;border:none;cursor:pointer;white-space:nowrap">+ AS</button>`:''}
+    ${!isGuest?`<button onclick="openASSheet()" style="font-size:11px;font-weight:800;padding:7px 12px;border-radius:8px;background:linear-gradient(135deg,#dc2626,#b91c1c);color:white;border:none;cursor:pointer;white-space:nowrap">AS신청</button>`:''}
   </div>`;
   }
 
@@ -5998,20 +6026,17 @@ function _asCard(r, canAct){
       <div class="lc-time">${r.date}${r.requestedAt?` <span style="font-size:9px;color:var(--tx3)">${new Date(r.requestedAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})}</span>`:''}</div>
     </div>
 
-    <!-- 장비번호·위치 한 줄 + 접수내용 -->
-    <div style="margin:6px 0 4px;font-size:11px">
-      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:3px">
-        <span style="font-family:monospace;font-weight:800;color:#60a5fa">${r.equip||'—'}</span>
-        ${r.location?`<span style="color:var(--tx3)">·</span><span style="color:var(--tx2)">${r.location}</span>`:''}
-      </div>
-      <div style="font-size:11px;color:var(--tx);line-height:1.4;padding:4px 6px;background:var(--bg2);border-radius:4px;border-left:2px solid var(--br)">${r.desc||'—'}</div>
+    <!-- 장비번호·위치·신청인·통화하기·날짜시간 한 줄 -->
+    <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin:4px 0 5px;font-size:11px">
+      <span style="font-family:monospace;font-weight:800;color:#60a5fa">${r.equip||'—'}</span>
+      ${r.location?`<span style="color:var(--tx3)">·</span><span style="color:var(--tx2);font-size:10px">${r.location}</span>`:''}
+      ${(r.reporterName||r.reporter)?`<span style="color:var(--tx3)">·</span><b style="color:var(--tx2)">${r.reporterName||r.reporter}</b>`:''}
+      ${r.reporterPhone?`<span style="color:var(--tx3)">·</span><a href="tel:${r.reporterPhone}" style="color:#60a5fa;text-decoration:none;font-weight:700">통화하기</a>`:''}
+      <span style="color:var(--tx3)">·</span>
+      <span style="color:var(--tx3);font-size:10px">${r.date}${r.requestedAt?' '+new Date(r.requestedAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}):''}</span>
     </div>
-    <!-- 신청인 한 줄 -->
-    <div style="font-size:10px;color:var(--tx3);margin-bottom:6px">
-      <b style="color:var(--tx2)">${r.reporterName||r.reporter||'—'}</b>
-      ${r.reporterPhone?`<a href="tel:${r.reporterPhone}" style="color:#60a5fa;text-decoration:none;margin-left:4px">${r.reporterPhone}</a>`:''}
-      <span style="margin-left:6px">${r.date}${r.requestedAt?' '+new Date(r.requestedAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}):''}</span>
-    </div>
+    <!-- 접수내용 -->
+    <div style="font-size:11px;color:var(--tx);line-height:1.4;padding:4px 6px;background:var(--bg2);border-radius:4px;border-left:2px solid var(--br);margin-bottom:6px">${r.desc||'—'}</div>
 
     <!-- 처리 정보 + 댓글 버블 -->
     ${r.materialAt && r.status==='자재수급중'?`<div style="font-size:10px;color:#f59e0b;margin-bottom:4px">⏳ 자재수급중 전환: ${new Date(r.materialAt).toLocaleDateString('ko-KR',{month:'2-digit',day:'2-digit'})} ${new Date(r.materialAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})}</div>`:''}
@@ -6022,9 +6047,6 @@ function _asCard(r, canAct){
     ${canAct?`
     <div style="margin-top:8px;border-top:1px solid var(--br);padding-top:8px">
       <div style="font-size:10px;color:var(--tx3);margin-bottom:6px;font-weight:700">처리 업데이트</div>
-      <!-- 담당기사 한 줄 -->
-      <input type="text" placeholder="담당기사" id="astech-name-${r.id}"
-        value="${r.techName||''}" style="width:100%;margin-bottom:6px;padding:5px 8px;font-size:11px;background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);color:var(--tx);box-sizing:border-box">
       <!-- 댓글 입력 -->
       <div style="display:flex;gap:6px;margin-bottom:8px">
         <input type="text" placeholder="댓글 입력 (Enter 또는 등록 버튼)" id="astech-cmt-${r.id}"
@@ -6546,14 +6568,14 @@ function _trCard(r, _unused, canEdit, canMsg){
     if(r.note)  repParts.push('<span style="color:var(--tx2)">'+r.note+'</span>');
     contactHtml += '<div style="grid-column:1/-1;display:flex;align-items:center;gap:4px;flex-wrap:wrap"><span style="color:var(--tx3);flex-shrink:0">신청자</span><span style="color:var(--tx3);flex-shrink:0">:</span>'+repParts.join(_sep)+'</div>';
   }
-  // 양중담당: 양중담당 : 이름 / 직급 / [통화하기] / 양중위치
+  // 양중담당: 양중담당 : 이름 직급 / [통화하기] / 양중위치 (이름·직급 사이 슬래시 없음, 색상 통일)
   const mgrTel = r.managerPhone ? '<a href="tel:'+r.managerPhone+'" style="color:#60a5fa;font-weight:700;text-decoration:none">통화하기</a>' : '';
   if(r.managerName||mgrTel){
     let mgrParts = [];
-    if(r.managerName)    mgrParts.push('<b>'+r.managerName+'</b>');
-    if(r.managerTitle)   mgrParts.push('<span style="color:var(--tx2)">'+r.managerTitle+'</span>');
-    if(mgrTel)           mgrParts.push(mgrTel);
-    if(r.managerLocation) mgrParts.push('<span style="color:var(--tx2)">'+r.managerLocation+'</span>');
+    const nameTitle = [r.managerName, r.managerTitle].filter(Boolean).join(' ');
+    if(nameTitle) mgrParts.push('<b style="color:var(--tx)">'+nameTitle+'</b>');
+    if(mgrTel)    mgrParts.push(mgrTel);
+    if(r.managerLocation) mgrParts.push('<span style="color:var(--tx)">'+r.managerLocation+'</span>');
     contactHtml += '<div style="grid-column:1/-1;display:flex;align-items:center;gap:4px;flex-wrap:wrap"><span style="color:var(--tx3);flex-shrink:0">양중담당</span><span style="color:var(--tx3);flex-shrink:0">:</span>'+mgrParts.join(_sep)+'</div>';
   }
 
@@ -6931,11 +6953,11 @@ function _renderSpecBlock(r, canEdit) {
       return `<div style="margin-bottom:8px;padding:8px 10px;background:rgba(96,165,250,.04);border:1px solid rgba(96,165,250,.15);border-radius:8px">
         <div style="font-size:10px;font-weight:700;color:#60a5fa;margin-bottom:6px">🏷 제원별 장비번호</div>
         <div style="font-size:12px;font-weight:700;line-height:2;margin-bottom:6px">${specLines}</div>
-        <div style="display:flex;flex-direction:column;gap:5px">
+        <div style="display:flex;justify-content:flex-end;gap:4px">
           <button onclick="var t=window['_copyData_${rid}'];if(navigator.clipboard){navigator.clipboard.writeText(t).then(()=>toast('복사됨','ok')).catch(()=>{});}else{var e=document.createElement('textarea');e.value=t;document.body.appendChild(e);e.select();document.execCommand('copy');e.remove();toast('복사됨','ok');}"
-            style="width:100%;padding:5px 0;font-size:11px;font-weight:700;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.25);border-radius:6px;color:#60a5fa;cursor:pointer">복사</button>
+            style="width:12.5%;padding:5px 0;font-size:11px;font-weight:700;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.25);border-radius:6px;color:#60a5fa;cursor:pointer">복사</button>
           <button onclick="if(!window._specEditMode)window._specEditMode=new Map();window._specEditMode.set('${rid}',true);renderTransit();"
-            style="width:100%;padding:5px 0;font-size:11px;font-weight:700;background:rgba(96,165,250,.18);border:1px solid rgba(96,165,250,.35);border-radius:6px;color:#60a5fa;cursor:pointer">수정</button>
+            style="width:12.5%;padding:5px 0;font-size:11px;font-weight:700;background:rgba(96,165,250,.18);border:1px solid rgba(96,165,250,.35);border-radius:6px;color:#60a5fa;cursor:pointer">수정</button>
         </div>
       </div>`;
     }
@@ -6993,10 +7015,10 @@ function _renderSpecBlock(r, canEdit) {
   const copyKey = 'spec-copy-' + r.id;
   window['_copyData_' + r.id] = copyText;
   const copyBtn = copyText
-    ? '<button onclick="var t=window[\'_copyData_' + r.id + '\'];if(navigator.clipboard){navigator.clipboard.writeText(t).then(()=>toast(\'복사됨\',\'ok\')).catch(()=>{});}else{var e=document.createElement(\'textarea\');e.value=t;document.body.appendChild(e);e.select();document.execCommand(\'copy\');e.remove();toast(\'복사됨\',\'ok\');}" style="margin-left:6px;padding:2px 8px;font-size:9px;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.25);border-radius:4px;color:#60a5fa;cursor:pointer;vertical-align:middle">📋 복사</button>'
+    ? '<button onclick="var t=window[\'_copyData_' + r.id + '\'];if(navigator.clipboard){navigator.clipboard.writeText(t).then(()=>toast(\'복사됨\',\'ok\')).catch(()=>{});}else{var e=document.createElement(\'textarea\');e.value=t;document.body.appendChild(e);e.select();document.execCommand(\'copy\');e.remove();toast(\'복사됨\',\'ok\');}" style="padding:3px 10px;font-size:10px;font-weight:700;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.25);border-radius:5px;color:#60a5fa;cursor:pointer">복사</button>'
     : '';
   return '<div style="font-size:12px;font-weight:700;margin-bottom:6px;line-height:2">' + specLines + '</div>' +
-    (copyText ? '<div style="margin-top:-2px;margin-bottom:6px">' + copyBtn + '</div>' : '');
+    (copyText ? '<div style="display:flex;justify-content:flex-end;margin-top:-2px;margin-bottom:6px">' + copyBtn + '</div>' : '');
 }
 
 // 전체 제원 한번에 저장
@@ -7105,6 +7127,31 @@ function saveAjEquip(id){
   renderTransit();
 }
 
+// ── 완료 확인 커스텀 모달 ────────────────────────────────────
+function _showCompleteConfirm(verb, company, date, equipNo){
+  return new Promise(resolve=>{
+    const isIn = verb==='반입완료';
+    const color = isIn ? '#22c55e' : '#fb923c';
+    const ov = document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:10001;display:flex;align-items:center;justify-content:center';
+    ov.innerHTML=`<div style="background:var(--bg2,#1a1a2e);border:1px solid var(--br);border-radius:18px;padding:26px 20px;max-width:300px;width:88%;text-align:center;box-shadow:0 16px 48px rgba(0,0,0,.5)">
+      <div style="font-size:22px;font-weight:900;color:${color};margin-bottom:8px;line-height:1.2">${verb} 완료 확인</div>
+      <div style="font-size:16px;font-weight:800;color:var(--tx);margin-bottom:4px">${company}</div>
+      ${equipNo?`<div style="font-size:12px;font-family:monospace;color:#60a5fa;margin-bottom:4px">${equipNo}</div>`:''}
+      <div style="font-size:11px;color:var(--tx3);margin-bottom:20px">${date}</div>
+      <div style="display:flex;gap:10px">
+        <button id="_cc_no" style="flex:1;padding:10px;border-radius:10px;background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.3);color:#f87171;font-size:14px;font-weight:700;cursor:pointer">취소</button>
+        <button id="_cc_yes" style="flex:1;padding:10px;border-radius:10px;background:${color}22;border:2px solid ${color}66;color:${color};font-size:14px;font-weight:900;cursor:pointer">확인</button>
+      </div>
+    </div>`;
+    document.body.appendChild(ov);
+    const done=(v)=>{ov.remove();resolve(v);};
+    ov.querySelector('#_cc_yes').onclick=()=>done(true);
+    ov.querySelector('#_cc_no').onclick=()=>done(false);
+    ov.onclick=(e)=>{if(e.target===ov)done(false);};
+  });
+}
+
 // ── 반입/반출 완료 처리 (장비 마스터 연동) ──────────────────
 async function completeTransit(id) {
   const recs = getTransit();
@@ -7133,7 +7180,8 @@ async function completeTransit(id) {
   }
 
   const verb = rec.type === 'in' ? '반입완료' : rec.type === 'handover' ? '인계완료' : '반출완료';
-  if (!confirm(`${verb} 처리하시겠습니까?\n업체: ${rec.company}\n날짜: ${rec.date}${rec.ajEquip ? '\n장비번호: ' + rec.ajEquip : ''}`)) return;
+  const _ok = await _showCompleteConfirm(verb, rec.company, rec.date, rec.ajEquip);
+  if (!_ok) return;
 
   rec.status   = verb;
   rec.date     = today();
@@ -7563,12 +7611,14 @@ function editTransitDate(id){
   };
   openSheet('sh-edit-date');
 }
-function cancelTransit(id){
+async function cancelTransit(id){
   if(!confirm('이 신청을 취소하시겠습니까?')) return;
   const recs=getTransit();
   const rec=recs.find(r=>r.id===id);
   if(!rec){ toast('레코드를 찾을 수 없습니다','err'); return; }
-  rec.status='취소'; saveTransit(recs);
+  rec.status='취소'; rec.synced=false;
+  await saveTransit(recs);
+  _syncToSupabase().catch(e=>console.warn('[cancelTransit sync]',e));
   toast('취소 처리되었습니다','warn'); renderTransit();
 }
 
@@ -8185,10 +8235,9 @@ async function _renderHeatmapAsync(){
 }
 
 /* ── Gemini AI 자연어 분석 ────────────────────────────────── */
-const _GEMINI_KEY = 'AIzaSyCjfXVmoxG3sk6JvZBTrkvwOQltJ_O6K80';
-
 async function _askAI(type){
-  const key = _GEMINI_KEY;
+  const key = DB.g('gemini_api_key','');
+  if(!key){ toast('Gemini API 키를 먼저 등록하세요 (관리 탭 → AI API 키 설정)','warn'); return; }
   const el = document.getElementById('ai-query-result');
   if(!el) return;
   el.innerHTML = `<div class="ai-qres" style="display:flex;align-items:center;gap:8px"><div style="width:13px;height:13px;border:2px solid var(--br);border-top-color:#818cf8;border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0"></div><span style="font-size:11px;color:var(--tx3)">AI 분석 중...</span></div>`;
@@ -8373,6 +8422,18 @@ function toggleNotice(id){
 /* ═══════════════════════════════════════════
    ADMIN
 ═══════════════════════════════════════════ */
+function _saveGeminiKey(){
+  const inp = document.getElementById('gemini-key-input');
+  const key = inp?.value.trim();
+  if(!key){ toast('API 키를 입력하세요','err'); return; }
+  DB.s('gemini_api_key', key);
+  if(inp) inp.type='password';
+  const st=document.getElementById('gemini-key-status');
+  if(st){ st.textContent='✓ API 키 등록됨 — AI 분석 사용 가능'; st.style.color='#4ade80'; }
+  toast('Gemini API 키 저장 완료','ok');
+  renderAdmin();
+}
+
 function renderAdmin(){
   const role=S?.role;
   if(role==='tech'){
@@ -8521,6 +8582,28 @@ function renderAdmin(){
       </div>
       `:''}
     </div>
+
+    <!-- AI API 키 설정 (AJ 관리자 전용) -->
+    ${isAJ?`<div style="background:var(--bg2);border:1px solid var(--br);border-radius:12px;margin-bottom:14px;overflow:hidden">
+      <div onclick="(()=>{const b=document.getElementById('ai-key-body');const a=document.getElementById('ai-key-arrow');if(b){const o=b.style.display!=='none';b.style.display=o?'none':'block';a.style.transform=o?'':'rotate(180deg)';}})()" style="display:flex;align-items:center;gap:8px;padding:12px 14px;cursor:pointer">
+        <span style="font-size:13px;font-weight:800;flex:1">🤖 AI API 키 설정</span>
+        <span style="font-size:10px;padding:2px 8px;border-radius:6px;font-weight:700;${DB.g('gemini_api_key','')?'background:rgba(34,197,94,.15);color:#22c55e':'background:rgba(248,113,113,.1);color:#f87171'}">${DB.g('gemini_api_key','')?'등록됨':'미등록'}</span>
+        <span id="ai-key-arrow" style="font-size:12px;color:var(--tx3);transition:transform .2s">▼</span>
+      </div>
+      <div id="ai-key-body" style="display:none;padding:0 14px 14px;border-top:1px solid var(--br)">
+        <div style="font-size:10px;color:var(--tx3);margin:10px 0 8px;line-height:1.6">Google AI Studio에서 발급한 Gemini API 키를 입력하세요.<br>가동 분석 탭의 AI 분석 기능에 사용됩니다.</div>
+        <div style="display:flex;gap:6px">
+          <input type="password" id="gemini-key-input" class="fg-input"
+            value="${DB.g('gemini_api_key','')}"
+            placeholder="AIzaSy..."
+            style="flex:1;font-size:11px;font-family:monospace;margin:0">
+          <button onclick="_saveGeminiKey()" style="padding:6px 14px;font-size:11px;font-weight:700;background:rgba(96,165,250,.15);border:1px solid rgba(96,165,250,.3);border-radius:7px;color:#60a5fa;cursor:pointer;flex-shrink:0;white-space:nowrap">저장</button>
+        </div>
+        <div id="gemini-key-status" style="font-size:10px;margin-top:6px;color:${DB.g('gemini_api_key','')?'#4ade80':'var(--tx3)'}">
+          ${DB.g('gemini_api_key','')?'✓ API 키 등록됨 — AI 분석 사용 가능':'미등록 — 저장 후 사용 가능'}
+        </div>
+      </div>
+    </div>`:``}
 
     <!-- 카카오 오픈채팅 지원 -->
     <div style="margin-top:12px;padding:12px;background:rgba(254,229,0,.08);border:1px solid rgba(254,229,0,.25);border-radius:12px;display:flex;align-items:center;gap:12px">
