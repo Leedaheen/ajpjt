@@ -5190,6 +5190,7 @@ async function pushToGS(entry){
   try{
     if(sbUrl){
       await _syncToSupabase();
+      entry.synced=true;  // Supabase 저장 성공 시 동기화 완료 표시
     } else {
       await gsReq('addLogs',{logs:[entry]});
       entry.synced=true;
