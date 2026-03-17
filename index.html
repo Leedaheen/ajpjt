@@ -2568,10 +2568,20 @@ function _runMemoryGuard(){
   // performance.memory 지원 브라우저(Chrome)에서 힙 과부하 감지
   try {
     const mem = performance?.memory;
-    if(mem && mem.usedJSHeapSize > 300 * 1024 * 1024){
-      console.warn('[MemGuard] 힙 초과 — 전체 캐시 해제:', Math.round(mem.usedJSHeapSize/1048576)+'MB');
-      _invalidateAll();
+    const heapMB = Math.round(mem.usedJSHeapSize / 1048576);
+    if(heapMB > 300){
+      console.warn('[MemGuard] 힙 초과 — 캐시 축소:', heapMB+'MB');
+      // 전체 무효화 대신 단계적 축소 (사용 중인 페이지 캐시는 유지)
+      if(_cache.logs   && _cache.logs.length   > 200) _cache.logs   = _cache.logs.slice(0, 200);
+      if(_cache.transit&& _cache.transit.length> 100) _cache.transit= _cache.transit.slice(0, 100);
+      if(_cache.asReqs && _cache.asReqs.length > 100) _cache.asReqs = _cache.asReqs.slice(0, 100);
+      _cache.logsByDate = null; _cache.logsByCoSite = null; _cache.todayLogs = null;
+      _cache.transitBySite = null; _cache.asBySite = null;
       _memGuardLastClean = now;
+      if(heapMB > 400){ // 400MB 초과 시 전체 해제
+        _invalidateAll();
+        console.warn('[MemGuard] 400MB 초과 — 전체 캐시 해제');
+      }
     }
   } catch {}
 }
@@ -2646,14 +2656,17 @@ async function saveLog(entry) {
   if(_cache.logs){
     const idx = _cache.logs.findIndex(l=>l.id===entry.id);
     if(idx>=0) _cache.logs[idx]=entry; else _cache.logs.unshift(entry);
+    // LRU: 메모리 캐시 최신 1000건 유지
+    if(_cache.logs.length > 1000) _cache.logs = _cache.logs.slice(0, 1000);
     _buildLogIndex(_cache.logs);
     DB.s(K.LOGS, _cache.logs.slice(0,200)); // 최신 200건만 LS에 백업
   }
 }
 async function saveLogs(logs, _newEntry){
-  _cache.logs = logs;
+  // LRU: 메모리 캐시 최신 1000건 제한 (전체는 IDB에 보존)
+  _cache.logs = logs.length > 1000 ? logs.slice(0, 1000) : logs;
   if(_newEntry && _cache.logsByDate) _addToIndex(_newEntry);
-  else _buildLogIndex(logs);
+  else _buildLogIndex(_cache.logs);
   DB.s(K.LOGS, logs.slice(0,200)); // LS 먼저 저장 (캐시 무효화 경합 방지)
   try { await IDB.putAll('logs', logs); } catch {}
   _cache.todayLogs = null;
@@ -4557,19 +4570,18 @@ function enterApp(){
       window._IDB_READY = true; // 동기화 함수에서 IDB 사용 가능 여부 체크용
       return _migrateFromLocalStorage();
     })
-    .then(() => syncNow())
+    .then(() => queueSync())
     .catch(e => {
       console.warn('[init] IDB 초기화 에러, localStorage 모드로 진행:', e.message);
       window._IDB_READY = false;
-      // IDB 없어도 Supabase에 localStorage 데이터로 동기화 시도
-      syncNow().catch(()=>{});
+      queueSync();
     });
   setInterval(check3PMAlert, 60000);
   setInterval(()=>{ if(S&&document.visibilityState==='visible') _fetchFromSB().catch(()=>{}); }, 30000);
   // 메모리 가드: 5분마다 비활성 캐시 해제
   setInterval(_runMemoryGuard, 5 * 60 * 1000);
   document.addEventListener('visibilitychange', ()=>{
-    if(document.visibilityState==='visible'&&S){ syncNow(); _fetchFromSB().catch(()=>{}); }
+    if(document.visibilityState==='visible'&&S){ queueSync(); _fetchFromSB().catch(()=>{}); }
   });
   setTimeout(_initScrollTopBtn, 400);
 }
@@ -4582,7 +4594,7 @@ function _updateOfflineBadge(){
   el.classList.toggle('on', offline);
   // 오프라인→온라인 복귀 시 자동 동기화 시도
 }
-window.addEventListener('online', ()=>{ _updateOfflineBadge(); syncNow().catch(()=>{}); });
+window.addEventListener('online', ()=>{ _updateOfflineBadge(); queueSync(); });
 window.addEventListener('offline', ()=>{ _updateOfflineBadge(); const el=document.getElementById('sdot'); const txt=document.getElementById('stxt'); if(el){el.className='sdot err'; txt.innerHTML='<b>오프라인</b> · 네트워크 연결 없음';} });
 
 /* ── Service Worker 등록 (PWA) ──────────────────────────── */
@@ -4597,7 +4609,7 @@ if('serviceWorker' in navigator && !_swSkip){
         if('sync' in reg) reg.sync.register('sync-logs').catch(()=>{});
         // SW 메시지 수신 (BG_SYNC)
         navigator.serviceWorker.addEventListener('message', e=>{
-          if(e.data?.type==='BG_SYNC') syncNow().catch(()=>{});
+          if(e.data?.type==='BG_SYNC') queueSync();
         });
       })
       .catch(e => console.warn('[SW] 등록 실패:', e));
@@ -4856,7 +4868,20 @@ async function gsReq(action,payload={}){
 }
 
 /* ── 동기화 메인 (Supabase 우선, GS 폴백) ─────────────────── */
+/* ── Sync Lock + Queue ──────────────────────────────────
+   - _syncLock : syncNow() 레벨에서 동시 실행 완전 차단
+   - _syncQueue: Promise 체인으로 호출 순서 보장 (queueSync)
+────────────────────────────────────────────────────── */
+let _syncQueue = Promise.resolve();
+function queueSync(){
+  _syncQueue = _syncQueue.then(() => syncNow().catch(() => {}));
+  return _syncQueue;
+}
+
 async function syncNow(){
+  // syncNow 레벨 락 — UI 업데이트 중복도 방지
+  if(_syncLock){ console.log('[syncNow] 이미 동기화 중 — 건너뜀'); return; }
+  _syncLock = true;
   const dot=document.getElementById('sdot');
   const txt=document.getElementById('stxt');
   dot.className='sdot sync'; txt.innerHTML='<b>동기화 중...</b>';
@@ -4865,6 +4890,7 @@ async function syncNow(){
   if(!sbUrl && !gsUrl){
     dot.className='sdot err';
     txt.innerHTML='<b>미연동</b> · 관리 탭에서 Supabase 설정';
+    _syncLock = false;
     return;
   }
   try{
@@ -4882,7 +4908,6 @@ async function syncNow(){
   } catch(e){
     dot.className='sdot err';
     const errMsg = e.message||'';
-    // 사용자에게 원인 힌트 제공
     const hint = errMsg.includes('NO_SB_URL') ? 'Supabase 키 미설정'
                : errMsg.includes('401')       ? 'API 키 오류'
                : errMsg.includes('404')        ? '테이블 없음'
@@ -4891,6 +4916,8 @@ async function syncNow(){
                : '로컬 저장 모드';
     txt.innerHTML=`<b>연결 실패</b> · ${hint}`;
     console.error('[Sync 실패]', errMsg);
+  } finally {
+    _syncLock = false;
   }
 }
 
@@ -4899,12 +4926,10 @@ async function syncNow(){
    - logs / transit / as / members 병렬 전송 → 동기화 시간 ~4× 단축
    - SB_BATCH(500)건 단위로 분할 전송
    - 성공 시 IDB markSynced → LS 백업 캐시 갱신
-   - _syncLock: 동시 실행 방지 (1개 워커만 허용)
+   - 락은 syncNow() 레벨에서 관리 (_syncLock)
 ────────────────────────────────────────────────────────── */
-let _syncLock = false;
+let _syncLock = false; // syncNow()와 공유 — 여기서 선언
 async function _syncToSupabase(){
-  if(_syncLock){ console.log('[Sync] 이미 동기화 중 — 건너뜀'); return; }
-  _syncLock = true;
   try {
   const siteMap = Object.fromEntries(getSites().map(s=>[s.id,s.name]));
   const idbReady = !!(window._IDB_READY);
@@ -5059,9 +5084,7 @@ async function _syncToSupabase(){
   // 마지막 동기화 이후 서버에서 변경된 transit / AS 데이터를 내려받아 로컬 병합
   // updated_at 기준 비교: 서버 버전이 더 새로우면 로컬을 덮어씀
   await _pullRecentFromSupabase().catch(e => console.warn('[pull] 실패:', e));
-  } finally {
-    _syncLock = false;
-  }
+  } catch(e) { throw e; }
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -8165,6 +8188,24 @@ let _logFiltered=[];
 let _logChunkIdx=0;
 let _logLoadTimer=null;
 const LOG_CHUNK=30;
+const MAX_LOG_DOM=60; // DOM에 유지할 최대 로그카드 수 (2 chunk)
+
+/* DOM 상단 노드 제거 — 스크롤 위치 유지하며 오래된 카드 제거
+   - .lcard 개수가 MAX_LOG_DOM 초과 시 맨 위부터 삭제
+   - 제거된 높이만큼 scrollTop 보정 → 화면 점프 없음 */
+function _trimLogDOM(el){
+  const cards = el.querySelectorAll('.lcard');
+  const excess = cards.length - MAX_LOG_DOM;
+  if(excess <= 0) return;
+  const panel = document.getElementById('ops-log-panel');
+  let removedH = 0;
+  for(let i = 0; i < excess; i++){
+    removedH += cards[i].offsetHeight || 82;
+    cards[i].remove();
+  }
+  // 스크롤 위치 보정 (화면 점프 방지)
+  if(panel) panel.scrollTop = Math.max(0, panel.scrollTop - removedH);
+}
 const LOG_PAGE_SIZE=200; // 서버에서 한 번에 가져올 최대 건수
 
 function clearDateRange(){
@@ -8295,6 +8336,7 @@ function _renderLogChunk(el){
         if(entries[0].isIntersecting){
           io.disconnect();
           sentinel.remove();
+          _trimLogDOM(el);   // 상단 오래된 노드 제거 → DOM ≤ 60 유지
           _renderLogChunk(el);
         }
       }, { root: document.getElementById('ops-log-panel'), threshold: 0.1 });
@@ -9447,7 +9489,7 @@ async function saveGsUrl(){
   const url=document.getElementById('gs-url').value.trim();
   if(!url){ toast('URL을 입력하세요','err'); return; }
   DB.s(K.GS_URL,url); toast('저장됨. 동기화 시도...','ok');
-  closeSheet('sh-gs'); renderAdmin(); setTimeout(syncNow,300);
+  closeSheet('sh-gs'); renderAdmin(); setTimeout(queueSync,300);
 }
 async function pasteUrl(){ try{const t=await navigator.clipboard.readText();document.getElementById('gs-url').value=t;}catch{toast('클립보드 접근 거부','err');} }
 
@@ -9468,7 +9510,7 @@ function saveSupabaseConfig(){
   toast('Supabase 연동 저장됨. 동기화 시도...','ok');
   closeSheet('sh-supabase');
   renderAdmin();
-  setTimeout(syncNow, 300);
+  setTimeout(queueSync, 300);
 }
 
 /* ── Supabase 연결 테스트 ── */
