@@ -3124,7 +3124,7 @@ async function deregisterEquipFromTransit(transitRec) {
 const _ACState = {}; // 입력필드별 상태
 
 function setupEquipAutocomplete(inputId, opts = {}) {
-  /* opts: { siteIdFn, companyFn, onSelect, multi } */
+  /* opts: { siteIdFn, companyFn, projectFn, specFn, onSelect, multi } */
   const inp = document.getElementById(inputId);
   if (!inp || inp._acSetup) return;
   inp._acSetup = true;
@@ -3151,9 +3151,15 @@ function setupEquipAutocomplete(inputId, opts = {}) {
   function showSuggestions(val) {
     const siteId  = opts.siteIdFn  ? opts.siteIdFn()  : (S?.siteId === 'all' ? null : S?.siteId);
     const company = opts.companyFn ? opts.companyFn() : null;
+    const project = opts.projectFn ? opts.projectFn() : null;
+    const spec    = opts.specFn    ? opts.specFn()    : null;
     let candidates = company
       ? getEquipByCompany(siteId, company)
       : getEquipBySite(siteId);
+    // 프로젝트 필터 (장비에 project 정보가 있을 경우)
+    if (project) candidates = candidates.filter(e => !e.project || e.project === project);
+    // 제원 필터 (장비에 spec 정보가 있을 경우)
+    if (spec) candidates = candidates.filter(e => !e.spec || e.spec === spec);
 
     const query = val.toUpperCase().trim();
     if (query) {
@@ -5893,8 +5899,11 @@ async function submitEnd(){
     spinner(true,'종료 저장 중...');
     await saveLog(entry);          // IDB 업데이트
     await pushToGS(entry);
+    _syncToSupabase().catch(e => console.warn('[submitEnd sync]', e)); // 즉시 서버 동기화
     toast(entry.synced?`사용 종료 완료 (${dur?fH(dur):'—'})`: '로컬 저장 (미연동)', entry.synced?'ok':'warn');
     updatePendingBanner(); updateLogBadge();
+    // 이력 목록 즉시 갱신
+    if(document.getElementById('log-body')) _logLoadTimer = setTimeout(_doRenderLog, 300);
     document.getElementById('f-meter-end').value='';
     populateOpenSessions();
   } catch(e) {
@@ -6541,11 +6550,12 @@ function renderTransit(){
   const allRecs=getTransit().filter(r=>siteId?r.siteId===siteId:true);
 
   // ── 필터 상태 유지 ──────────────────────────
-  if (!window._trFilter) window._trFilter = {date:'', company:'', spec:'', status:''};
-  const fDate    = window._trFilter.date    || '';
-  const fCompany = window._trFilter.company || '';
-  const fSpec    = window._trFilter.spec    || '';
-  const fStatus  = window._trFilter.status  || '';
+  if (!window._trFilter) window._trFilter = {dateFrom:'', dateTo:'', company:'', spec:'', status:''};
+  const fDateFrom = window._trFilter.dateFrom || '';
+  const fDateTo   = window._trFilter.dateTo   || '';
+  const fCompany  = window._trFilter.company  || '';
+  const fSpec     = window._trFilter.spec     || '';
+  const fStatus   = window._trFilter.status   || '';
 
   // ── 유니크 업체 목록 ────────────────────────
   const coSet = new Set();
@@ -6558,7 +6568,8 @@ function renderTransit(){
 
   // ── 필터 적용 ───────────────────────────────
   const filtered = allRecs.filter(r => {
-    if (fDate && r.date !== fDate) return false;
+    if (fDateFrom && r.date < fDateFrom) return false;
+    if (fDateTo   && r.date > fDateTo)   return false;
     if (fCompany) {
       const m = r.company===fCompany || r.fromCompany===fCompany || r.toCompany===fCompany;
       if (!m) return false;
@@ -6594,7 +6605,7 @@ function renderTransit(){
   active.sort((a,b)=>a.date.localeCompare(b.date));
   done.sort((a,b)=>b.date.localeCompare(a.date));
 
-  const hasFilter = !!(fDate || fCompany || fSpec || fStatus);
+  const hasFilter = !!(fDateFrom || fDateTo || fCompany || fSpec || fStatus);
   const filterBadge = hasFilter
     ? `<span style="font-size:10px;background:rgba(59,139,255,.2);color:#60a5fa;padding:2px 8px;border-radius:6px">${filtered.length}건</span>`
     : '';
@@ -6635,11 +6646,17 @@ function renderTransit(){
       ${filterBadge}
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
-      <input type="date" id="tr-filter-date" value="${fDate}" onchange="_filterTransit()" style="font-size:11px;padding:6px 8px;border:1px solid var(--br);border-radius:8px;background:var(--bg1);color:var(--tx);width:100%;box-sizing:border-box">
+      <div style="display:flex;align-items:center;gap:4px;grid-column:1/-1">
+        <span style="font-size:10px;color:var(--tx3);white-space:nowrap;flex-shrink:0">기간</span>
+        <input type="date" id="tr-filter-date-from" value="${fDateFrom}" onchange="_filterTransit()" style="flex:1;font-size:11px;padding:5px 6px;border:1px solid var(--br);border-radius:8px;background:var(--bg1);color:var(--tx);box-sizing:border-box">
+        <span style="font-size:10px;color:var(--tx3)">~</span>
+        <input type="date" id="tr-filter-date-to" value="${fDateTo}" onchange="_filterTransit()" style="flex:1;font-size:11px;padding:5px 6px;border:1px solid var(--br);border-radius:8px;background:var(--bg1);color:var(--tx);box-sizing:border-box">
+      </div>
       <select id="tr-filter-company" onchange="_filterTransit()" style="font-size:11px;padding:6px 8px;border:1px solid var(--br);border-radius:8px;background:var(--bg1);color:var(--tx);width:100%;box-sizing:border-box">
         <option value="">전체 업체</option>
         ${coList.map(c=>`<option value="${c}"${fCompany===c?' selected':''}>${c}</option>`).join('')}
       </select>
+      <div></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
       <input type="text" id="tr-filter-spec" value="${fSpec}" oninput="_filterTransit()" placeholder="장비명 / 장비번호 검색" style="font-size:11px;padding:6px 10px;border:1px solid var(--br);border-radius:8px;background:var(--bg1);color:var(--tx);width:100%;box-sizing:border-box">
@@ -6682,10 +6699,11 @@ function _filterTransit(){
   // 포커스·커서 위치 저장 (re-render 후 복원용)
   const _focId  = document.activeElement?.id || '';
   const _selEnd = document.activeElement?.selectionStart ?? null;
-  window._trFilter.date    = document.getElementById('tr-filter-date')?.value    || '';
-  window._trFilter.company = document.getElementById('tr-filter-company')?.value || '';
-  window._trFilter.spec    = document.getElementById('tr-filter-spec')?.value    || '';
-  window._trFilter.status  = document.getElementById('tr-filter-status')?.value  || '';
+  window._trFilter.dateFrom = document.getElementById('tr-filter-date-from')?.value || '';
+  window._trFilter.dateTo   = document.getElementById('tr-filter-date-to')?.value   || '';
+  window._trFilter.company  = document.getElementById('tr-filter-company')?.value   || '';
+  window._trFilter.spec     = document.getElementById('tr-filter-spec')?.value      || '';
+  window._trFilter.status   = document.getElementById('tr-filter-status')?.value    || '';
   renderTransit();
   // re-render 후 포커스 복원
   if(_focId){
@@ -6699,7 +6717,7 @@ function _filterTransit(){
 }
 
 function _clearTransitFilter(){
-  window._trFilter = {date:'', company:'', spec:'', status:''};
+  window._trFilter = {dateFrom:'', dateTo:'', company:'', spec:'', status:''};
   renderTransit();
 }
 
@@ -7662,9 +7680,9 @@ function _resetTransitForm(){
   document.getElementById('tr-specs-list').innerHTML='';
   document.getElementById('tr-note').value='';
   const trn = document.getElementById('tr-reporter-name');
-  if(trn) trn.value = S?.name||'';
+  if(trn){ trn.value = S?.name||''; trn.readOnly = true; trn.style.opacity='.7'; }
   const trp = document.getElementById('tr-reporter-phone');
-  if(trp) trp.value = S?.phone || DB.g('last_reporter_phone','') || '';
+  if(trp){ trp.value = S?.phone || DB.g('last_reporter_phone','') || ''; trp.readOnly = true; trp.style.opacity='.7'; }
   const tmn = document.getElementById('tr-manager-name');
   if(tmn) tmn.value = '';
   const tmt = document.getElementById('tr-manager-title');
@@ -7781,13 +7799,16 @@ function _updateHandoverEquipList(){
   const siteId = S?.siteId==='all'
     ? (document.getElementById('tr-site-sel')?.value || null)
     : S?.siteId;
-  const equips = getEquipByCompany(siteId, fromCo);
+  let equips = getEquipByCompany(siteId, fromCo);
+  // 프로젝트 필터: 프로젝트 변경 섹션에서 인계前 프로젝트가 선택된 경우 필터
+  const fromProj = document.querySelector('#tr-from-proj-chips .chip.on')?.textContent.trim() || null;
+  if (fromProj) equips = equips.filter(e => !e.project || e.project === fromProj);
   if (!equips.length) {
     chipsEl.innerHTML = '<span style="font-size:10px;color:var(--tx3)">등록된 장비 없음 — 직접 입력</span>';
     return;
   }
   chipsEl.innerHTML = equips.map(e =>
-    `<div class="chip" style="font-family:monospace;font-size:11px;font-weight:700" onclick="this.classList.toggle('on')">${e.equipNo}</div>`
+    `<div class="chip" style="font-family:monospace;font-size:11px;font-weight:700" onclick="this.classList.toggle('on')">${e.equipNo}${e.project?`<span style="font-size:9px;color:var(--tx3);margin-left:3px">[${e.project}]</span>`:''}</div>`
   ).join('');
 }
 
@@ -7807,7 +7828,7 @@ function _updateHandoverProjChips(){
   const toEl   = document.getElementById('tr-to-proj-chips');
   const placeholder = '<span style="font-size:10px;color:var(--tx3)">설정된 프로젝트 없음</span>';
   if (fromEl) fromEl.innerHTML = projects.length
-    ? projects.map(p=>`<div class="chip" onclick="selectOne(this,'tr-from-proj-chips')">${p}</div>`).join('')
+    ? projects.map(p=>`<div class="chip" onclick="selectOne(this,'tr-from-proj-chips');_updateHandoverEquipList()">${p}</div>`).join('')
     : placeholder;
   if (toEl)   toEl.innerHTML   = projects.length
     ? projects.map(p=>`<div class="chip" onclick="selectOne(this,'tr-to-proj-chips')">${p}</div>`).join('')
@@ -7884,10 +7905,10 @@ function _trAddSpecRow(spec='', model='', qty=1, equipNos=''){
   const equipId = 'tr-spec-equip-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,4);
   div.innerHTML=`
   <div style="display:flex;gap:6px;align-items:center;margin-bottom:${isOut?'5px':'0'}">
-    <select class="fg-select tr-spec" style="flex:3;font-size:12px;padding:6px 8px">
+    <select class="fg-select tr-spec" style="flex:1;font-size:12px;padding:6px 8px">
       ${TR_SPECS.map(s=>`<option${s===spec?' selected':''}>${s}</option>`).join('')}
     </select>
-    <input type="number" class="fg-input tr-qty" value="${qty}" min="1" style="width:56px;flex-shrink:0;padding:6px 8px;font-size:12px;text-align:center" placeholder="수량">
+    <input type="number" class="fg-input tr-qty" value="${qty}" min="1" style="flex:1;padding:6px 8px;font-size:12px;text-align:center" placeholder="수량">
     <button onclick="this.closest('.tr-spec-row').remove()" style="background:none;border:none;color:#f87171;font-size:18px;cursor:pointer;flex-shrink:0;line-height:1">x</button>
   </div>
   ${isOut?`<div style="display:flex;align-items:center;gap:5px;position:relative">
@@ -7904,6 +7925,8 @@ function _trAddSpecRow(spec='', model='', qty=1, equipNos=''){
       setupEquipAutocomplete(equipId, {
         siteIdFn:  () => { const sel = document.getElementById('tr-site-sel'); return sel?.value || (S?.siteId === 'all' ? null : S?.siteId); },
         companyFn: () => document.getElementById('tr-company')?.value.trim() || null,
+        projectFn: () => document.querySelector('#tr-project-chips .chip.on')?.textContent.trim() || null,
+        specFn:    () => document.getElementById(equipId)?.closest('.tr-spec-row')?.querySelector('.tr-spec')?.value || null,
         multi: true,
       });
     }, 60);
@@ -8811,14 +8834,14 @@ async function runAI(){
   const unusedHTML = unused7.length > 0
     ? `<div style="margin-top:10px;padding:10px 12px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:8px">
         <div style="font-size:11px;font-weight:800;color:#f87171;margin-bottom:6px">최근 1개월 내 1주일 미사용 장비 (${unused7.length}대)</div>
-        ${unused7.slice(0,10).map(u=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)">
-          <span style="font-size:11px;font-weight:700;color:#e2e8f0;font-family:'JetBrains Mono',monospace">${u.equip}</span>
-          <span style="font-size:10px;color:#94a3b8">${u.company}</span>
-          <span style="font-size:10px;color:#64748b">마지막 ${u.lastDate.slice(5)}</span>
+        ${unused7.slice(0,10).map(u=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--br)">
+          <span style="font-size:11px;font-weight:700;color:var(--tx);font-family:'JetBrains Mono',monospace">${u.equip}</span>
+          <span style="font-size:10px;color:var(--tx2)">${u.company}</span>
+          <span style="font-size:10px;color:var(--tx3)">마지막 ${u.lastDate.slice(5)}</span>
         </div>`).join('')}
-        ${unused7.length>10?`<div style="font-size:10px;color:#64748b;margin-top:4px;text-align:right">외 ${unused7.length-10}대 더</div>`:''}
+        ${unused7.length>10?`<div style="font-size:10px;color:var(--tx3);margin-top:4px;text-align:right">외 ${unused7.length-10}대 더</div>`:''}
       </div>`
-    : `<div style="margin-top:8px;font-size:11px;color:#4ade80">최근 1개월 내 1주일 이상 미사용 장비 없음</div>`;
+    : `<div style="margin-top:8px;font-size:11px;color:var(--green,#4ade80)">최근 1개월 내 1주일 이상 미사용 장비 없음</div>`;
 
   try{
     const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:800,messages:[{role:'user',content:`건설현장 고소작업대 가동현황 분석. 현장:${site} 오늘가동률:${tr}% 총누적시간:${hrs}h 총기록:${logs.length}건 목표70%. 3~4개 불릿(•)으로 볼드 포함 한국어 간결하게.`}]})});
