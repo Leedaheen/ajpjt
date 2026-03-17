@@ -3,6 +3,14 @@
 ═══════════════════════════════════════════ */
 let S = null; // current session
 
+/* ── 메모리 누수 방지: enterApp setInterval ID + visibilitychange 핸들러 ──
+   enterApp()이 재호출(예: 자동로그인 후 수동로그인)되어도 중복 등록 방지.
+──────────────────────────────────────────────────────────────────────── */
+let _appIntervals = [];
+function _onVisibilityChange(){
+  if(document.visibilityState==='visible'&&S){ queueSync(); _fetchFromSB().catch(()=>{}); }
+}
+
 /* ═══════════════════════════════════════════
    UTILS
 ═══════════════════════════════════════════ */
@@ -1292,13 +1300,16 @@ function enterApp(){
       window._IDB_READY = false;
       queueSync();
     });
-  setInterval(check3PMAlert, 60000);
-  setInterval(()=>{ if(S&&document.visibilityState==='visible') _fetchFromSB().catch(()=>{}); }, 30000);
-  // 메모리 가드: 5분마다 비활성 캐시 해제
-  setInterval(_runMemoryGuard, 5 * 60 * 1000);
-  document.addEventListener('visibilitychange', ()=>{
-    if(document.visibilityState==='visible'&&S){ queueSync(); _fetchFromSB().catch(()=>{}); }
-  });
+  // 중복 등록 방지 — 기존 인터벌 모두 해제 후 재등록
+  _appIntervals.forEach(id => clearInterval(id));
+  _appIntervals = [
+    setInterval(check3PMAlert, 60000),
+    setInterval(()=>{ if(S&&document.visibilityState==='visible') _fetchFromSB().catch(()=>{}); }, 30000),
+    setInterval(_runMemoryGuard, 5 * 60 * 1000), // 메모리 가드: 5분마다 비활성 캐시 해제
+  ];
+  // visibilitychange: 이름 있는 함수로 교체 → 중복 방지 가능
+  document.removeEventListener('visibilitychange', _onVisibilityChange);
+  document.addEventListener('visibilitychange', _onVisibilityChange);
   setTimeout(_initScrollTopBtn, 400);
 }
 
@@ -1335,6 +1346,14 @@ if('serviceWorker' in navigator && !_swSkip){
 
 function doLogout(){
   if(!confirm('로그아웃 하시겠습니까?')) return;
+  // 인터벌 및 리스너 정리 (location.reload() 전 명시적 해제)
+  _appIntervals.forEach(id => clearInterval(id));
+  _appIntervals = [];
+  document.removeEventListener('visibilitychange', _onVisibilityChange);
+  // 재시도 타이머 정리 (api.js 전역 참조)
+  if(typeof _retrySyncTimer !== 'undefined' && _retrySyncTimer){
+    clearTimeout(_retrySyncTimer); _retrySyncTimer = null;
+  }
   S=null; DB.s(K.SESSION,null); DB.s('auto_login',false); location.reload();
 }
 

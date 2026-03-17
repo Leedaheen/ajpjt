@@ -3,8 +3,12 @@
    - 정적 자산 캐시 (오프라인 지원)
    - 외부 API (Supabase, Anthropic, Google) 제외
 ═══════════════════════════════════════ */
-const CACHE_NAME = 'ajpjt-v2';
-const SHELL = ['/', '/index.html', '/manifest.json', '/sw.js'];
+const CACHE_NAME = 'ajpjt-v3'; // JS 파일 분리 반영 — 구 캐시 자동 삭제
+const SHELL = [
+  '/', '/index.html', '/manifest.json', '/sw.js',
+  '/js/db.js', '/js/state.js', '/js/api.js',
+  '/js/ui.js', '/js/app.js', '/js/event.js',
+];
 
 const BYPASS = [
   'supabase.co', 'anthropic.com', 'googleapis.com',

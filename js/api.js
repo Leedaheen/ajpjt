@@ -20,8 +20,12 @@ async function sbReq(table, method='GET', data=null, query=''){
   const _exec = async () => {
     const prefer = method==='POST' ? 'resolution=merge-duplicates,return=minimal'
                  : method==='PATCH' ? 'return=minimal' : '';
+    // 30초 fetch 타임아웃 — 무한 대기 방지
+    const controller = new AbortController();
+    const _tid = setTimeout(() => controller.abort(), 30000);
     const opts = {
       method,
+      signal: controller.signal,
       headers: {
         'apikey': key,
         'Authorization': `Bearer ${key}`,
@@ -30,14 +34,21 @@ async function sbReq(table, method='GET', data=null, query=''){
       }
     };
     if(data) opts.body = JSON.stringify(data);
-    const r = await fetch(endpoint, opts);
-    if(!r.ok){
-      const err = await r.text();
-      throw new Error(`SB ${r.status}: ${err}`);
+    try {
+      const r = await fetch(endpoint, opts);
+      clearTimeout(_tid);
+      if(!r.ok){
+        const err = await r.text();
+        throw new Error(`SB ${r.status}: ${err}`);
+      }
+      if(method==='DELETE'||method==='PATCH') return null;
+      const ct = r.headers.get('content-type')||'';
+      return ct.includes('json') ? r.json() : null;
+    } catch(e) {
+      clearTimeout(_tid);
+      if(e.name === 'AbortError') throw new Error('REQUEST_TIMEOUT');
+      throw e;
     }
-    if(method==='DELETE'||method==='PATCH') return null;
-    const ct = r.headers.get('content-type')||'';
-    return ct.includes('json') ? r.json() : null;
   };
 
   const _execWithRetry = async () => {
@@ -182,8 +193,8 @@ async function _syncToSupabase(){
     idbReady ? IDB.getUnsynced('members').catch(()=>[]) : Promise.resolve([]),
   ]);
 
-  // 병렬 업서트 (테이블 간 의존성 없음)
-  await Promise.all([
+  // 병렬 업서트 (테이블 간 의존성 없음) — allSettled: 한 테이블 실패해도 나머지 계속 진행
+  const _syncResults = await Promise.allSettled([
     // 1. LOGS
     (async()=>{
       if(!unsyncLogs.length) return;
@@ -216,7 +227,7 @@ async function _syncToSupabase(){
       const rows = unsyncTr.map(t=>({
         record_id:        t.id||'',
         date:             t.date||'',
-        type:             t.type==='in'?'반입':'반출',
+        type:             t.type==='in'?'반입':t.type==='handover'?'인수인계':'반출',
         site_id:          t.siteId||'',
         site_name:        siteMap[t.siteId]||t.siteId||'',
         company:          t.company||'',
@@ -287,6 +298,12 @@ async function _syncToSupabase(){
       _cache.members = null;
     })(),
   ]);
+  // 부분 실패 테이블 로깅 (성공한 테이블은 이미 synced:true 처리됨)
+  const _syncFailed = _syncResults.filter(r => r.status === 'rejected');
+  if(_syncFailed.length){
+    _syncFailed.forEach(f => console.warn('[sync] 테이블 동기화 실패:', f.reason?.message));
+    if(_syncFailed.length === _syncResults.length) throw new Error('전체 테이블 동기화 실패');
+  }
 
   // 5. EQUIPMENT MASTER (transit 업서트 완료 후 순차 처리)
   const allEquip = getEquipMaster();
@@ -351,7 +368,7 @@ async function _directPushTransit(rec){
   const row={
     record_id:        rec.id||'',
     date:             rec.date||'',
-    type:             rec.type==='in'?'반입':'반출',
+    type:             rec.type==='in'?'반입':rec.type==='handover'?'인수인계':'반출',
     site_id:          rec.siteId||'',
     site_name:        siteMap[rec.siteId]||rec.siteId||'',
     company:          rec.company||'',
@@ -688,7 +705,7 @@ async function _syncToGS(){
   const unsyncTr = transits.filter(t=>!t.synced);
   if(unsyncTr.length){
     const trRows = unsyncTr.map(t=>[
-      t.date, t.type==='in'?'반입':'반출',
+      t.date, t.type==='in'?'반입':t.type==='handover'?'인수인계':'반출',
       getSites().find(s=>s.id===t.siteId)?.name||t.siteId||'—',
       t.company||'—',
       (t.specs||[]).map(s=>s.spec+(s.model?' ('+s.model+')':'')+' ×'+s.qty).join(', ')||t.equip||'—',
@@ -777,18 +794,31 @@ async function pushToGS(entry){
   }
 }
 
-let _retrySyncTimer=null;
+let _retrySyncTimer = null;
+let _retrySyncCount = 0;          // 연속 실패 횟수
+const _MAX_RETRY_SYNC = 5;        // 최대 재시도 5회 (총 2.5분)
 function scheduleRetrySync(){
   if(_retrySyncTimer) return;
-  _retrySyncTimer=setTimeout(async()=>{
-    _retrySyncTimer=null;
+  if(_retrySyncCount >= _MAX_RETRY_SYNC){
+    console.warn('[Sync] 재시도 최대 횟수 초과 — 중단. 다음 수동 동기화 시 초기화됨');
+    _retrySyncCount = 0;
+    setTimeout(()=>{ try{ toast('동기화 재시도 실패 (5회). 네트워크를 확인하세요','err',5000); }catch(_e){} },0);
+    return;
+  }
+  _retrySyncCount++;
+  _retrySyncTimer = setTimeout(async()=>{
+    _retrySyncTimer = null;
     try{
       await syncNow();
       const unsync = await IDB.getUnsynced('logs').catch(()=>[]);
-      if(!unsync.length) toast('재동기화 완료','ok');
-      else scheduleRetrySync();
+      if(!unsync.length){
+        _retrySyncCount = 0;
+        toast('재동기화 완료','ok');
+      } else {
+        scheduleRetrySync();
+      }
     }catch(_e){ scheduleRetrySync(); }
-  }, 30*1000); // 30초 후 재시도
+  }, 30*1000);
 }
 
 /* 3PM 알림 — 인덱스 활용, 알림 중복 방지 */

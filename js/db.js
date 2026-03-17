@@ -87,7 +87,11 @@ const DB = {
     try {
       localStorage.setItem(k, JSON.stringify(v));
     } catch(e) {
-      console.warn('[DB] localStorage 저장 실패:', k);
+      if(e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED'){
+        _handleQuotaExceeded(k, v);
+      } else {
+        console.warn('[DB] localStorage 저장 실패:', k, e.message);
+      }
     }
   },
   sizeKB() {
@@ -324,6 +328,49 @@ const IDB = (() => {
 
   return { open, getAll, getByIndex, getRange, put, putAll, getUnsynced, markSynced, count, getPage };
 })();
+
+/* ── localStorage 용량 초과 자동 복구 ─────────────────────
+   대용량 배열 키(_BULK_KEYS)를 최근 50건으로 슬라이싱 후 재시도.
+   IDB로 마이그레이션된 환경에서는 LS를 캐시 목적으로만 사용하므로 안전.
+─────────────────────────────────────────────────────────── */
+const _BULK_KEYS_LS = ['logs_v3','transit_v3','as_requests_v3','sub_members_v3'];
+function _handleQuotaExceeded(k, v){
+  console.warn('[DB] localStorage 용량 초과 — 대용량 키 슬라이싱 시도');
+  // 저장 대상 키 자신 제외한 대용량 키부터 50건으로 축소
+  let freed = false;
+  for(const bk of _BULK_KEYS_LS){
+    if(bk === k) continue;
+    try {
+      const raw = localStorage.getItem(bk);
+      if(!raw) continue;
+      const arr = JSON.parse(raw);
+      if(Array.isArray(arr) && arr.length > 50){
+        localStorage.setItem(bk, JSON.stringify(arr.slice(-50)));
+        freed = true;
+        break;
+      }
+    } catch(_e){}
+  }
+  if(freed){
+    try {
+      localStorage.setItem(k, JSON.stringify(v));
+      console.log('[DB] 용량 확보 후 재저장 성공:', k);
+      return;
+    } catch(_e){}
+  }
+  // 자기 자신이 대용량 배열이면 직접 축소
+  if(_BULK_KEYS_LS.includes(k) && Array.isArray(v)){
+    try {
+      localStorage.setItem(k, JSON.stringify(v.slice(-50)));
+      console.warn('[DB] 용량 부족 — 최근 50건만 LS 유지 (IDB 보존):', k);
+      return;
+    } catch(_e){}
+  }
+  console.error('[DB] localStorage 용량 초과 — 저장 불가:', k);
+  setTimeout(()=>{
+    try{ toast('저장 공간 부족. 앱을 새로고침하면 자동 정리됩니다','warn',5000); }catch(_e){}
+  }, 0);
+}
 
 /* ── localStorage → IndexedDB 마이그레이션 (최초 1회) ─── */
 async function _migrateFromLocalStorage() {

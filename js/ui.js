@@ -2458,6 +2458,7 @@ function deleteTransitMsg(id, idx){
 
 function submitTransit(){
   if(!S) return;
+  if(!navigator.onLine) toast('오프라인 상태입니다. 로컬에만 저장되며 온라인 복귀 시 자동 동기화됩니다','warn',4000);
   const date = document.getElementById('tr-date').value || today();
   const typeChip = document.querySelector('#tr-type-chips .chip.on');
   if(!typeChip){ toast('구분을 선택하세요','err'); return; }
@@ -2604,6 +2605,7 @@ function openASSheet(){
 }
 async function submitAS(){
   if(!S) return;
+  if(!navigator.onLine) toast('오프라인 상태입니다. 로컬에만 저장되며 온라인 복귀 시 자동 동기화됩니다','warn',4000);
   const equipRaw  = document.getElementById('as-equip').value.trim();
   const equipList = equipRaw.split(/[,，]+/).map(e=>e.trim().toUpperCase()).filter(Boolean);
   const equip     = equipList.join(', ');
