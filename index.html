@@ -6645,18 +6645,14 @@ function renderTransit(){
       ${hasFilter?`<button onclick="_clearTransitFilter()" style="font-size:10px;padding:2px 8px;border-radius:6px;background:rgba(239,68,68,.12);color:#f87171;border:1px solid rgba(239,68,68,.25);cursor:pointer">✕ 초기화</button>`:''}
       ${filterBadge}
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
-      <div style="display:flex;align-items:center;gap:4px;grid-column:1/-1">
-        <span style="font-size:10px;color:var(--tx3);white-space:nowrap;flex-shrink:0">기간</span>
-        <input type="date" id="tr-filter-date-from" value="${fDateFrom}" onchange="_filterTransit()" style="flex:1;font-size:11px;padding:5px 6px;border:1px solid var(--br);border-radius:8px;background:var(--bg1);color:var(--tx);box-sizing:border-box">
-        <span style="font-size:10px;color:var(--tx3)">~</span>
-        <input type="date" id="tr-filter-date-to" value="${fDateTo}" onchange="_filterTransit()" style="flex:1;font-size:11px;padding:5px 6px;border:1px solid var(--br);border-radius:8px;background:var(--bg1);color:var(--tx);box-sizing:border-box">
-      </div>
-      <select id="tr-filter-company" onchange="_filterTransit()" style="font-size:11px;padding:6px 8px;border:1px solid var(--br);border-radius:8px;background:var(--bg1);color:var(--tx);width:100%;box-sizing:border-box">
+    <div style="display:flex;align-items:center;gap:4px;margin-bottom:6px">
+      <input type="date" id="tr-filter-date-from" value="${fDateFrom}" onchange="_filterTransit()" placeholder="시작일" title="시작일" style="flex:1;min-width:0;font-size:11px;padding:5px 6px;border:1px solid var(--br);border-radius:8px;background:var(--bg1);color:var(--tx);box-sizing:border-box">
+      <span style="font-size:10px;color:var(--tx3);flex-shrink:0">~</span>
+      <input type="date" id="tr-filter-date-to" value="${fDateTo}" onchange="_filterTransit()" placeholder="종료일" title="종료일" style="flex:1;min-width:0;font-size:11px;padding:5px 6px;border:1px solid var(--br);border-radius:8px;background:var(--bg1);color:var(--tx);box-sizing:border-box">
+      <select id="tr-filter-company" onchange="_filterTransit()" style="flex:1;min-width:0;font-size:11px;padding:5px 6px;border:1px solid var(--br);border-radius:8px;background:var(--bg1);color:var(--tx);box-sizing:border-box">
         <option value="">전체 업체</option>
         ${coList.map(c=>`<option value="${c}"${fCompany===c?' selected':''}>${c}</option>`).join('')}
       </select>
-      <div></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
       <input type="text" id="tr-filter-spec" value="${fSpec}" oninput="_filterTransit()" placeholder="장비명 / 장비번호 검색" style="font-size:11px;padding:6px 10px;border:1px solid var(--br);border-radius:8px;background:var(--bg1);color:var(--tx);width:100%;box-sizing:border-box">
