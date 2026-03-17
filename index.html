@@ -2266,31 +2266,33 @@ create index if not exists idx_aj_status on aj_members(status);</pre>
     <div class="sh-handle"></div>
     <div class="sh-title" id="transit-form-title">반입/반출 신청</div>
 
-    <!-- 반입/반출 구분 -->
+    <!-- 반입/반출 구분 + 프로젝트 구분 (같은 행) -->
     <div class="fg">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-        <label class="fg-lbl" style="margin:0">구분 <span class="req">*</span></label>
-        <div id="tr-proj-change-inline" style="display:none;align-items:center;gap:5px">
-          <span style="font-size:10px;color:var(--tx2);flex-shrink:0">프로젝트 변경</span>
-          <div class="chips" id="tr-proj-change-chips" style="gap:4px">
-            <div class="chip" onclick="selectOne(this,'tr-proj-change-chips');_updateHandoverProjSection()">예</div>
-            <div class="chip on" onclick="selectOne(this,'tr-proj-change-chips');_updateHandoverProjSection()">아니오</div>
+      <div style="display:flex;align-items:flex-start;gap:10px">
+        <!-- 왼쪽: 구분 칩 -->
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <label class="fg-lbl" style="margin:0">구분 <span class="req">*</span></label>
+            <div id="tr-proj-change-inline" style="display:none;align-items:center;gap:5px">
+              <span style="font-size:10px;color:var(--tx2);flex-shrink:0">프로젝트 변경</span>
+              <div class="chips" id="tr-proj-change-chips" style="gap:4px">
+                <div class="chip" onclick="selectOne(this,'tr-proj-change-chips');_updateHandoverProjSection()">예</div>
+                <div class="chip on" onclick="selectOne(this,'tr-proj-change-chips');_updateHandoverProjSection()">아니오</div>
+              </div>
+            </div>
+          </div>
+          <div class="chips" id="tr-type-chips">
+            <div class="chip" onclick="selectOne(this,'tr-type-chips');_updateSpecModelVisibility()">반입</div>
+            <div class="chip" onclick="selectOne(this,'tr-type-chips');_updateSpecModelVisibility()">반출</div>
+            <div class="chip" onclick="selectOne(this,'tr-type-chips');_updateSpecModelVisibility()">인수인계</div>
           </div>
         </div>
+        <!-- 오른쪽: 프로젝트 구분 (반입/반출 시 표시) -->
+        <div id="tr-project-row" style="flex:1;display:none">
+          <label class="fg-lbl" style="margin-bottom:6px">프로젝트 구분 <span class="req">*</span></label>
+          <div class="chips" id="tr-project-chips" style="flex-wrap:wrap"></div>
+        </div>
       </div>
-      <div class="chips" id="tr-type-chips">
-        <div class="chip" onclick="selectOne(this,'tr-type-chips');_updateSpecModelVisibility()">반입</div>
-        <div class="chip" onclick="selectOne(this,'tr-type-chips');_updateSpecModelVisibility()">반출</div>
-        <div class="chip" onclick="selectOne(this,'tr-type-chips');_updateSpecModelVisibility()">인수인계</div>
-      </div>
-      <div style="font-size:10px;color:var(--tx3);margin-top:4px">반출 선택 시 제원별 장비번호 입력이 필요합니다</div>
-    </div>
-
-    <!-- 프로젝트 구분 (반입 시에만 표시) -->
-    <div class="fg" id="tr-project-row">
-      <label class="fg-lbl">프로젝트 구분</label>
-      <div class="chips" id="tr-project-chips" style="flex-wrap:wrap"></div>
-      <div style="font-size:10px;color:var(--tx3);margin-top:4px">해당 없으면 선택하지 않아도 됩니다</div>
     </div>
 
     <!-- 요청일 / 현장 / 업체명 같은 행 -->
@@ -2473,7 +2475,7 @@ create index if not exists idx_aj_status on aj_members(status);</pre>
     <!-- 현장 표시 -->
     <div style="font-size:11px;font-weight:700;color:var(--aj);margin-bottom:12px;padding:6px 10px;background:rgba(245,158,11,.1);border-radius:var(--rs)" id="as-site-disp">—</div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px">
       <div class="fg" style="margin:0">
         <label class="fg-lbl">요청 업체 <span class="req">*</span></label>
         <input type="text" class="fg-input" id="as-company" placeholder="업체명" autocomplete="off">
@@ -2484,7 +2486,27 @@ create index if not exists idx_aj_status on aj_members(status);</pre>
       </div>
       <div class="fg" style="margin:0">
         <label class="fg-lbl">장비 위치 <span class="req">*</span></label>
-        <input type="text" class="fg-input" id="as-location" placeholder="예: 1F D-E 41열">
+        <div class="site-select-wrap">
+          <select class="fg-input" id="as-location" style="padding:8px 6px;font-size:12px">
+            <option value="">위치 선택</option>
+            <option value="모듈동">모듈동</option>
+            <option value="1F외곽">1F외곽</option>
+            <option value="1F">1F</option>
+            <option value="2F">2F</option>
+            <option value="3F">3F</option>
+            <option value="4F">4F</option>
+            <option value="5F">5F</option>
+            <option value="6F">6F</option>
+            <option value="7F">7F</option>
+            <option value="8F">8F</option>
+            <option value="9F">9F</option>
+            <option value="기타">기타</option>
+          </select>
+        </div>
+      </div>
+      <div class="fg" style="margin:0">
+        <label class="fg-lbl">상세 위치</label>
+        <input type="text" class="fg-input" id="as-location-detail" placeholder="예: D-E 41열">
       </div>
     </div>
     <div class="fg">

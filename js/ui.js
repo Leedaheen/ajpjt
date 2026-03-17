@@ -559,6 +559,7 @@ function _initInputFormBindings(){
 let _asSearchQ = '';
 let _asFilter  = 'all'; // all / 대기 / 자재수급중 / 처리완료
 let _asTypeFilter = 'all'; // all / 작동불량 / 충전불량 / 누유의심 / 파손 / 자재요청 / 오류코드 / 기타
+let _asLocFilter  = 'all'; // all / 모듈동 / 1F외곽 / 1F~9F / 기타
 
 function renderASPage(){
   const el = document.getElementById('as-content');
@@ -588,6 +589,7 @@ function renderASPage(){
   }
   if(_asFilter !== 'all') reqs = reqs.filter(r=>r.status===_asFilter);
   if(_asTypeFilter !== 'all') reqs = reqs.filter(r=>(r.type||r.faultType||'')===_asTypeFilter);
+  if(_asLocFilter !== 'all') reqs = reqs.filter(r=>(r.location||'').startsWith(_asLocFilter));
 
   const pending  = reqs.filter(r=>r.status==='대기');
   const supply   = reqs.filter(r=>r.status==='자재수급중');
@@ -627,7 +629,7 @@ function renderASPage(){
       <div style="font-size:9px;color:var(--tx2)">처리완료</div>
     </div>
   </div>
-  <div style="display:flex;gap:8px;margin-bottom:12px">
+  <div style="display:flex;gap:6px;margin-bottom:12px">
     <div class="site-select-wrap" style="flex:1">
       <select class="fg-select" style="width:100%;font-size:11px" onchange="_asFilter=this.value;renderASPage()">
         <option value="all"${_asFilter==='all'?' selected':''}>전체 상태</option>
@@ -646,6 +648,23 @@ function renderASPage(){
         <option value="자재요청"${_asTypeFilter==='자재요청'?' selected':''}>자재요청</option>
         <option value="오류코드"${_asTypeFilter==='오류코드'?' selected':''}>오류코드</option>
         <option value="기타"${_asTypeFilter==='기타'?' selected':''}>기타</option>
+      </select>
+    </div>
+    <div class="site-select-wrap" style="flex:1">
+      <select class="fg-select" style="width:100%;font-size:11px" onchange="_asLocFilter=this.value;renderASPage()">
+        <option value="all"${_asLocFilter==='all'?' selected':''}>전체 위치</option>
+        <option value="모듈동"${_asLocFilter==='모듈동'?' selected':''}>모듈동</option>
+        <option value="1F외곽"${_asLocFilter==='1F외곽'?' selected':''}>1F외곽</option>
+        <option value="1F"${_asLocFilter==='1F'?' selected':''}>1F</option>
+        <option value="2F"${_asLocFilter==='2F'?' selected':''}>2F</option>
+        <option value="3F"${_asLocFilter==='3F'?' selected':''}>3F</option>
+        <option value="4F"${_asLocFilter==='4F'?' selected':''}>4F</option>
+        <option value="5F"${_asLocFilter==='5F'?' selected':''}>5F</option>
+        <option value="6F"${_asLocFilter==='6F'?' selected':''}>6F</option>
+        <option value="7F"${_asLocFilter==='7F'?' selected':''}>7F</option>
+        <option value="8F"${_asLocFilter==='8F'?' selected':''}>8F</option>
+        <option value="9F"${_asLocFilter==='9F'?' selected':''}>9F</option>
+        <option value="기타"${_asLocFilter==='기타'?' selected':''}>기타</option>
       </select>
     </div>
   </div>
@@ -1338,7 +1357,7 @@ function _trCard(r, _unused, canEdit, canMsg){
   });
   // 최대 15개, 최신 3개만 기본 표시 — 나머지는 아코디언
   const _MAX_MSGS = 15, _SHOW_MSGS = 3;
-  const _canAddMsg = (canEdit || canMsg) && _msgs.length < _MAX_MSGS;
+  const _canAddMsg = (canEdit || canMsg || S?.role==='sub') && _msgs.length < _MAX_MSGS;
   const _myInitials = (S?.company||(S?.role==='aj'?'AJ네트웍스':S?.name)||'AJ').slice(0,2);
   const _olderCnt  = Math.max(0, _allMsgHtmls.length - _SHOW_MSGS);
   const _olderHtml = _allMsgHtmls.slice(0, _olderCnt).join('');
@@ -1378,12 +1397,8 @@ function _trCard(r, _unused, canEdit, canMsg){
   if (canEdit && !st.done && !alreadyDone(r)) {
     const completeBtnLabel = isIn ? '반입완료' : '반출완료';
     const completeBtnColor = isIn ? '#22c55e' : '#fb923c';
-    const _actDispLabel = r.dispatch ? '배차확인' : '배차정보';
-    const _actDispColor = r.dispatch ? '#4ade80' : 'var(--tx2)';
-    const _actDispBorder = r.dispatch ? 'rgba(74,222,128,.4)' : 'var(--br)';
     actionHtml =
       `<div style="display:flex;gap:6px;margin-top:4px;border-top:1px solid var(--br);padding-top:8px">` +
-      `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:${_actDispColor};border-color:${_actDispBorder}" onclick="openDispatchPopup('${r.id}')">${_actDispLabel}</button>` +
       `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:#f87171;border-color:rgba(248,113,113,.3)" onclick="cancelTransit('${r.id}')">취소</button>` +
       `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:${completeBtnColor};border-color:${completeBtnColor}40;font-weight:700" onclick="completeTransit('${r.id}')">${completeBtnLabel}</button>` +
       `</div>`;
@@ -1714,13 +1729,10 @@ function _renderSpecBlock(r, canEdit) {
       </div>`;
     }).join('');
     const btnId = 'spec-save-btn-' + rid;
-    const _dispLabel = r.dispatch ? '배차정보 확인' : '배차정보';
-    const _dispColor = r.dispatch ? '#4ade80' : 'var(--tx2)';
     return `<div style="margin-bottom:8px;padding:8px 10px;background:rgba(96,165,250,.04);border:1px solid rgba(96,165,250,.15);border-radius:8px">
       <div style="font-size:10px;font-weight:700;color:#60a5fa;margin-bottom:7px">🏷 제원별 장비번호 입력</div>
       ${rows}
       <div style="display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-top:6px;padding-top:6px;border-top:1px solid rgba(96,165,250,.12)">
-        <button class="btn-ghost" style="font-size:10px;padding:4px 10px;color:${_dispColor}" onclick="openDispatchPopup('${rid}')">${_dispLabel}</button>
         <button class="btn-ghost" style="font-size:10px;padding:4px 10px" onclick="editTransitDate('${rid}')">날짜변경</button>
         <button id="${btnId}" onclick="_saveAllSpecEquip('${rid}')"
           style="padding:4px 10px;font-size:11px;font-weight:700;background:rgba(96,165,250,.18);
@@ -2242,7 +2254,7 @@ function _trAddSpecRow(spec='', model='', qty=1, equipNos=''){
       ${TR_SPECS.map(s=>`<option${s===spec?' selected':''}>${s}</option>`).join('')}
     </select>
     <input type="number" class="fg-input tr-qty" value="${qty}" min="1" style="flex:1;padding:6px 8px;font-size:12px;text-align:center" placeholder="수량">
-    <button onclick="this.closest('.tr-spec-row').remove()" style="background:none;border:none;color:#f87171;font-size:18px;cursor:pointer;flex-shrink:0;line-height:1">x</button>
+    <button onclick="var l=document.getElementById('tr-specs-list');if(l&&l.querySelectorAll('.tr-spec-row').length>1)this.closest('.tr-spec-row').remove();" style="background:none;border:none;color:#f87171;font-size:18px;cursor:pointer;flex-shrink:0;line-height:1">x</button>
   </div>
   ${isOut?`<div style="display:flex;align-items:center;gap:5px;position:relative">
     <span style="font-size:10px;color:var(--tx3);white-space:nowrap;flex-shrink:0">반출 장비번호</span>
@@ -2564,7 +2576,7 @@ function submitTransit(){
 
   addNotif({icon:'📦', title:`반입/반출 신청: ${company}`, desc:`${typeChip.textContent} · ${date}`});
   toast(typeChip.textContent + ' 신청이 등록되었습니다', 'ok');
-  _directPushTransit(rec).catch(e => console.warn('[submitTransit push]', e));
+  _directPushTransit(rec).catch(e => { console.warn('[submitTransit push]', e); scheduleRetrySync(); });
   closeSheet('sh-transit-form');
   renderTransit();
 }
@@ -2578,6 +2590,7 @@ function openASSheet(){
   el('as-equip', '');
   el('as-desc',  '');
   el('as-location', '');
+  el('as-location-detail', '');
   el('as-company',  S?.company || '');
   el('as-reporter-name',  S?.name  || '');
   el('as-reporter-phone', S?.phone || '');
@@ -2598,7 +2611,9 @@ async function submitAS(){
   const equipList = equipRaw.split(/[,，]+/).map(e=>e.trim().toUpperCase()).filter(Boolean);
   const equip     = equipList.join(', ');
   const company  = document.getElementById('as-company')?.value.trim() || S.company;
-  const location = document.getElementById('as-location')?.value.trim() || '';
+  const locationSel    = document.getElementById('as-location')?.value || '';
+  const locationDetail = document.getElementById('as-location-detail')?.value.trim() || '';
+  const location = locationDetail ? `${locationSel} ${locationDetail}`.trim() : locationSel;
   const type     = document.querySelector('#as-type-chips .chip.on')?.textContent || '기타';
   const desc     = document.getElementById('as-desc').value.trim();
   const repName  = document.getElementById('as-reporter-name')?.value.trim() || '';
@@ -2623,7 +2638,7 @@ async function submitAS(){
     return;
   }
   if(!equip){ toast('장비번호를 입력하세요','err'); return; }
-  if(!location){ toast('장비 위치를 입력하세요','err'); document.getElementById('as-location')?.focus(); return; }
+  if(!locationSel){ toast('장비 위치를 선택하세요','err'); document.getElementById('as-location')?.focus(); return; }
   if(!desc){ toast('접수 내용을 입력하세요','err'); return; }
   const req = {
     id: `as-${Date.now().toString(36)}`,
@@ -2641,7 +2656,7 @@ async function submitAS(){
   const reqs = getAsReqs(); reqs.unshift(req); saveAsReqs(reqs);
   addNotif({icon:'🔧', title:`AS신청: ${equip}`, desc:`${company} — ${desc.slice(0,30)}`});
   toast('AS 신청이 등록되었습니다','ok');
-  _directPushAS(req).catch(e => console.warn('[submitAS push]', e));
+  _directPushAS(req).catch(e => { console.warn('[submitAS push]', e); scheduleRetrySync(); });
   updateASBadge();
   closeSheet('sh-as');
   if(curPg==='pg-as') renderASPage();
