@@ -7717,6 +7717,7 @@ function _resetTransitForm(){
   // 섹션: 기본 반입/반출 표시
   const bs=document.getElementById('tr-basic-section');    if(bs) bs.style.display='';
   const hs=document.getElementById('tr-handover-section'); if(hs) hs.style.display='none';
+  const pi=document.getElementById('tr-proj-change-inline'); if(pi) pi.style.display='none';
   _trAddSpecRow(); // 기본 1행
 }
 
@@ -7747,6 +7748,8 @@ function _updateSpecModelVisibility(){
   if (basicSec)    basicSec.style.display    = isHandover ? 'none' : '';
   if (handoverSec) handoverSec.style.display = isHandover ? '' : 'none';
   if (companyFg)   companyFg.style.display   = isHandover ? 'none' : '';
+  const projInline = document.getElementById('tr-proj-change-inline');
+  if (projInline) projInline.style.display = isHandover ? 'flex' : 'none';
 
   if (isHandover) {
     // 반입 전용 프로젝트 칩 숨기기
@@ -10165,7 +10168,16 @@ ensureAdminAccount()
 
     <!-- 반입/반출 구분 -->
     <div class="fg">
-      <label class="fg-lbl">구분 <span class="req">*</span></label>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <label class="fg-lbl" style="margin:0">구분 <span class="req">*</span></label>
+        <div id="tr-proj-change-inline" style="display:none;align-items:center;gap:5px">
+          <span style="font-size:10px;color:var(--tx2);flex-shrink:0">프로젝트 변경</span>
+          <div class="chips" id="tr-proj-change-chips" style="gap:4px">
+            <div class="chip" onclick="selectOne(this,'tr-proj-change-chips');_updateHandoverProjSection()">예</div>
+            <div class="chip on" onclick="selectOne(this,'tr-proj-change-chips');_updateHandoverProjSection()">아니오</div>
+          </div>
+        </div>
+      </div>
       <div class="chips" id="tr-type-chips">
         <div class="chip" onclick="selectOne(this,'tr-type-chips');_updateSpecModelVisibility()">반입</div>
         <div class="chip" onclick="selectOne(this,'tr-type-chips');_updateSpecModelVisibility()">반출</div>
@@ -10294,16 +10306,7 @@ ensureAdminAccount()
         <div style="font-size:10px;color:var(--tx3);margin-top:4px">장비 칩 클릭으로 복수 선택 가능</div>
       </div>
 
-      <!-- 프로젝트 변경 여부 -->
-      <div class="fg">
-        <label class="fg-lbl">프로젝트 변경</label>
-        <div class="chips" id="tr-proj-change-chips">
-          <div class="chip" onclick="selectOne(this,'tr-proj-change-chips');_updateHandoverProjSection()">예</div>
-          <div class="chip on" onclick="selectOne(this,'tr-proj-change-chips');_updateHandoverProjSection()">아니오</div>
-        </div>
-      </div>
-
-      <!-- 프로젝트 변경 상세 (아코디언) -->
+      <!-- 프로젝트 변경 상세 (아코디언) — 구분 행 우측 칩으로 이동 -->
       <div id="tr-proj-change-detail" style="display:none;border-left:3px solid rgba(20,184,166,.4);padding-left:10px;margin-bottom:8px">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
           <div class="fg" style="margin:0">
