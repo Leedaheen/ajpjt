@@ -2545,6 +2545,37 @@ function _invalidate(key){
   if(key==='asReqs')  _cache.asBySite=null;
 }
 
+/* ── 메모리 가드 ─────────────────────────────────────────
+   5분마다 실행: 현재 보이지 않는 페이지의 대용량 캐시 해제
+   performance.memory 지원 시 heap 임계치(300MB) 초과하면 강제 전체 해제
+──────────────────────────────────────────────────────── */
+let _memGuardLastClean = 0;
+function _runMemoryGuard(){
+  const now = Date.now();
+  // 같은 페이지에 없으면 logs 캐시(가장 큼) 해제
+  if(curPg !== 'pg-ops'){
+    _cache.logs = null;
+    _cache.logsByDate = null;
+    _cache.logsByCoSite = null;
+    _cache.todayLogs = null;
+  }
+  if(curPg !== 'pg-transit') _cache.transitBySite = null;
+  if(curPg !== 'pg-as')      _cache.asBySite = null;
+
+  // 진행 중이 아닌 pendingGET 만료 정리
+  if(_pendingGETs.size > 10) _pendingGETs.clear();
+
+  // performance.memory 지원 브라우저(Chrome)에서 힙 과부하 감지
+  try {
+    const mem = performance?.memory;
+    if(mem && mem.usedJSHeapSize > 300 * 1024 * 1024){
+      console.warn('[MemGuard] 힙 초과 — 전체 캐시 해제:', Math.round(mem.usedJSHeapSize/1048576)+'MB');
+      _invalidateAll();
+      _memGuardLastClean = now;
+    }
+  } catch {}
+}
+
 // ── LOGS: IDB 우선 접근자 ───────────────────────────────
 // 오늘 로그 (빠른 홈화면용)
 async function getTodayLogs() {
@@ -2562,8 +2593,9 @@ async function getTodayLogs() {
 async function getLogsByRange(from, to, siteId=null, limit=200) {
   const sbUrl = DB.g(K.SB_URL,'');
   if(sbUrl){
-    // Supabase 서버사이드 쿼리 — 필요한 것만
-    let q = `?select=*&date=gte.${from}&date=lte.${to}&order=created_at.desc&limit=${limit}`;
+    // Supabase 서버사이드 쿼리 — select=* 대신 필요 컬럼만 지정 (payload 절감)
+    const LOG_COLS = 'record_id,id,date,site_id,company,floor,equip,recorder,status,start_time,end_time,used_hours,meter_start,meter_end,off_reason,created_at';
+    let q = `?select=${LOG_COLS}&date=gte.${from}&date=lte.${to}&order=created_at.desc&limit=${limit}`;
     if(siteId) q += `&site_id=eq.${siteId}`;
     try {
       const rows = await sbReq('logs','GET',null,q);
@@ -2661,7 +2693,8 @@ function getTransitBySite(siteId){
 async function saveTransit(arr){
   const now = Date.now();
   arr = arr.map(r => r.updatedAt ? r : {...r, updatedAt: now});
-  _cache.transit = arr;
+  // 메모리 캐시는 최신 500건으로 제한 (전체는 IDB에 보존)
+  _cache.transit = arr.length > 500 ? arr.slice(0, 500) : arr;
   _cache.transitBySite = null;
   DB.s(K.TRANSIT, arr.slice(0,100)); // LS 먼저 저장 (캐시 무효화 경합 방지)
   try { await IDB.putAll('transit', arr); } catch {}
@@ -2692,7 +2725,8 @@ function getAsBySite(siteId){
 async function saveAsReqs(arr){
   const now = Date.now();
   arr = arr.map(r => r.updatedAt ? r : {...r, updatedAt: now});
-  _cache.asReqs = arr;
+  // 메모리 캐시는 최신 300건으로 제한 (전체는 IDB에 보존)
+  _cache.asReqs = arr.length > 300 ? arr.slice(0, 300) : arr;
   _cache.asBySite = null;
   DB.s(K.AS_REQS, arr.slice(0,100)); // LS 먼저 저장 (캐시 무효화 경합 방지)
   try { await IDB.putAll('as_requests', arr); } catch {}
@@ -2797,9 +2831,12 @@ async function _fetchFromSB(){
     const siteFilter=siteId?`&site_id=eq.${encodeURIComponent(siteId)}`:'';
     const since=new Date(); since.setDate(since.getDate()-30);
     const sinceStr=since.toISOString();
+    // select=* 대신 필요한 컬럼만 지정 → payload 30~50% 절감
+    const TR_COLS  = 'record_id,id,date,type,site_id,site_name,company,equip_specs,aj_equip,reporter_name,reporter_phone,manager_name,manager_phone,manager_location,note,status,messages,created_at';
+    const AS_COLS  = 'record_id,id,date,site_id,site_name,company,equip,location,fault_type,description,reporter_name,reporter_phone,status,tech_name,tech_phone,resolved_at,resolve_note,requested_at,material_at,created_at';
     const [trRows,asRows]=await Promise.all([
-      sbReq('transit','GET',null,`?select=*&created_at=gte.${sinceStr}${siteFilter}&order=created_at.desc&limit=200`),
-      sbReq('as_requests','GET',null,`?select=*${siteFilter}&order=created_at.desc&limit=200`),
+      sbReq('transit','GET',null,`?select=${TR_COLS}&created_at=gte.${sinceStr}${siteFilter}&order=created_at.desc&limit=200`),
+      sbReq('as_requests','GET',null,`?select=${AS_COLS}${siteFilter}&order=created_at.desc&limit=200`),
     ]);
     let changed=false;
     if(Array.isArray(trRows)&&trRows.length){
@@ -4529,6 +4566,8 @@ function enterApp(){
     });
   setInterval(check3PMAlert, 60000);
   setInterval(()=>{ if(S&&document.visibilityState==='visible') _fetchFromSB().catch(()=>{}); }, 30000);
+  // 메모리 가드: 5분마다 비활성 캐시 해제
+  setInterval(_runMemoryGuard, 5 * 60 * 1000);
   document.addEventListener('visibilitychange', ()=>{
     if(document.visibilityState==='visible'&&S){ syncNow(); _fetchFromSB().catch(()=>{}); }
   });
@@ -4715,12 +4754,24 @@ function goTab(pgId){
 ═══════════════════════════════════════════ */
 const SB_BATCH = 500; // 한 번에 upsert할 최대 건수 (3000대 환경)
 
+/* ── GET 요청 중복 차단: 동일 endpoint가 이미 진행 중이면 해당 Promise 재사용 ── */
+const _pendingGETs = new Map();
+/* ── 지수 백오프 딜레이 (ms) — 네트워크 실패 시 순서대로 사용 ── */
+const _SB_RETRY_DELAYS = [5000, 15000, 30000];
+
 async function sbReq(table, method='GET', data=null, query=''){
   const url = DB.g(K.SB_URL,'');
   const key  = DB.g(K.SB_KEY,'');
   if(!url || !key) throw new Error('NO_SB_URL');
+
+  const endpoint = `${url}/rest/v1/${table}${query}`;
+
+  // GET 요청 중복 차단 — 동일 URL이 비행 중이면 같은 Promise 반환
+  if(method === 'GET'){
+    if(_pendingGETs.has(endpoint)) return _pendingGETs.get(endpoint);
+  }
+
   const _exec = async () => {
-    const endpoint = `${url}/rest/v1/${table}${query}`;
     const prefer = method==='POST' ? 'resolution=merge-duplicates,return=minimal'
                  : method==='PATCH' ? 'return=minimal' : '';
     const opts = {
@@ -4742,16 +4793,33 @@ async function sbReq(table, method='GET', data=null, query=''){
     const ct = r.headers.get('content-type')||'';
     return ct.includes('json') ? r.json() : null;
   };
-  try {
-    return await _exec();
-  } catch(e) {
+
+  const _execWithRetry = async () => {
     // PGRST205: 스키마 캐시 미갱신 → 3초 후 1회 자동 재시도
-    if(e?.message?.includes('PGRST205')){
-      await new Promise(r => setTimeout(r, 3000));
+    try {
       return await _exec();
+    } catch(e) {
+      if(e?.message?.includes('PGRST205')){
+        await new Promise(r => setTimeout(r, 3000));
+        return await _exec();
+      }
+      // 네트워크 오류 시 지수 백오프 재시도 (GET만)
+      if(method === 'GET' && (e?.message?.includes('Failed to fetch') || e?.name === 'TypeError')){
+        for(const delay of _SB_RETRY_DELAYS){
+          await new Promise(r => setTimeout(r, delay));
+          try { return await _exec(); } catch(_) {}
+        }
+      }
+      throw e;
     }
-    throw e;
+  };
+
+  if(method === 'GET'){
+    const p = _execWithRetry().finally(() => _pendingGETs.delete(endpoint));
+    _pendingGETs.set(endpoint, p);
+    return p;
   }
+  return _execWithRetry();
 }
 
 // 배치 upsert — SB_BATCH 단위로 분할 전송
@@ -4831,8 +4899,13 @@ async function syncNow(){
    - logs / transit / as / members 병렬 전송 → 동기화 시간 ~4× 단축
    - SB_BATCH(500)건 단위로 분할 전송
    - 성공 시 IDB markSynced → LS 백업 캐시 갱신
+   - _syncLock: 동시 실행 방지 (1개 워커만 허용)
 ────────────────────────────────────────────────────────── */
+let _syncLock = false;
 async function _syncToSupabase(){
+  if(_syncLock){ console.log('[Sync] 이미 동기화 중 — 건너뜀'); return; }
+  _syncLock = true;
+  try {
   const siteMap = Object.fromEntries(getSites().map(s=>[s.id,s.name]));
   const idbReady = !!(window._IDB_READY);
 
@@ -4986,6 +5059,9 @@ async function _syncToSupabase(){
   // 마지막 동기화 이후 서버에서 변경된 transit / AS 데이터를 내려받아 로컬 병합
   // updated_at 기준 비교: 서버 버전이 더 새로우면 로컬을 덮어씀
   await _pullRecentFromSupabase().catch(e => console.warn('[pull] 실패:', e));
+  } finally {
+    _syncLock = false;
+  }
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -8147,7 +8223,15 @@ async function _doRenderLog(){
       el.innerHTML=`<div class="empty"><div class="empty-ico" style="font-size:32px;margin-bottom:10px">—</div><div class="empty-txt">이력이 없습니다</div></div>`;
       return;
     }
-    el.innerHTML='';
+    // DOM 완전 초기화 — 이전 청크 노드 누적 방지
+    while(el.firstChild) el.removeChild(el.firstChild);
+    // 1,000건 초과 시 상단 안내 (날짜 범위 축소 권장)
+    if(f.length >= 1000){
+      const warn = document.createElement('div');
+      warn.style.cssText = 'padding:6px 10px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:var(--rs);font-size:10px;color:#f59e0b;margin-bottom:6px;text-align:center';
+      warn.textContent = `⚠️ ${f.length.toLocaleString()}건 — 날짜 범위를 좁히면 더 빠릅니다`;
+      el.appendChild(warn);
+    }
     _renderLogChunk(el);
   } catch(e){
     el.innerHTML=`<div class="empty"><div class="empty-txt">조회 오류: ${e.message}</div></div>`;
@@ -8194,16 +8278,34 @@ function _renderLogChunk(el){
   el.appendChild(frag);
   _logChunkIdx+=LOG_CHUNK;
 
-  // 더 불러올 데이터가 있으면 "더보기" 버튼
-  if(_logChunkIdx<_logFiltered.length){
-    const existing=el.querySelector('.log-more-btn');
-    if(existing) existing.remove();
-    const more=document.createElement('div');
-    more.className='log-more-btn';
-    more.style.cssText='text-align:center;padding:12px;color:var(--blue);font-size:12px;font-weight:700;cursor:pointer;border:1px solid var(--br);border-radius:var(--rs);margin:4px 0';
-    more.textContent=`더보기 (${_logFiltered.length-_logChunkIdx}건 더)`;
-    more.onclick=()=>{ more.remove(); _renderLogChunk(el); };
-    el.appendChild(more);
+  // 기존 sentinel 제거
+  const oldSentinel = el.querySelector('.log-sentinel');
+  if(oldSentinel) oldSentinel.remove();
+
+  if(_logChunkIdx < _logFiltered.length){
+    // IntersectionObserver 지원 시 — 스크롤 끝에 도달하면 자동 로드 (DOM 클릭 불필요)
+    const sentinel = document.createElement('div');
+    sentinel.className = 'log-sentinel';
+    sentinel.style.cssText = 'height:20px;text-align:center;padding:8px;color:var(--tx3);font-size:11px';
+    sentinel.textContent = `▾ ${_logFiltered.length - _logChunkIdx}건 더`;
+    el.appendChild(sentinel);
+
+    if('IntersectionObserver' in window){
+      const io = new IntersectionObserver(entries => {
+        if(entries[0].isIntersecting){
+          io.disconnect();
+          sentinel.remove();
+          _renderLogChunk(el);
+        }
+      }, { root: document.getElementById('ops-log-panel'), threshold: 0.1 });
+      io.observe(sentinel);
+    } else {
+      // 폴백: 클릭으로 더보기
+      sentinel.style.cursor = 'pointer';
+      sentinel.style.color  = 'var(--blue)';
+      sentinel.style.fontWeight = '700';
+      sentinel.onclick = () => { sentinel.remove(); _renderLogChunk(el); };
+    }
   }
 }
 
