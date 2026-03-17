@@ -554,13 +554,17 @@ input,select,button,textarea{font-family:inherit;}
 
 /* Sync */
 .sync-row{display:flex;align-items:center;gap:10px;background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);padding:10px 14px;margin-bottom:14px;}
-.sdot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.sdot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
 .sdot.ok  {background:var(--green);box-shadow:0 0 0 3px rgba(34,197,94,.2);animation:pulse 3s infinite;}
 .sdot.err {background:var(--red);box-shadow:0 0 0 3px rgba(239,68,68,.2);}
 .sdot.sync{background:var(--yellow);box-shadow:0 0 0 3px rgba(245,158,11,.2);}
 .sync-txt{flex:1;font-size:12px;color:var(--tx2);}
 .sync-txt b{color:var(--tx);}
 .sync-go{font-size:11px;color:var(--blue);cursor:pointer;padding:5px 11px;border-radius:6px;background:rgba(59,139,255,.12);border:1px solid rgba(59,139,255,.2);flex-shrink:0;font-weight:700;}
+/* 탑바 동기화 pill */
+.sync-pill{display:flex;align-items:center;gap:5px;cursor:pointer;padding:5px 9px;border-radius:8px;border:1px solid var(--br);background:var(--bg2);transition:background .15s;flex-shrink:0;}
+.sync-pill:active{background:var(--bg3);}
+.sync-pill-txt{font-size:10px;color:var(--tx2);white-space:nowrap;max-width:88px;overflow:hidden;text-overflow:ellipsis;line-height:1.2;}
 
 /* Section headers */
 .shd{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;}
@@ -1429,6 +1433,10 @@ textarea.fg-input{height:72px;line-height:1.5;}
       </div>
     </div>
     <div class="topbar-acts">
+      <div class="sync-pill" onclick="syncNow()">
+        <div id="sdot" class="sdot"></div>
+        <span id="stxt" class="sync-pill-txt">동기화</span>
+      </div>
       <div class="offline-badge" id="offline-badge">✕ 오프라인</div>
       <div class="rbadge" id="rbadge" style="display:flex;align-items:center;justify-content:center"></div>
       <div class="tb-btn" onclick="openNotifSheet()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg><div class="ndot" id="ndot"></div></div>
@@ -1453,13 +1461,6 @@ textarea.fg-input{height:72px;line-height:1.5;}
             <div class="a3pm-desc" id="a3pm-desc">오후 3시까지 가동현황을 입력하지 않은 업체입니다</div>
             <div class="a3pm-missing" id="a3pm-missing"></div>
           </div>
-        </div>
-
-        <!-- Sync -->
-        <div class="sync-row">
-          <div class="sdot" id="sdot"></div>
-          <div class="sync-txt" id="stxt">Google Sheets 미연동</div>
-          <div class="sync-go" onclick="syncNow()">동기화</div>
         </div>
 
         <!-- KPIs -->
@@ -4612,9 +4613,17 @@ function enterApp(){
   const _txt = document.getElementById('stxt');
   if (_dot && _txt) {
     const hasSB = DB.g(K.SB_URL, '');
-    _dot.className = 'sdot sync';
-    _txt.innerHTML = hasSB ? '<b>연결 확인 중...</b>' : '<b>미연동</b> · 관리 탭에서 Supabase 설정';
-    if (!hasSB) _dot.className = 'sdot err';
+    const _ls0  = DB.g('last_sync', '');
+    if (!hasSB) {
+      _dot.className = 'sdot err';
+      _txt.textContent = '미연동';
+    } else if (_ls0) {
+      _dot.className = 'sdot ok';
+      _txt.textContent = `동기화 ${new Date(_ls0).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})}`;
+    } else {
+      _dot.className = 'sdot sync';
+      _txt.textContent = '연결 확인 중...';
+    }
   }
   updateLogBadge();
   check3PMAlert();
@@ -4650,7 +4659,7 @@ function _updateOfflineBadge(){
   // 오프라인→온라인 복귀 시 자동 동기화 시도
 }
 window.addEventListener('online', ()=>{ _updateOfflineBadge(); queueSync(); });
-window.addEventListener('offline', ()=>{ _updateOfflineBadge(); const el=document.getElementById('sdot'); const txt=document.getElementById('stxt'); if(el){el.className='sdot err'; txt.innerHTML='<b>오프라인</b> · 네트워크 연결 없음';} });
+window.addEventListener('offline', ()=>{ _updateOfflineBadge(); const el=document.getElementById('sdot'); const txt=document.getElementById('stxt'); if(el){el.className='sdot err'; if(txt) txt.textContent='오프라인';} });
 
 /* ── Service Worker 등록 (PWA) ──────────────────────────── */
 // claudeusercontent.com / 로컬 미리보기에서는 SW 등록 생략
@@ -4939,12 +4948,12 @@ async function syncNow(){
   _syncLock = true;
   const dot=document.getElementById('sdot');
   const txt=document.getElementById('stxt');
-  dot.className='sdot sync'; txt.innerHTML='<b>동기화 중...</b>';
+  dot.className='sdot sync'; txt.textContent='동기화 중...';
   const sbUrl = DB.g(K.SB_URL,'');
   const gsUrl = DB.g(K.GS_URL,'');
   if(!sbUrl && !gsUrl){
     dot.className='sdot err';
-    txt.innerHTML='<b>미연동</b> · 관리 탭에서 Supabase 설정';
+    txt.textContent='미연동';
     _syncLock = false;
     return;
   }
@@ -4955,7 +4964,7 @@ async function syncNow(){
       await _syncToGS();
     }
     dot.className='sdot ok';
-    txt.innerHTML=`<b>연결됨</b> · ${new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})} 동기화`;
+    txt.textContent=`동기화 ${new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})}`;
     DB.s('last_sync',new Date().toISOString());
     if(curPg==='pg-home') renderHome();
     if(curPg==='pg-admin') renderAdmin();
@@ -4963,13 +4972,13 @@ async function syncNow(){
   } catch(e){
     dot.className='sdot err';
     const errMsg = e.message||'';
-    const hint = errMsg.includes('NO_SB_URL') ? 'Supabase 키 미설정'
+    const hint = errMsg.includes('NO_SB_URL') ? '키 미설정'
                : errMsg.includes('401')       ? 'API 키 오류'
                : errMsg.includes('404')        ? '테이블 없음'
-               : errMsg.includes('column')     ? 'DB 컬럼 불일치'
+               : errMsg.includes('column')     ? '컬럼 불일치'
                : errMsg.includes('Failed to fetch') ? '네트워크 오류'
-               : '로컬 저장 모드';
-    txt.innerHTML=`<b>연결 실패</b> · ${hint}`;
+               : '오류';
+    txt.textContent=`오류 · ${hint}`;
     console.error('[Sync 실패]', errMsg);
   } finally {
     _syncLock = false;
@@ -5045,7 +5054,9 @@ async function _syncToSupabase(){
         note:             t.note||'',
         status:           t.status || (t.cancelled?'취소':(t.done?'완료':'대기')),
         messages:         JSON.stringify(t.ajMsgs||[]),
+        dispatch:         t.dispatch||'',
         created_at:       t.createdAt ? new Date(t.createdAt).toISOString() : new Date().toISOString(),
+        updated_at:       t.updatedAt ? new Date(t.updatedAt).toISOString() : new Date().toISOString(),
       }));
       await sbBatchUpsert('transit', rows);
       await IDB.markSynced('transit', unsyncTr.map(t=>t.id)).catch(()=>{});
@@ -5140,6 +5151,96 @@ async function _syncToSupabase(){
   // updated_at 기준 비교: 서버 버전이 더 새로우면 로컬을 덮어씀
   await _pullRecentFromSupabase().catch(e => console.warn('[pull] 실패:', e));
   } catch(e) { throw e; }
+}
+
+/* ══════════════════════════════════════════════════════════
+   단건 즉시 업로드 (서버우선연동) — transit / as_requests
+   저장 직후 해당 레코드만 Supabase에 단독 upsert.
+   성공 → synced:true 마킹 + sync pill 갱신
+   실패 → synced:false 유지 (다음 _syncToSupabase 재시도)
+══════════════════════════════════════════════════════════ */
+function _syncPillOk(){
+  const dot=document.getElementById('sdot');
+  const txt=document.getElementById('stxt');
+  const t=new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+  if(dot) dot.className='sdot ok';
+  if(txt) txt.textContent=`동기화 ${t}`;
+  DB.s('last_sync',new Date().toISOString());
+}
+async function _directPushTransit(rec){
+  const sbUrl=DB.g(K.SB_URL,'');
+  if(!sbUrl) return;
+  const siteMap=Object.fromEntries(getSites().map(s=>[s.id,s.name]));
+  const now=new Date().toISOString();
+  const row={
+    record_id:        rec.id||'',
+    date:             rec.date||'',
+    type:             rec.type==='in'?'반입':'반출',
+    site_id:          rec.siteId||'',
+    site_name:        siteMap[rec.siteId]||rec.siteId||'',
+    company:          rec.company||'',
+    equip_specs:      (rec.specs||[]).map(s=>s.spec+(s.model?` (${s.model})`:'')+` ×${s.qty}`).join(', ')||rec.equip||'',
+    aj_equip:         rec.ajEquip||'',
+    reporter_name:    rec.reporterName||rec.recorder||'',
+    reporter_phone:   rec.reporterPhone||'',
+    manager_name:     rec.managerName||'',
+    manager_phone:    rec.managerPhone||'',
+    manager_location: rec.managerLocation||'',
+    note:             rec.note||'',
+    status:           rec.status||'예정',
+    messages:         JSON.stringify(rec.ajMsgs||[]),
+    dispatch:         rec.dispatch||'',
+    created_at:       now,
+    updated_at:       now,
+  };
+  try{
+    await sbReq('transit','POST',row);
+    const arr=getTransit();
+    const idx=arr.findIndex(r=>r.id===rec.id);
+    if(idx>=0){ arr[idx].synced=true; arr[idx].updatedAt=Date.now(); await saveTransit(arr); }
+    await IDB.markSynced('transit',[rec.id]).catch(()=>{});
+    _syncPillOk();
+  }catch(e){
+    console.warn('[직접업로드] transit 실패 (로컬 저장됨):', e.message);
+  }
+}
+async function _directPushAS(req){
+  const sbUrl=DB.g(K.SB_URL,'');
+  if(!sbUrl) return;
+  const siteMap=Object.fromEntries(getSites().map(s=>[s.id,s.name]));
+  const now=new Date().toISOString();
+  const row={
+    record_id:     req.id||'',
+    date:          req.date||'',
+    site_id:       req.siteId||'',
+    site_name:     siteMap[req.siteId]||req.siteId||'',
+    company:       req.company||'',
+    equip:         req.equip||'',
+    location:      req.location||'',
+    fault_type:    req.type||req.faultType||'기타',
+    description:   req.desc||'',
+    reporter_name: req.reporterName||req.reporter||'',
+    reporter_phone:req.reporterPhone||'',
+    status:        req.status||'대기',
+    tech_name:     req.techName||'',
+    tech_phone:    req.techPhone||'',
+    resolved_at:   req.resolvedAt?new Date(req.resolvedAt).toISOString():null,
+    resolve_note:  req.resolvedNote||'',
+    material_at:   req.materialAt?new Date(req.materialAt).toISOString():null,
+    requested_at:  req.requestedAt?new Date(req.requestedAt).toISOString():null,
+    created_at:    now,
+    updated_at:    now,
+  };
+  try{
+    await sbReq('as_requests','POST',row);
+    const arr=getAsReqs();
+    const idx=arr.findIndex(r=>r.id===req.id);
+    if(idx>=0){ arr[idx].synced=true; arr[idx].updatedAt=Date.now(); saveAsReqs(arr); }
+    await IDB.markSynced('as_requests',[req.id]).catch(()=>{});
+    _syncPillOk();
+  }catch(e){
+    console.warn('[직접업로드] as_requests 실패 (로컬 저장됨):', e.message);
+  }
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -8107,7 +8208,7 @@ function submitTransit(){
 
   addNotif({icon:'📦', title:`반입/반출 신청: ${company}`, desc:`${typeChip.textContent} · ${date}`});
   toast(typeChip.textContent + ' 신청이 등록되었습니다', 'ok');
-  _syncToSupabase().catch(e => console.warn('[submitTransit sync]', e));
+  _directPushTransit(rec).catch(e => console.warn('[submitTransit push]', e));
   closeSheet('sh-transit-form');
   renderTransit();
 }
@@ -8184,7 +8285,7 @@ async function submitAS(){
   const reqs = getAsReqs(); reqs.unshift(req); saveAsReqs(reqs);
   addNotif({icon:'🔧', title:`AS신청: ${equip}`, desc:`${company} — ${desc.slice(0,30)}`});
   toast('AS 신청이 등록되었습니다','ok');
-  _syncToSupabase().catch(e => console.warn('[submitAS sync]', e));
+  _directPushAS(req).catch(e => console.warn('[submitAS push]', e));
   updateASBadge();
   closeSheet('sh-as');
   if(curPg==='pg-as') renderASPage();
