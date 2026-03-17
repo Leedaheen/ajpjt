@@ -2617,7 +2617,11 @@ async function getLogsByRange(from, to, siteId=null, limit=200) {
         if(siteId) idbRows = idbRows.filter(l => l.siteId === siteId);
         const sbIds = new Set(sbRows.map(r => r.id));
         const localOnly = idbRows.filter(r => !sbIds.has(r.id));
-        if(localOnly.length) return [...sbRows, ...localOnly].sort((a,b)=>(b.ts||0)-(a.ts||0)).slice(0, limit);
+        // SB 0건이어도 IDB 데이터 있으면 반환 (오프라인/신규 저장 직후 포함)
+        if(localOnly.length || sbRows.length === 0){
+          const merged = [...sbRows, ...localOnly].sort((a,b)=>(b.ts||0)-(a.ts||0));
+          if(merged.length) return merged.slice(0, limit);
+        }
       } catch {}
       return sbRows;
     } catch {}
@@ -5689,8 +5693,11 @@ async function submitStart(){
     // 장비별 층수 데이터 수집 (새 층수로 덮어쓰기)
     if(equip && floors){ const _fm=DB.g('equip_floors',{}); _fm[equip]={floor:floors,detail:locationDetail}; DB.s('equip_floors',_fm); }
     await pushToGS(entry);         // Supabase 직접 저장 (실패 시 로컬 + 재시도 예약)
+    _syncToSupabase().catch(e => console.warn('[submitStart sync]', e)); // 즉시 전체 미동기화 항목 push
     toast(entry.synced?'사용 신청 완료':'로컬 저장 (미연동)', entry.synced?'ok':'warn');
     updatePendingBanner(); updateLogBadge();
+    // 이력 목록 즉시 갱신
+    if(document.getElementById('log-body')) _logLoadTimer = setTimeout(_doRenderLog, 300);
     document.getElementById('f-equip').value='';
     document.getElementById('f-meter-start').value='';
     document.getElementById('f-starttime').value=nowHM();
@@ -6760,8 +6767,19 @@ function _trCard(r, _unused, canEdit, canMsg){
     ? `<span style="font-size:9px;font-weight:800;padding:2px 6px;border-radius:6px;background:rgba(20,184,166,.2);color:#14b8a6">${r.project}</span>`
     : '';
 
-  // 반입 제원+장비번호 복사 버튼 (specBlock 저장 버튼 좌측으로 이동)
-  const inCopyHtml = '';
+  // 반입 제원+장비번호 복사 버튼 (액션 버튼 바로 위 별도 행)
+  const _inCopyText = specs.map(s => {
+    let t = s.spec + ' ×' + s.qty;
+    if(s.equipNos && s.equipNos.length) t += ' / ' + s.equipNos.join(', ');
+    return t;
+  }).join('\n') + (r.ajEquip ? '\n장비번호: ' + r.ajEquip : '');
+  window['_inCopy_' + r.id] = _inCopyText;
+  const inCopyHtml = _inCopyText.trim()
+    ? `<div style="display:flex;justify-content:flex-end;margin:4px 0 2px">` +
+      `<button onclick="var t=window['_inCopy_${r.id}'];if(navigator.clipboard){navigator.clipboard.writeText(t).then(()=>toast('복사됨','ok')).catch(()=>{});}else{var e=document.createElement('textarea');e.value=t;document.body.appendChild(e);e.select();document.execCommand('copy');e.remove();toast('복사됨','ok');}" ` +
+      `style="padding:3px 12px;font-size:10px;font-weight:700;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.25);border-radius:5px;color:#60a5fa;cursor:pointer">복사</button>` +
+      `</div>`
+    : '';
 
   // AJ 장비번호 영역
   let ajEquipHtml = '';
@@ -6865,8 +6883,12 @@ function _trCard(r, _unused, canEdit, canMsg){
   if (canEdit && !st.done && !alreadyDone(r)) {
     const completeBtnLabel = isIn ? '반입완료' : '반출완료';
     const completeBtnColor = isIn ? '#22c55e' : '#fb923c';
+    const _actDispLabel = r.dispatch ? '배차확인' : '배차정보';
+    const _actDispColor = r.dispatch ? '#4ade80' : 'var(--tx2)';
+    const _actDispBorder = r.dispatch ? 'rgba(74,222,128,.4)' : 'var(--br)';
     actionHtml =
       `<div style="display:flex;gap:6px;margin-top:4px;border-top:1px solid var(--br);padding-top:8px">` +
+      `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:${_actDispColor};border-color:${_actDispBorder}" onclick="openDispatchPopup('${r.id}')">${_actDispLabel}</button>` +
       `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:#f87171;border-color:rgba(248,113,113,.3)" onclick="cancelTransit('${r.id}')">취소</button>` +
       `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:${completeBtnColor};border-color:${completeBtnColor}40;font-weight:700" onclick="completeTransit('${r.id}')">${completeBtnLabel}</button>` +
       `</div>`;
@@ -7537,7 +7559,7 @@ function _updateProjectChips(){
   const row = document.getElementById('tr-project-row');
   const chipsEl = document.getElementById('tr-project-chips');
   const isIn = document.querySelector('#tr-type-chips .chip.on')?.textContent==='반입';
-  if(row) row.style.display = (isIn && projects.length) ? '' : 'none';
+  if(row) row.style.display = (projects.length) ? '' : 'none';
   if(chipsEl){
     chipsEl.innerHTML = projects.map(p=>
       `<div class="chip" onclick="selectOne(this,'tr-project-chips')">${p}</div>`
@@ -8239,9 +8261,11 @@ async function _doRenderLog(){
   const q=(document.getElementById('log-q')?.value||'').toLowerCase();
   const siteId=S?.siteId==='all'?null:S?.siteId;
   const td=today();
-  const dateFrom=document.getElementById('log-date-from')?.value || (() => {
-    // 기본: 최근 7일
-    const d=new Date(); d.setDate(d.getDate()-7); return d.toISOString().split('T')[0];
+  const dateFrom=document.getElementById('log-date-from')?.value || (()=>{
+    // 기본: 최근 7일 (로컬 날짜 기준)
+    const [y,m,dy]=today().split('-').map(Number);
+    const d=new Date(y,m-1,dy-7);
+    return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
   })();
   const dateTo=document.getElementById('log-date-to')?.value||td;
 
