@@ -2231,7 +2231,7 @@ const DB = {
       if (k === 'sb_url'      && SB_DEFAULT_URL) return SB_DEFAULT_URL;
       if (k === 'sb_anon_key' && SB_DEFAULT_KEY) return SB_DEFAULT_KEY;
       return d !== undefined ? d : null;
-    } catch { return d; }
+    } catch (_e) { return d; }
   },
   s(k, v) {
     try {
@@ -2268,7 +2268,7 @@ const IDB = (() => {
       req.onupgradeneeded = e => {
         const db = e.target.result;
         // 기존 트랜잭션이 남아있는 경우 안전하게 처리
-        try { e.target.transaction.onabort = ev => console.warn('[IDB] upgrade aborted:', ev); } catch {}
+        try { e.target.transaction.onabort = ev => console.warn('[IDB] upgrade aborted:', ev); } catch (_e) {}
         // LOGS
         if (!db.objectStoreNames.contains('logs')) {
           const s = db.createObjectStore('logs', { keyPath: 'id' });
@@ -2610,7 +2610,7 @@ function _runMemoryGuard(){
         console.warn('[MemGuard] 400MB 초과 — 전체 캐시 해제');
       }
     }
-  } catch {}
+  } catch (_e) {}
 }
 
 // ── LOGS: IDB 우선 접근자 ───────────────────────────────
@@ -2623,7 +2623,7 @@ async function getTodayLogs() {
     _cache.todayLogs = rows;
     _cache.todayDate = td;
     return rows;
-  } catch { return []; }
+  } catch (_e) { return []; }
 }
 
 // 날짜 범위 로그 조회 (이력 탭용)
@@ -2649,9 +2649,9 @@ async function getLogsByRange(from, to, siteId=null, limit=200) {
           const merged = [...sbRows, ...localOnly].sort((a,b)=>(b.ts||0)-(a.ts||0));
           if(merged.length) return merged.slice(0, limit);
         }
-      } catch {}
+      } catch (_e) {}
       return sbRows;
-    } catch {}
+    } catch (_e) {}
   }
   // 폴백: IDB 로컬
   try {
@@ -2659,7 +2659,7 @@ async function getLogsByRange(from, to, siteId=null, limit=200) {
     let rows = await IDB.getRange('logs', 'date', range);
     if(siteId) rows = rows.filter(l => l.siteId === siteId);
     return rows.sort((a,b)=> (b.ts||0)-(a.ts||0)).slice(0, limit);
-  } catch { return []; }
+  } catch (_e) { return []; }
 }
 
 // 호환용 동기 getLogs — 캐시된 것만 반환 (점진적 전환용)
@@ -2699,7 +2699,7 @@ async function saveLogs(logs, _newEntry){
   if(_newEntry && _cache.logsByDate) _addToIndex(_newEntry);
   else _buildLogIndex(_cache.logs);
   DB.s(K.LOGS, logs.slice(0,200)); // LS 먼저 저장 (캐시 무효화 경합 방지)
-  try { await IDB.putAll('logs', logs); } catch {}
+  try { await IDB.putAll('logs', logs); } catch (_e) {}
   _cache.todayLogs = null;
 }
 
@@ -2741,7 +2741,7 @@ async function saveTransit(arr){
   _cache.transit = arr.length > 500 ? arr.slice(0, 500) : arr;
   _cache.transitBySite = null;
   DB.s(K.TRANSIT, arr.slice(0,100)); // LS 먼저 저장 (캐시 무효화 경합 방지)
-  try { await IDB.putAll('transit', arr); } catch {}
+  try { await IDB.putAll('transit', arr); } catch (_e) {}
 }
 
 // ── AS_REQS ────────────────────────────────────────────
@@ -2773,7 +2773,7 @@ async function saveAsReqs(arr){
   _cache.asReqs = arr.length > 300 ? arr.slice(0, 300) : arr;
   _cache.asBySite = null;
   DB.s(K.AS_REQS, arr.slice(0,100)); // LS 먼저 저장 (캐시 무효화 경합 방지)
-  try { await IDB.putAll('as_requests', arr); } catch {}
+  try { await IDB.putAll('as_requests', arr); } catch (_e) {}
 }
 
 // ── MEMBERS ────────────────────────────────────────────
@@ -2784,7 +2784,7 @@ function getMembers(){
 async function saveMembers(arr){
   _cache.members = arr;
   DB.s(K.MEMBERS, arr); // LS 먼저 저장 (캐시 무효화 경합 방지)
-  try { await IDB.putAll('members', arr); } catch {}
+  try { await IDB.putAll('members', arr); } catch (_e) {}
 }
 
 // Supabase 응답 → 로컬 로그 형식 변환
@@ -2834,7 +2834,7 @@ function _sbTransitToLocal(row){
     managerLocation:row.manager_location,
     note:           row.note,
     status:         row.status,
-    ajMsgs:         (()=>{try{return JSON.parse(row.messages||'[]');}catch{return[];}}()),
+    ajMsgs:         (()=>{try{return JSON.parse(row.messages||'[]');}catch(_e){return[];}}()),
     synced:         true,
     createdAt:      row.created_at?new Date(row.created_at).getTime():Date.now(),
     ts:             row.created_at?new Date(row.created_at).getTime():Date.now(),
@@ -2955,7 +2955,7 @@ function getEquipMaster() {
 }
 async function saveEquipMaster(arr) {
   _cache.equipment = arr;
-  try { await IDB.putAll('equipment', arr); } catch {}
+  try { await IDB.putAll('equipment', arr); } catch (_e) {}
   DB.s(K.EQUIP, arr);
 }
 
@@ -3633,7 +3633,7 @@ function _decodeJwt(token){
     const b64 = token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');
     const json = decodeURIComponent(atob(b64).split('').map(c=>'%'+c.charCodeAt(0).toString(16).padStart(2,'0')).join(''));
     return JSON.parse(json);
-  } catch { return null; }
+  } catch (_e) { return null; }
 }
 
 /* GIS 콜백 — 구글 로그인 성공 시 호출 (어느 탭에서든 동일 콜백) */
@@ -3661,7 +3661,7 @@ async function _doGoogleTechLogin(email, googleName){
         allMembers.push(member);
         saveMembers(allMembers);
       }
-    } catch {}
+    } catch (_e) {}
   }
   // 프로필 입력 모달 열기 (신규 또는 재확인)
   _showGoogleProfileModal('tech',{
@@ -3689,7 +3689,7 @@ async function _doGoogleSubLogin(email, googleName){
         if(idx>=0) allMembers[idx]=member; else allMembers.push(member);
         saveMembers(allMembers);
       }
-    } catch {}
+    } catch (_e) {}
   }
   if(member){
     const st = member.status||'approved';
@@ -5215,7 +5215,7 @@ async function _pullSitesFromSB(){
   if(!Array.isArray(rows)||!rows.length) return;
   const local = rows.map(r=>({
     id:r.id, name:r.name, active:r.active!==false,
-    projects:(()=>{ try{ return JSON.parse(r.projects||'[]'); }catch{ return []; } })()
+    projects:(()=>{ try{ return JSON.parse(r.projects||'[]'); }catch(_e){ return []; } })()
   }));
   _cache.sites = null; DB.s(K.SITES, local);
 }
@@ -5247,7 +5247,7 @@ async function _pullSettingsFromSB(){
   const r = rows[0];
   const s = DB.g(K.SETTINGS,{}); s.alertTime = r.alert_time||'15:00';
   DB.s(K.SETTINGS, s);
-  try{ DB.s('custom_alerts', JSON.parse(r.custom_alerts||'[]')); }catch{}
+  try{ DB.s('custom_alerts', JSON.parse(r.custom_alerts||'[]')); }catch(_e){}
 }
 
 async function _pullInviteCodesFromSB(){
@@ -5326,7 +5326,7 @@ async function _pullRecentFromSupabase(){
           localTr[idx] = {...localTr[idx],
             status: mappedSt,
             ajEquip: sr.aj_equip || localTr[idx].ajEquip,
-            ajMsgs: (() => { try{ return JSON.parse(sr.messages||'[]'); }catch{ return localTr[idx].ajMsgs||[]; } })(),
+            ajMsgs: (() => { try{ return JSON.parse(sr.messages||'[]'); }catch(_e){ return localTr[idx].ajMsgs||[]; } })(),
             dispatch: sr.dispatch || localTr[idx].dispatch,
             updatedAt: serverTs, synced: true };
           changed = true;
@@ -5346,7 +5346,7 @@ async function _pullRecentFromSupabase(){
           managerName: sr.manager_name||'', managerPhone: sr.manager_phone||'',
           managerLocation: sr.manager_location||'', note: sr.note||'',
           status: mappedSt,
-          ajMsgs: (() => { try{ return JSON.parse(sr.messages||'[]'); }catch{ return []; } })(),
+          ajMsgs: (() => { try{ return JSON.parse(sr.messages||'[]'); }catch(_e){ return []; } })(),
           dispatch: sr.dispatch||'',
           createdAt: sr.created_at ? new Date(sr.created_at).getTime() : Date.now(),
           updatedAt: serverTs, synced: true
@@ -5492,7 +5492,7 @@ async function pushToGS(entry){
     try{
       await gsReq('addLogs',{logs:[entry]});
       entry.synced=true;
-    } catch{
+    } catch(_e){
       entry.synced=false;
       scheduleRetrySync();
     }
@@ -5509,7 +5509,7 @@ function scheduleRetrySync(){
       const unsync = await IDB.getUnsynced('logs').catch(()=>[]);
       if(!unsync.length) toast('재동기화 완료','ok');
       else scheduleRetrySync();
-    }catch{ scheduleRetrySync(); }
+    }catch(_e){ scheduleRetrySync(); }
   }, 30*1000); // 30초 후 재시도
 }
 
@@ -5766,7 +5766,7 @@ async function submitEnd(){
   if(!sessionId){ toast('종료할 장비를 선택하세요','err'); return; }
   // IDB에서 해당 세션 조회
   let entry = null;
-  try { entry = (await IDB.getByIndex('logs','status','start')).find(l=>l.id===sessionId); } catch{}
+  try { entry = (await IDB.getByIndex('logs','status','start')).find(l=>l.id===sessionId); } catch(_e){}
   if(!entry){
     // 폴백: 메모리 캐시
     const logs=getLogs(); const idx=logs.findIndex(l=>l.id===sessionId);
@@ -5860,7 +5860,7 @@ function copyInviteCodeSite(siteId){
   const el = document.getElementById('invite-code-'+siteId);
   const code = el?.textContent||'';
   navigator.clipboard?.writeText(code).then(()=>toast('복사됨','ok'))
-    .catch(()=>{ try{ const r=document.createRange(); r.selectNode(el); window.getSelection().removeAllRanges(); window.getSelection().addRange(r); document.execCommand('copy'); toast('복사됨','ok'); }catch{} });
+    .catch(()=>{ try{ const r=document.createRange(); r.selectNode(el); window.getSelection().removeAllRanges(); window.getSelection().addRange(r); document.execCommand('copy'); toast('복사됨','ok'); }catch(_e){} });
 }
 function shareInviteCodeSite(siteId, siteName){
   const el = document.getElementById('invite-code-'+siteId);
@@ -5870,7 +5870,7 @@ function shareInviteCodeSite(siteId, siteName){
     if(navigator.clipboard){
       navigator.clipboard.writeText(txt).then(()=>toast('공유 텍스트 복사됨','ok')).catch(()=>{});
     } else {
-      try{ const t=document.createElement('textarea'); t.value=txt; document.body.appendChild(t); t.select(); document.execCommand('copy'); document.body.removeChild(t); toast('공유 텍스트 복사됨','ok'); }catch{}
+      try{ const t=document.createElement('textarea'); t.value=txt; document.body.appendChild(t); t.select(); document.execCommand('copy'); document.body.removeChild(t); toast('공유 텍스트 복사됨','ok'); }catch(_e){}
     }
   };
   if(navigator.share && (typeof navigator.canShare!=='function' || navigator.canShare({text:txt}))){
@@ -7014,7 +7014,7 @@ function _parseDispatch(v){
     // 기존 단일 객체 → 배열로 변환
     if(o&&typeof o==='object'&&(o.driver||o.carNo||o.phone))
       return [{driver:o.driver||'',carNo:o.carNo||'',phone:o.phone||''}];
-  }catch{}
+  }catch(_e){}
   return [];
 }
 function _dispatchRowHtml(idx, d={}){
@@ -8724,7 +8724,7 @@ async function runAI(){
     const txt=data.content?.[0]?.text||'';
     el.innerHTML=txt.split('\n').filter(l=>l.trim()).map(line=>`<span class="ai-bul">${line.replace(/\*\*(.*?)\*\*/g,'<b>$1</b>')}</span>`).join('') + unusedHTML;
     const te=document.getElementById('ai-time'); if(te) te.textContent=new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})+' 완료';
-  }catch{
+  }catch(_e){
     el.innerHTML=`<span class="ai-bul"><b>오늘 ${tr}%</b> — 목표70% ${tr!=='N/A'&&+tr>=70?'초과':'미달'}</span><span class="ai-bul"><b>누적 ${hrs}h</b> 장비 사용 기록됨</span><span class="ai-bul" style="color:var(--tx3);font-size:10px">* AI 연결 실패 — 로컬 분석</span>` + unusedHTML;
   }
 }
@@ -9569,7 +9569,7 @@ async function saveGsUrl(){
   DB.s(K.GS_URL,url); toast('저장됨. 동기화 시도...','ok');
   closeSheet('sh-gs'); renderAdmin(); setTimeout(queueSync,300);
 }
-async function pasteUrl(){ try{const t=await navigator.clipboard.readText();document.getElementById('gs-url').value=t;}catch{toast('클립보드 접근 거부','err');} }
+async function pasteUrl(){ try{const t=await navigator.clipboard.readText();document.getElementById('gs-url').value=t;}catch(_e){toast('클립보드 접근 거부','err');} }
 
 /* ── Supabase 설정 저장 ── */
 function saveSupabaseConfig(){
@@ -9813,7 +9813,7 @@ function updateLogBadge(){
 ═══════════════════════════════════════════ */
 
 function _safeLS(key){
-  try{ const v=localStorage.getItem(key); return v?JSON.parse(v):null; }catch{ return null; }
+  try{ const v=localStorage.getItem(key); return v?JSON.parse(v):null; }catch(_e){ return null; }
 }
 
 /* ── v1 마이그레이션 (키: 'logs', 'companies') ── */
