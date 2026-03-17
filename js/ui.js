@@ -1401,6 +1401,7 @@ function _trCard(r, _unused, canEdit, canMsg){
     const completeBtnColor = isIn ? '#22c55e' : '#fb923c';
     actionHtml =
       `<div style="display:flex;gap:6px;margin-top:4px;border-top:1px solid var(--br);padding-top:8px">` +
+      `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:#a78bfa;border-color:rgba(167,139,250,.3)" onclick="openDispatchPopup('${r.id}')">배차정보</button>` +
       `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:#f87171;border-color:rgba(248,113,113,.3)" onclick="cancelTransit('${r.id}')">취소</button>` +
       `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:${completeBtnColor};border-color:${completeBtnColor}40;font-weight:700" onclick="completeTransit('${r.id}')">${completeBtnLabel}</button>` +
       `</div>`;
