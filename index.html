@@ -2825,7 +2825,7 @@ function _sbTransitToLocal(row){
     siteId:         row.site_id,
     siteName:       row.site_name,
     company:        row.company,
-    equip:          row.equip_specs,
+    equip:          row.equip_specs||'',
     specs:          specs,
     ajEquip:        row.aj_equip,
     reporterName:   row.reporter_name,
@@ -4904,27 +4904,33 @@ async function sbReq(table, method='GET', data=null, query=''){
   return _execWithRetry();
 }
 
-// 배치 upsert — SB_BATCH 단위로 분할 전송
+// 배치 upsert — SB_BATCH 단위로 분할 전송 (컬럼 불일치 시 최대 5회 반복 재시도)
 async function sbBatchUpsert(table, rows){
   if(!rows.length) return;
   for(let i=0; i<rows.length; i+=SB_BATCH){
-    try {
-      await sbReq(table,'POST', rows.slice(i, i+SB_BATCH));
-    } catch(e) {
-      // 컬럼 불일치 에러 시 누락 컬럼 제거 후 재시도
-      if(e.message && e.message.includes('column') && e.message.includes('does not exist')){
-        console.warn('[SB] 컬럼 불일치 재시도:', e.message);
-        // 에러 메시지에서 컬럼명 추출
-        const m = e.message.match(/column "([^"]+)"/);
-        if(m){
-          const badCol = m[1];
-          const cleaned = rows.slice(i, i+SB_BATCH).map(r => { const c={...r}; delete c[badCol]; return c; });
-          await sbReq(table,'POST', cleaned);
-          continue;
+    let batch = rows.slice(i, i+SB_BATCH);
+    let lastErr = null;
+    for(let attempt=0; attempt<5; attempt++){
+      try {
+        await sbReq(table,'POST', batch);
+        lastErr = null;
+        break;
+      } catch(e) {
+        // 컬럼 불일치 에러 시 해당 컬럼 제거 후 재시도 (여러 컬럼 불일치 대응)
+        if(e.message && e.message.includes('column') && e.message.includes('does not exist')){
+          console.warn('[SB] 컬럼 불일치 재시도:', e.message);
+          const m = e.message.match(/column "([^"]+)"/);
+          if(m){
+            const badCol = m[1];
+            batch = batch.map(r => { const c={...r}; delete c[badCol]; return c; });
+            lastErr = e;
+            continue;
+          }
         }
+        throw e;
       }
-      throw e;
     }
+    if(lastErr) throw lastErr;
   }
 }
 
@@ -5200,7 +5206,7 @@ async function _directPushTransit(rec){
     updated_at:       now,
   };
   try{
-    await sbReq('transit','POST',row);
+    await sbBatchUpsert('transit',[row]);
     const arr=getTransit();
     const idx=arr.findIndex(r=>r.id===rec.id);
     if(idx>=0){ arr[idx].synced=true; arr[idx].updatedAt=Date.now(); await saveTransit(arr); }
@@ -6899,7 +6905,7 @@ function _trCard(r, _unused, canEdit, canMsg){
   const diff = trDiff(r.date);
   const isIn = r.type === 'in';
   const isAJ = S?.role === 'aj';
-  const specs = r.specs || [];
+  const specs = (r.specs && r.specs.length) ? r.specs : _parseSpecString(r.equip || r.equip_specs || '');
   const specStr = specs.map(s => {
     let line = s.spec + (s.model ? ' ('+s.model+')' : '') + ' ×' + s.qty;
     if (s.equipNos && s.equipNos.length) {
