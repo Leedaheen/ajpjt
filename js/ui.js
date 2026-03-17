@@ -729,7 +729,9 @@ function _addASComment(id){
   r.synced = false;
   reqs[idx] = r;
   saveAsReqs(reqs);
-  _syncToSupabase().catch(()=>{});
+  // 즉시 서버 동기화 (AJ 정비기사에게 알람)
+  _directPushAS(r).catch(e=>{ console.warn('[ASComment push]',e); scheduleRetrySync(); });
+  addNotif({icon:'💬', title:`AS 댓글 [${r.equip||''}]`, desc:`${S?.name||''}(${S?.company||''}) — ${text.slice(0,40)}`});
   renderASPage();
   toast('댓글 등록됨','ok');
 }
@@ -2501,22 +2503,9 @@ function submitTransit(){
     }
   }
 
-  // 신청인/담당자 정보 수집
-  const reporterPhone_raw = document.getElementById('tr-reporter-phone')?.value || '';
-  const reporterPhone = fmtPhone(reporterPhone_raw);
-  if(!reporterPhone_raw){
-    toast('신청인 연락처를 입력하세요','err');
-    document.getElementById('tr-reporter-phone')?.classList.add('shake');
-    setTimeout(()=>document.getElementById('tr-reporter-phone')?.classList.remove('shake'),500);
-    return;
-  }
-  if(reporterPhone_raw && !validPhone(reporterPhone)){
-    toast('신청인 연락처는 10~11자리 숫자로 입력하세요','err');
-    document.getElementById('tr-reporter-phone').classList.add('shake');
-    setTimeout(()=>document.getElementById('tr-reporter-phone').classList.remove('shake'),500);
-    return;
-  }
-  const reporterName  = document.getElementById('tr-reporter-name')?.value.trim()  || S.name;
+  // 신청인 정보는 회원 정보 자동 사용
+  const reporterName  = S?.name  || '';
+  const reporterPhone = fmtPhone(S?.phone || '');
   const managerName   = document.getElementById('tr-manager-name')?.value.trim()   || '';
   const managerTitle  = document.getElementById('tr-manager-title')?.value.trim()  || '';
   const managerPhone_raw = document.getElementById('tr-manager-phone')?.value || '';
@@ -2528,6 +2517,14 @@ function submitTransit(){
     return;
   }
   const managerLocation = document.getElementById('tr-manager-location')?.value.trim() || '';
+  if((typeVal==='in'||typeVal==='out') && !managerLocation){
+    toast('양중 위치를 입력하세요','err');
+    const mlEl = document.getElementById('tr-manager-location');
+    mlEl?.classList.add('shake');
+    mlEl?.focus();
+    setTimeout(()=>mlEl?.classList.remove('shake'),500);
+    return;
+  }
 
   const siteId = S.siteId === 'all'
     ? (document.getElementById('tr-site-sel')?.value || getSites()[0]?.id || '')
@@ -2557,7 +2554,6 @@ function submitTransit(){
   const records = getTransit();
   records.unshift(rec);
   saveTransit(records);
-  DB.s('last_reporter_phone', reporterPhone_raw || reporterPhone || '');
 
   // 반입 신청 시 장비번호가 있으면 마스터에 미리 등록 (예정 상태로)
   if (typeVal === 'in' && equipVal) {
@@ -2638,6 +2634,23 @@ async function submitAS(){
     return;
   }
   if(!equip){ toast('장비번호를 입력하세요','err'); return; }
+  // 소속 현장 장비 마스터 검증 (협력사)
+  if(S?.role === 'sub'){
+    const asSiteId = S.siteId==='all' ? null : S.siteId;
+    if(asSiteId){
+      const validNos = getEquipBySite(asSiteId).map(e=>e.equipNo);
+      if(validNos.length){
+        const invalid = equipList.filter(no=>!validNos.includes(no));
+        if(invalid.length){
+          toast(`현장에 없는 장비번호: ${invalid.join(', ')}`, 'err');
+          const eq = document.getElementById('as-equip');
+          eq?.classList.add('shake'); eq?.focus();
+          setTimeout(()=>eq?.classList.remove('shake'),500);
+          return;
+        }
+      }
+    }
+  }
   if(!locationSel){ toast('장비 위치를 선택하세요','err'); document.getElementById('as-location')?.focus(); return; }
   if(!desc){ toast('접수 내용을 입력하세요','err'); return; }
   const req = {
