@@ -555,6 +555,89 @@ function _initInputFormBindings(){
 }
 
 /* ─── AS 전용 탭 렌더 ─── */
+
+/* ══════════════════════════════════════════════════
+   이미지 압축 유틸 (Canvas API)
+   - _compressImage : 지정 최대 크기 + 품질로 JPEG base64 반환
+   - _asPhotoCache  : reqId → 원본(풀사이즈) base64 (메모리)
+   - _pendingAsPhoto: 신청 전 임시 보관 { full, thumb }
+══════════════════════════════════════════════════ */
+const _asPhotoCache = new Map();
+let   _pendingAsPhoto = null;
+
+function _compressImage(file, maxW, maxH, quality){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        if(w > maxW || h > maxH){
+          const ratio = Math.min(maxW / w, maxH / h);
+          w = Math.round(w * ratio); h = Math.round(h * ratio);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function _onAsPhotoSelected(input){
+  const file = input.files[0];
+  if(!file) return;
+  try {
+    const [full, thumb] = await Promise.all([
+      _compressImage(file, 800, 800, 0.65),  // 원본 (~100-200KB)
+      _compressImage(file, 100, 100, 0.5),   // 썸네일 (~3-5KB)
+    ]);
+    _pendingAsPhoto = { full, thumb };
+    // 미리보기 표시
+    const preview = document.getElementById('as-photo-preview');
+    const thumbEl = document.getElementById('as-photo-thumb-preview');
+    const labelEl = document.getElementById('as-photo-label');
+    if(preview && thumbEl){ thumbEl.src = thumb; preview.style.display = 'flex'; }
+    if(labelEl) labelEl.style.display = 'none';
+  } catch(e) {
+    console.warn('[photo] 압축 실패:', e);
+    toast('사진 처리 중 오류가 발생했습니다','err');
+  }
+}
+
+function _clearAsPhoto(){
+  _pendingAsPhoto = null;
+  const preview = document.getElementById('as-photo-preview');
+  const labelEl = document.getElementById('as-photo-label');
+  const input   = document.getElementById('as-photo-input');
+  if(preview) preview.style.display = 'none';
+  if(labelEl) labelEl.style.display = 'inline-flex';
+  if(input)   input.value = '';
+}
+
+function _showPhotoPopup(reqId){
+  const full  = _asPhotoCache.get(reqId);
+  const req   = getAsReqs().find(r => r.id === reqId);
+  const src   = full || req?.photoFull || req?.photoThumb;
+  if(!src){ toast('사진을 불러올 수 없습니다','warn'); return; }
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;padding:16px';
+  overlay.onclick = () => document.body.removeChild(overlay);
+  const img = document.createElement('img');
+  img.src = src;
+  img.style.cssText = 'max-width:90vw;max-height:80vh;border-radius:10px;object-fit:contain;box-shadow:0 8px 32px rgba(0,0,0,.5)';
+  const hint = document.createElement('div');
+  hint.style.cssText = 'color:rgba(255,255,255,.5);font-size:11px;margin-top:12px';
+  hint.textContent = '화면을 탭하면 닫힙니다';
+  overlay.append(img, hint);
+  document.body.appendChild(overlay);
+}
+
 /* ═══ AS 검색 상태 ═══ */
 let _asSearchQ = '';
 let _asFilter  = 'all'; // all / 대기 / 자재수급중 / 처리완료
@@ -799,8 +882,14 @@ function _asCard(r, canAct){
       <span style="color:var(--tx3)">·</span>
       <span style="color:var(--tx3);font-size:10px">${r.date}${r.requestedAt?' '+new Date(r.requestedAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}):''}</span>
     </div>
-    <!-- 접수내용 -->
-    <div style="font-size:11px;color:var(--tx);line-height:1.4;padding:4px 6px;background:var(--bg2);border-radius:4px;border-left:2px solid var(--br);margin-bottom:6px">${r.desc||'—'}</div>
+    <!-- 접수내용 + 사진 썸네일 -->
+    <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:6px">
+      <div style="flex:1;font-size:11px;color:var(--tx);line-height:1.4;padding:4px 6px;background:var(--bg2);border-radius:4px;border-left:2px solid var(--br)">${r.desc||'—'}</div>
+      ${r.photoThumb ? `<div onclick="_showPhotoPopup('${r.id}')" style="flex-shrink:0;cursor:pointer;position:relative" title="사진 보기">
+        <img src="${r.photoThumb}" style="width:52px;height:52px;object-fit:cover;border-radius:6px;border:1.5px solid rgba(96,165,250,.4);display:block">
+        <div style="position:absolute;bottom:2px;right:2px;background:rgba(0,0,0,.55);border-radius:3px;padding:1px 3px;font-size:8px;color:#fff">🔍</div>
+      </div>` : ''}
+    </div>
 
     <!-- 처리 정보 + 댓글 버블 -->
     ${r.materialAt && r.status==='자재수급중'?`<div style="font-size:10px;color:#f59e0b;margin-bottom:4px">⏳ 자재수급중 전환: ${new Date(r.materialAt).toLocaleDateString('ko-KR',{month:'2-digit',day:'2-digit'})} ${new Date(r.materialAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})}</div>`:''}
@@ -2610,6 +2699,7 @@ function openASSheet(){
   el('as-reporter-name',  S?.name  || '');
   el('as-reporter-phone', S?.phone || '');
   document.querySelectorAll('#as-type-chips .chip.on').forEach(c=>c.classList.remove('on'));
+  _clearAsPhoto(); // 사진 초기화
   openSheet('sh-as');
   // AS 장비번호 자동완성 (반입된 장비 목록)
   setTimeout(() => {
@@ -2630,7 +2720,14 @@ async function submitAS(){
   const locationSel    = document.getElementById('as-location')?.value || '';
   const locationDetail = document.getElementById('as-location-detail')?.value.trim() || '';
   const location = locationDetail ? `${locationSel} ${locationDetail}`.trim() : locationSel;
-  const type     = document.querySelector('#as-type-chips .chip.on')?.textContent || '기타';
+  const typeChipEl = document.querySelector('#as-type-chips .chip.on');
+  if(!typeChipEl){
+    toast('증상 유형을 선택하세요','err');
+    document.getElementById('as-type-chips')?.classList.add('shake');
+    setTimeout(()=>document.getElementById('as-type-chips')?.classList.remove('shake'),500);
+    return;
+  }
+  const type     = typeChipEl.textContent;
   const desc     = document.getElementById('as-desc').value.trim();
   const repName  = document.getElementById('as-reporter-name')?.value.trim() || '';
   if(!repName){
@@ -2681,11 +2778,17 @@ async function submitAS(){
     type, desc,
     reporterName: repName, reporterPhone: repPhone,
     requestedAt: Date.now(),
-    status: '대기',        // 대기 / 자재수급중 / 처리완료
+    status: '대기',
     techName: '', techPhone: '', techNote: '',
     resolvedAt: null, resolvedNote: '',
+    // 사진: 썸네일은 record에 보존, 원본은 메모리 캐시
+    photoThumb: _pendingAsPhoto?.thumb || null,
     ts: Date.now(), synced: false,
   };
+  // 원본 사진 메모리 캐시 등록
+  if(_pendingAsPhoto?.full) _asPhotoCache.set(req.id, _pendingAsPhoto.full);
+  _pendingAsPhoto = null;
+
   const reqs = getAsReqs(); reqs.unshift(req); saveAsReqs(reqs);
   addNotif({icon:'🔧', title:`AS신청: ${equip}`, desc:`${company} — ${desc.slice(0,30)}`});
   toast('AS 신청이 등록되었습니다','ok');

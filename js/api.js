@@ -273,7 +273,8 @@ async function _syncToSupabase(){
         material_at:   a.materialAt ? new Date(a.materialAt).toISOString() : null,
         requested_at:  a.requestedAt ? new Date(a.requestedAt).toISOString() : null,
         created_at:    a.createdAt ? new Date(a.createdAt).toISOString() : new Date().toISOString(),
-        updated_at:    a.updatedAt  ? new Date(a.updatedAt).toISOString()  : new Date(a.createdAt||Date.now()).toISOString()
+        updated_at:    a.updatedAt  ? new Date(a.updatedAt).toISOString()  : new Date(a.createdAt||Date.now()).toISOString(),
+        ...(a.photoThumb ? { photo_data: a.photoThumb } : {}),
       }));
       await sbBatchUpsert('as_requests', rows);
       await IDB.markSynced('as_requests', unsyncAS.map(a=>a.id)).catch(()=>{});
@@ -421,6 +422,8 @@ async function _directPushAS(req){
     resolve_note:  req.resolvedNote||'',
     material_at:   req.materialAt?new Date(req.materialAt).toISOString():null,
     requested_at:  req.requestedAt?new Date(req.requestedAt).toISOString():null,
+    // 썸네일(~5KB base64) 저장 — 컬럼 없으면 sbBatchUpsert가 자동 제거
+    ...(req.photoThumb ? { photo_data: req.photoThumb } : {}),
     created_at:    now,
     updated_at:    now,
   };

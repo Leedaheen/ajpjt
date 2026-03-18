@@ -2497,7 +2497,7 @@ create index if not exists idx_aj_status on aj_members(status);</pre>
       </div>
     </div>
     <div class="fg">
-      <label class="fg-lbl">증상 유형</label>
+      <label class="fg-lbl">증상 유형 <span class="req">*</span></label>
       <div class="chips" id="as-type-chips">
         <div class="chip" onclick="selectOne(this,'as-type-chips')">작동불량</div>
         <div class="chip" onclick="selectOne(this,'as-type-chips')">충전불량</div>
@@ -2511,6 +2511,20 @@ create index if not exists idx_aj_status on aj_members(status);</pre>
     <div class="fg">
       <label class="fg-lbl">접수 내용 <span class="req">*</span></label>
       <textarea class="fg-input" id="as-desc" placeholder="구체적인 증상을 입력해주세요" rows="3" style="resize:none"></textarea>
+    </div>
+    <!-- 사진 첨부 -->
+    <div class="fg">
+      <label class="fg-lbl">현장 사진 <span style="font-size:9px;color:var(--tx3)">(선택 · 자동 압축)</span></label>
+      <div id="as-photo-wrap" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <label for="as-photo-input" id="as-photo-label" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:1.5px dashed var(--br);border-radius:var(--rs);cursor:pointer;font-size:11px;color:var(--tx2);background:var(--bg2)">
+          <span style="font-size:16px">📷</span> 사진 선택 / 촬영
+          <input type="file" id="as-photo-input" accept="image/*" capture="environment" onchange="_onAsPhotoSelected(this)" style="display:none">
+        </label>
+        <div id="as-photo-preview" style="display:none;position:relative;width:80px;height:80px;flex-shrink:0">
+          <img id="as-photo-thumb-preview" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:1px solid var(--br);display:block">
+          <button onclick="_clearAsPhoto()" style="position:absolute;top:-7px;right:-7px;width:20px;height:20px;border-radius:50%;background:#f87171;border:none;color:#fff;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;padding:0">×</button>
+        </div>
+      </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
       <div class="fg">
