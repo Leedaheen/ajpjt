@@ -2561,23 +2561,34 @@ function editTransitDate(id){
     const movedSpecs = specs2.map((s,i)=>{
       const qtyEl = document.getElementById('split-qty-'+i);
       const mv = Math.min(+qtyEl?.value||0, s.qty);
-      return mv>0 ? {...s, qty:mv, equipNos:(s.equipNos||[]).slice(0,mv)} : null;
+      const movedEquipNos = (s.equipNos||[]).slice(0,mv);
+      return mv>0 ? {...s, qty:mv, equipNos:movedEquipNos} : null;
     }).filter(Boolean);
     if(!movedSpecs.length){ toast('이동할 수량을 입력하세요','err'); return; }
     const splitEquipStr = document.getElementById('split-equip')?.value||'';
     const splitEquipNos = splitEquipStr.split(/[,\s]+/).filter(Boolean).map(x=>x.toUpperCase());
-    // 원본 수정
+    // 원본 수정 — 이동된 equipNos(앞 mv개) 제거
     rec2.specs = specs2.map((s,i)=>{
       const qtyEl = document.getElementById('split-qty-'+i);
       const mv = Math.min(+qtyEl?.value||0, s.qty);
-      return mv>=s.qty ? null : {...s, qty:s.qty-mv};
+      if(mv>=s.qty) return null;
+      return {...s, qty:s.qty-mv, equipNos:(s.equipNos||[]).slice(mv)};
     }).filter(Boolean);
+    // ajEquip에서도 이동된 장비번호 제거 (spec equipNos + 직접 입력 splitEquipNos 모두)
+    const movedEquipSet = new Set([
+      ...movedSpecs.flatMap(s=>s.equipNos||[]).map(n=>n.toUpperCase()),
+      ...splitEquipNos,
+    ]);
+    if(movedEquipSet.size && rec2.ajEquip){
+      const origNos = rec2.ajEquip.split(/[,，\s]+/).map(s=>s.trim()).filter(Boolean);
+      rec2.ajEquip = origNos.filter(n=>!movedEquipSet.has(n.toUpperCase())).join(', ');
+    }
     rec2.synced=false;
     // 신규 카드 생성
     const newRec = {...rec2,
       id:'tr-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,6),
       date:nd, specs:movedSpecs,
-      ajEquip: splitEquipNos.length?splitEquipNos.join(', '):'',
+      ajEquip: splitEquipNos.length ? splitEquipNos.join(', ') : [...new Set(movedSpecs.flatMap(s=>s.equipNos||[]))].join(', '),
       status:'예정', doneAt:null, doneBy:null, synced:false, createdAt:Date.now()
     };
     recs2.push(newRec);
