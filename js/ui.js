@@ -754,13 +754,28 @@ function _asCard(r, canAct){
   const stCol = r.status==='처리완료'?'#4ade80':r.status==='자재수급중'?'#f59e0b':'#f87171';
   const stBg  = r.status==='처리완료'?'rgba(74,222,128,.15)':r.status==='자재수급중'?'rgba(245,158,11,.15)':'rgba(248,113,113,.15)';
 
-  // 처리 시간 계산
-  let resolvedInfo = '';
-  if(r.resolvedAt && r.requestedAt){
-    const diffMs = r.resolvedAt - r.requestedAt;
-    const diffH = Math.floor(diffMs / 3600000);
-    const diffD = Math.floor(diffH / 24);
-    resolvedInfo = diffD > 0 ? `신청 후 ${diffD}일 ${diffH%24}h 만에 처리` : `신청 후 ${diffH}h 만에 처리`;
+  // 처리완료 정보 블록 (담당기사 · 처리완료 시간 · 소요시간 — 각각 독립 표시)
+  let resolvedBlock = '';
+  if(r.techName || r.resolvedAt || r.status==='처리완료'){
+    const parts = [];
+    if(r.techName) parts.push(`담당기사: <b style="color:#fff">${r.techName}</b>`);
+    if(r.resolvedAt){
+      const rDate = new Date(r.resolvedAt);
+      const rStr = rDate.toLocaleDateString('ko-KR',{month:'2-digit',day:'2-digit'})
+                 + ' ' + rDate.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+      parts.push(`처리완료: ${rStr}`);
+      // 소요시간 — requestedAt이 있을 때만
+      if(r.requestedAt){
+        const diffMs = r.resolvedAt - r.requestedAt;
+        const diffH  = Math.floor(diffMs / 3600000);
+        const diffD  = Math.floor(diffH / 24);
+        const elapsed = diffD > 0 ? `${diffD}일 ${diffH%24}h` : `${diffH}h ${Math.round((diffMs%3600000)/60000)}m`;
+        parts.push(`소요: ${elapsed}`);
+      }
+    }
+    if(parts.length){
+      resolvedBlock = `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:10px;color:#4ade80;margin-bottom:6px;padding:5px 8px;background:rgba(74,222,128,.08);border-radius:6px;border-left:2px solid rgba(74,222,128,.5)">✓ ${parts.join('<span style="color:var(--tx3);margin:0 1px">·</span>')}</div>`;
+    }
   }
 
   return `<div class="lcard" style="margin-bottom:10px">
@@ -789,7 +804,7 @@ function _asCard(r, canAct){
 
     <!-- 처리 정보 + 댓글 버블 -->
     ${r.materialAt && r.status==='자재수급중'?`<div style="font-size:10px;color:#f59e0b;margin-bottom:4px">⏳ 자재수급중 전환: ${new Date(r.materialAt).toLocaleDateString('ko-KR',{month:'2-digit',day:'2-digit'})} ${new Date(r.materialAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})}</div>`:''}
-    ${r.techName&&resolvedInfo?`<div style="font-size:9px;color:#4ade80;margin-bottom:6px">✓ ${r.techName} · ${resolvedInfo}</div>`:''}
+    ${resolvedBlock}
     ${_asCommentBubbles(r)}
 
     <!-- 댓글 입력 — AJ + 협력사 담당자 모두 표시 -->
@@ -836,6 +851,8 @@ function updateASStatus(id, status){
   if(status==='처리완료'){
     r.resolvedAt = Date.now();
     r.resolvedStatus = '처리완료';
+    // 담당기사 미입력 시 현재 로그인 AJ 멤버 이름으로 자동 설정
+    if(!r.techName && S?.name) r.techName = S.name;
     addNotif({icon:'', title:`AS처리완료: ${r.equip}`, desc:`${r.company} — ${r.techName||'기사'}님 처리 완료`});
   }
   if(status==='자재수급중'){
