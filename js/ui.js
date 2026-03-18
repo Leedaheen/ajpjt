@@ -1903,14 +1903,21 @@ async function _saveAllSpecEquip(recordId) {
   rec.ajEquip = [...new Set(allNos)].join(', ');
   rec.synced = false;
 
+  rec.synced = false;
   await saveTransit(recs);
 
-  toast('장비번호 저장됨', 'ok');
-  // 버튼 텍스트 변경 (1.5초 후 카드 재렌더)
+  // ── 즉시 서버 연동 (다른 이용자가 바로 확인 가능) ──────────
+  _directPushTransit(rec).catch(e => { console.warn('[_saveAllSpecEquip push]', e); scheduleRetrySync(); });
+
+  // ── 반입완료 상태라면 장비 마스터 즉시 등록 ─────────────────
+  if (rec.type === 'in' && rec.status === '반입완료' && hasAny) {
+    await registerEquipFromTransit(rec);
+  }
+
+  const toastMsg = rec.status === '반입완료' && hasAny ? '장비번호 저장 + 마스터 등록 + 서버 동기화 완료' : '장비번호 저장됨 (서버 반영 중)';
+  toast(toastMsg, 'ok');
   if (btn) { btn.innerHTML = '저장완료'; btn.style.background = 'rgba(34,197,94,.15)'; btn.style.borderColor = 'rgba(34,197,94,.35)'; btn.style.color = '#4ade80'; btn.disabled = false; }
-  // 편집 모드 플래그 초기화 → 재렌더 시 읽기 전용으로 표시
   if (window._specEditMode) window._specEditMode.delete(recordId);
-  // 카드 re-render (입력란 border 색 갱신 위해)
   setTimeout(() => renderTransit(), 1500);
 }
 
@@ -1929,13 +1936,19 @@ async function _saveSpecEquip(recordId, specIdx) {
 
   rec.specs[specIdx].equipNos = equipNos;
   rec.synced = false;
-  // ajEquip 필드도 전체 장비번호 목록으로 갱신 (하위 호환)
   const allNos = (rec.specs || []).flatMap(s => s.equipNos || []).filter(Boolean);
   rec.ajEquip = [...new Set(allNos)].join(', ');
 
   await saveTransit(recs);
 
-  toast('저장됨', 'ok');
+  // 즉시 서버 연동
+  _directPushTransit(rec).catch(e => { console.warn('[_saveSpecEquip push]', e); scheduleRetrySync(); });
+  // 반입완료면 마스터 등록
+  if (rec.type === 'in' && rec.status === '반입완료' && equipNos.length) {
+    await registerEquipFromTransit(rec);
+  }
+
+  toast('저장됨 (서버 반영 중)', 'ok');
   renderTransit();
 }
 
@@ -1949,12 +1962,14 @@ async function _saveInlineEquip(id) {
   rec.ajEquip = equip;
   rec.synced  = false;
   await saveTransit(recs);
+  // 즉시 서버 연동
+  _directPushTransit(rec).catch(e => { console.warn('[_saveInlineEquip push]', e); scheduleRetrySync(); });
   // 반입완료 상태라면 마스터도 즉시 갱신
   if (rec.type === 'in' && rec.status === '반입완료' && equip) {
     await registerEquipFromTransit(rec);
-    toast('장비번호 저장 + 마스터 등록 완료', 'ok');
+    toast('장비번호 저장 + 마스터 등록 + 서버 동기화 완료', 'ok');
   } else {
-    toast('장비번호 저장됨', 'ok');
+    toast('장비번호 저장됨 (서버 반영 중)', 'ok');
   }
   renderTransit();
 }
@@ -2045,14 +2060,14 @@ async function completeTransit(id) {
   rec.doneBy   = S?.name || '';
   rec.synced   = false;
   await saveTransit(recs);
-  _syncToSupabase().catch(e => console.warn('[completeTransit sync]', e));
+  // 단건 즉시 서버 업서트 — 다른 이용자가 완료 상태 바로 확인 가능
+  _directPushTransit(rec).catch(e => { console.warn('[completeTransit push]', e); scheduleRetrySync(); });
 
   // 장비 마스터 업데이트
   if (rec.type === 'in') {
     const changed = await registerEquipFromTransit(rec);
     if (changed) {
       toast(`${verb} · 장비 마스터 등록 완료`, 'ok');
-      _syncToSupabase().catch(e=>console.warn('[completeTransit equip sync]',e));
     } else {
       toast(verb + ' 처리 완료' + (rec.ajEquip ? '' : ' (장비번호 미입력)'), rec.ajEquip ? 'ok' : 'warn');
     }

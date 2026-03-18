@@ -531,10 +531,12 @@ async function registerEquipFromTransit(transitRec) {
           spec:      sp.spec || '',
           model:     sp.model || '',
           project:   transitRec.project  || '',
+          location:  transitRec.managerLocation || transitRec.location || '',
           transitId: transitRec.id,
           status:    'active',
           inDate:    transitRec.date,
           outDate:   null,
+          synced:    false,
         });
         changed = true;
       } else if (exists.status !== 'active') {
@@ -563,10 +565,12 @@ async function registerEquipFromTransit(transitRec) {
           spec:      '',
           model:     '',
           project:   transitRec.project  || '',
+          location:  transitRec.managerLocation || transitRec.location || '',
           transitId: transitRec.id,
           status:    'active',
           inDate:    transitRec.date,
           outDate:   null,
+          synced:    false,
         });
         changed = true;
       } else if (exists.status !== 'active') {

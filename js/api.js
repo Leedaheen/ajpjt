@@ -319,6 +319,8 @@ async function _syncToSupabase(){
       spec:       e.spec||'',
       model:      e.model||'',
       transit_id: e.transitId||'',
+      location:   e.location||'',
+      project:    e.project||'',
       status:     e.status||'active',
       in_date:    e.inDate||'',
       out_date:   e.outDate||null,
