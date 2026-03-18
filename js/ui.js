@@ -564,6 +564,7 @@ function _initInputFormBindings(){
 ══════════════════════════════════════════════════ */
 const _asPhotoCache = new Map();
 let   _pendingAsPhoto = null;
+let _pendingTrPlan  = null; // {type:'image'|'pdf', data:base64, name:string, thumb:string}
 
 function _compressImage(file, maxW, maxH, quality){
   return new Promise((resolve, reject) => {
@@ -618,6 +619,85 @@ function _clearAsPhoto(){
   if(preview) preview.style.display = 'none';
   if(labelEl) labelEl.style.display = 'inline-flex';
   if(input)   input.value = '';
+}
+
+// ── 사용계획서 첨부 (반입 신청 폼) ────────────────────────────
+async function _onTrPlanSelected(input){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  const MAX_PDF = 8 * 1024 * 1024; // 8MB
+  const isPdf = file.type === 'application/pdf';
+  if(isPdf && file.size > MAX_PDF){ toast('PDF 파일은 8MB 이하만 첨부 가능합니다','err'); input.value=''; return; }
+  try{
+    let data, thumb;
+    if(isPdf){
+      data = await new Promise((res,rej)=>{
+        const reader = new FileReader();
+        reader.onload = e => res(e.target.result);
+        reader.onerror = rej;
+        reader.readAsDataURL(file);
+      });
+      thumb = null;
+    } else {
+      [data, thumb] = await Promise.all([
+        _compressImage(file, 1500, 1500, 0.72),
+        _compressImage(file, 120, 120, 0.55),
+      ]);
+    }
+    _pendingTrPlan = { type: isPdf ? 'pdf' : 'image', data, thumb, name: file.name };
+    // 미리보기
+    const preview = document.getElementById('tr-plan-preview');
+    const thumbEl = document.getElementById('tr-plan-thumb');
+    const pdfBadge = document.getElementById('tr-plan-pdf-badge');
+    const fname   = document.getElementById('tr-plan-fname');
+    if(isPdf){
+      if(thumbEl) thumbEl.style.display = 'none';
+      if(pdfBadge) pdfBadge.style.display = 'flex';
+    } else {
+      if(thumbEl){ thumbEl.src = thumb || data; thumbEl.style.display = ''; }
+      if(pdfBadge) pdfBadge.style.display = 'none';
+    }
+    if(preview) preview.style.display = '';
+    if(fname) fname.textContent = file.name;
+    toast('파일 첨부됨', 'ok');
+  }catch(e){ toast('파일 처리 오류: '+e.message,'err'); }
+}
+function _clearTrPlan(){
+  _pendingTrPlan = null;
+  const input   = document.getElementById('tr-plan-input');
+  const preview = document.getElementById('tr-plan-preview');
+  const fname   = document.getElementById('tr-plan-fname');
+  if(input)   input.value='';
+  if(preview) preview.style.display='none';
+  if(fname)   fname.textContent='';
+}
+function _showTrPlanPopup(recId){
+  const rec = getTransit().find(r=>r.id===recId);
+  if(!rec || !rec.planData){ toast('첨부파일이 없습니다','warn'); return; }
+  const isPdf = rec.planType === 'pdf';
+  document.getElementById('tr-plan-popup')?.remove();
+  const pop = document.createElement('div');
+  pop.id = 'tr-plan-popup';
+  pop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:2000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;box-sizing:border-box';
+  const fileName = rec.planName || (isPdf ? 'plan.pdf' : 'plan.jpg');
+  const contentHtml = isPdf
+    ? `<iframe src="${rec.planData}" style="width:100%;flex:1;border:none;border-radius:8px;background:#fff;min-height:0"></iframe>`
+    : `<img src="${rec.planData}" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;flex:1;min-height:0">`;
+  pop.innerHTML = `
+    <div style="width:100%;max-width:600px;height:90vh;display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+        <span style="font-size:13px;font-weight:800;color:#fff">📄 사용계획서</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <a href="${rec.planData}" download="${fileName}"
+            style="padding:6px 14px;background:rgba(99,102,241,.3);border:1px solid rgba(99,102,241,.5);border-radius:8px;color:#a5b4fc;font-size:12px;font-weight:700;text-decoration:none">💾 저장하기</a>
+          <button onclick="document.getElementById('tr-plan-popup').remove()" style="background:none;border:none;font-size:22px;color:#fff;cursor:pointer;line-height:1">✕</button>
+        </div>
+      </div>
+      ${contentHtml}
+      <div style="font-size:10px;color:rgba(255,255,255,.5);text-align:center;flex-shrink:0">${fileName}</div>
+    </div>`;
+  pop.addEventListener('click', e=>{ if(e.target===pop) pop.remove(); });
+  document.body.appendChild(pop);
 }
 
 function _showPhotoPopup(reqId){
@@ -1505,9 +1585,11 @@ function _trCard(r, _unused, canEdit, canMsg){
   if (canEdit && !st.done && !alreadyDone(r)) {
     const completeBtnLabel = isIn ? '반입완료' : '반출완료';
     const completeBtnColor = isIn ? '#22c55e' : '#fb923c';
+    const hasDispatch = !!(r.dispatch && _parseDispatch(r.dispatch).length);
+    const dispBtnLabel = hasDispatch ? '배차정보 확인' : '배차정보 등록';
     actionHtml =
       `<div style="display:flex;gap:6px;margin-top:4px;border-top:1px solid var(--br);padding-top:8px">` +
-      `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:#a78bfa;border-color:rgba(167,139,250,.3)" onclick="openDispatchPopup('${r.id}')">배차정보</button>` +
+      `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:#a78bfa;border-color:rgba(167,139,250,.3)" onclick="openDispatchPopup('${r.id}')">${dispBtnLabel}</button>` +
       `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:#f87171;border-color:rgba(248,113,113,.3)" onclick="cancelTransit('${r.id}')">취소</button>` +
       `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:${completeBtnColor};border-color:${completeBtnColor}40;font-weight:700" onclick="completeTransit('${r.id}')">${completeBtnLabel}</button>` +
       `</div>`;
@@ -1554,6 +1636,7 @@ function _trCard(r, _unused, canEdit, canMsg){
         <div style="text-align:right">
           <div style="font-size:13px;font-weight:900;color:${!st.done&&diff<=1?st.color:'var(--tx)'}">${r.date}</div>
           <div style="font-size:10px;font-weight:800;color:${st.color}">${st.label}${dDayStr}</div>
+          ${isIn && r.planData ? `<button onclick="event.stopPropagation();_showTrPlanPopup('${r.id}')" style="margin-top:3px;padding:2px 8px;background:rgba(99,102,241,.18);border:1px solid rgba(99,102,241,.35);border-radius:5px;color:#a5b4fc;font-size:9px;font-weight:700;cursor:pointer">📄 계획서</button>` : ''}
         </div>
       </div>
       <span id="tr-arrow-${r.id}" style="font-size:12px;color:var(--tx3);transition:transform .2s;flex-shrink:0;align-self:center${isExpanded?';transform:rotate(180deg)':''}">▼</span>
@@ -1673,6 +1756,8 @@ async function saveDispatch(id){
   rec.synced = false;
   await saveTransit(recs);
   document.getElementById('dispatch-popup')?.remove();
+  // 즉시 서버 연동
+  _directPushTransit(rec).catch(e => { console.warn('[saveDispatch push]', e); scheduleRetrySync(); });
   toast(list.length ? `배차정보 ${list.length}대 저장됨` : '배차정보 삭제됨', 'ok');
   renderTransit();
 }
@@ -2184,6 +2269,10 @@ function _resetTransitForm(){
   const bs=document.getElementById('tr-basic-section');    if(bs) bs.style.display='';
   const hs=document.getElementById('tr-handover-section'); if(hs) hs.style.display='none';
   const pi=document.getElementById('tr-proj-change-inline'); if(pi) pi.style.display='none';
+  // 사용계획서 초기화
+  _clearTrPlan();
+  const planSec2 = document.getElementById('tr-plan-section');
+  if(planSec2) planSec2.style.display = 'none';
   _trAddSpecRow(); // 기본 1행
 }
 
@@ -2238,6 +2327,9 @@ function _updateSpecModelVisibility(){
     list.innerHTML = '';
     existing.forEach(r => _trAddSpecRow(r.spec, '', r.qty, r.equipNos));
   }
+  // 사용계획서 섹션: 반입만 표시
+  const planSec = document.getElementById('tr-plan-section');
+  if(planSec) planSec.style.display = (type === '반입') ? '' : 'none';
   _updateProjectChips();
 }
 
@@ -2671,6 +2763,9 @@ function submitTransit(){
     reporterPhone,
     managerName, managerTitle, managerPhone, managerLocation,
     ajEquip: '',
+    planData:  typeVal === 'in' && _pendingTrPlan ? _pendingTrPlan.data  : '',
+    planType:  typeVal === 'in' && _pendingTrPlan ? _pendingTrPlan.type  : '',
+    planName:  typeVal === 'in' && _pendingTrPlan ? _pendingTrPlan.name  : '',
     ts: Date.now(), synced: false, status: '예정',
   };
 
@@ -2696,6 +2791,7 @@ function submitTransit(){
   addNotif({icon:'📦', title:`반입/반출 신청: ${company}`, desc:`${typeChip.textContent} · ${date}`});
   toast(typeChip.textContent + ' 신청이 등록되었습니다', 'ok');
   _directPushTransit(rec).catch(e => { console.warn('[submitTransit push]', e); scheduleRetrySync(); });
+  if(typeVal === 'in') _clearTrPlan();
   closeSheet('sh-transit-form');
   renderTransit();
 }

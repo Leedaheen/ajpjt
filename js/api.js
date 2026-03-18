@@ -386,6 +386,8 @@ async function _directPushTransit(rec){
     status:           rec.status||'예정',
     messages:         JSON.stringify(rec.ajMsgs||[]),
     dispatch:         rec.dispatch||'',
+    plan_type:        rec.planType||'',
+    plan_name:        rec.planName||'',
     created_at:       now,
     updated_at:       now,
   };
