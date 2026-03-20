@@ -16,6 +16,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&family=JetBrains+Mono:wght@600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 <!-- Google Identity Services (Sign In With Google) -->
 <script>
 // Google Identity Services 라이브러리 로드 완료 콜백
@@ -2262,7 +2263,7 @@ create index if not exists idx_aj_status on aj_members(status);</pre>
 
 <!-- AS 요청 sheet -->
 <div class="soverlay" id="sh-transit-form" onclick="if(event.target===this)closeSheet('sh-transit-form')">
-  <div class="sheet" style="max-height:90vh;overflow-y:auto">
+  <div class="sheet" style="max-height:90vh;overflow-y:auto" ontouchstart="_swipeStart(event)" ontouchmove="_swipeMove(event,'sh-transit-form')">
     <div class="sh-handle"></div>
     <div class="sh-title" id="transit-form-title">반입/반출 신청</div>
 
@@ -2467,7 +2468,6 @@ create index if not exists idx_aj_status on aj_members(status);</pre>
 
     <div class="btn-gap">
       <button class="btn-full teal" onclick="submitTransit()">신청 등록</button>
-      <button class="btn-ghost" onclick="closeSheet('sh-transit-form')">닫기</button>
     </div>
   </div>
 </div>
@@ -2558,6 +2558,26 @@ create index if not exists idx_aj_status on aj_members(status);</pre>
     <div class="btn-gap">
       <button class="btn-full" style="background:linear-gradient(135deg,#dc2626,#991b1b)" onclick="submitAS()">AS 신청 등록</button>
       <button class="btn-ghost" onclick="closeSheet('sh-as')">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- QR 코드 생성 sheet -->
+<div class="soverlay" id="sh-qr-gen" onclick="if(event.target===this)closeSheet('sh-qr-gen')">
+  <div class="sheet" style="max-height:90vh;overflow-y:auto">
+    <div class="sh-handle"></div>
+    <div class="sh-title">QR 코드 생성</div>
+    <div style="font-size:11px;color:var(--tx3);margin-bottom:12px;padding:8px 10px;background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.15);border-radius:8px;line-height:1.6">
+      QR 스캔 시 가동현황 탭이 열리고 장비번호가 자동 입력됩니다.<br>
+      여러 대는 쉼표로 구분 · A4 1장에 QR 1개로 PDF 생성
+    </div>
+    <div class="fg">
+      <label class="fg-lbl">장비번호 <span class="req">*</span></label>
+      <textarea class="fg-input" id="qr-equip-input" placeholder="GA123, GB456, GC789" rows="3" style="resize:none;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></textarea>
+    </div>
+    <div class="btn-gap">
+      <button class="btn-full teal" onclick="generateQrPdf()">PDF 생성 · 인쇄</button>
+      <button class="btn-ghost" onclick="closeSheet('sh-qr-gen')">닫기</button>
     </div>
   </div>
 </div>

@@ -949,6 +949,7 @@ function _asCard(r, canAct){
         <div class="lc-name" style="font-weight:800">${r.company||'—'}</div>
         <span style="font-size:9px;font-weight:800;padding:2px 7px;border-radius:10px;margin-left:4px;color:${stCol};background:${stBg}">${r.status}</span>
         <span style="padding:1px 6px;border-radius:4px;background:rgba(248,113,113,.12);color:#f87171;font-size:9px;font-weight:700;margin-left:4px">${r.type||r.faultType||'기타'}</span>
+        ${r.status==='처리완료'&&r.techName?`<span style="font-size:9px;color:#4ade80;margin-left:4px;font-weight:700">· ${r.techName}</span>`:''}
       </div>
       <div class="lc-time">${r.date}${r.requestedAt?` <span style="font-size:9px;color:var(--tx3)">${new Date(r.requestedAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})}</span>`:''}</div>
     </div>
@@ -959,8 +960,6 @@ function _asCard(r, canAct){
       ${r.location?`<span style="color:var(--tx3)">·</span><span style="color:var(--tx2);font-size:10px">${r.location}</span>`:''}
       ${(r.reporterName||r.reporter)?`<span style="color:var(--tx3)">·</span><b style="color:var(--tx2)">${r.reporterName||r.reporter}</b>`:''}
       ${r.reporterPhone?`<span style="color:var(--tx3)">·</span><a href="tel:${r.reporterPhone}" style="color:#60a5fa;text-decoration:none;font-weight:700">통화하기</a>`:''}
-      <span style="color:var(--tx3)">·</span>
-      <span style="color:var(--tx3);font-size:10px">${r.date}${r.requestedAt?' '+new Date(r.requestedAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}):''}</span>
     </div>
     <!-- 접수내용 + 사진 썸네일 -->
     <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:6px">
@@ -1926,11 +1925,11 @@ function _renderSpecBlock(r, canEdit) {
     return `<div style="margin-bottom:8px;padding:8px 10px;background:rgba(96,165,250,.04);border:1px solid rgba(96,165,250,.15);border-radius:8px">
       <div style="font-size:10px;font-weight:700;color:#60a5fa;margin-bottom:7px">🏷 제원별 장비번호 입력</div>
       ${rows}
-      <div style="display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-top:6px;padding-top:6px;border-top:1px solid rgba(96,165,250,.12)">
-        <button class="btn-ghost" style="font-size:10px;padding:4px 10px" onclick="editTransitDate('${rid}')">날짜변경</button>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:6px;padding-top:6px;border-top:1px solid rgba(96,165,250,.12)">
+        <button class="btn-ghost" style="flex:1;font-size:10px;padding:5px" onclick="editTransitDate('${rid}')">날짜변경</button>
         <button id="${btnId}" onclick="_saveAllSpecEquip('${rid}')"
-          style="padding:4px 10px;font-size:11px;font-weight:700;background:rgba(96,165,250,.18);
-            border:1px solid rgba(96,165,250,.35);border-radius:6px;color:#60a5fa;cursor:pointer;white-space:nowrap;flex-shrink:0">
+          style="flex:1;padding:5px;font-size:11px;font-weight:700;background:rgba(96,165,250,.18);
+            border:1px solid rgba(96,165,250,.35);border-radius:6px;color:#60a5fa;cursor:pointer;white-space:nowrap">
           저장
         </button>
       </div>
@@ -2136,7 +2135,15 @@ async function completeTransit(id) {
   }
 
   const verb = rec.type === 'in' ? '반입완료' : rec.type === 'handover' ? '인계완료' : '반출완료';
-  const _ok = await _showCompleteConfirm(verb, rec.company, rec.date, rec.ajEquip);
+  // 확인 팝업용 장비번호 수집 (반출: specs.equipNos + ajEquip, 반입: ajEquip)
+  let _confirmEquip = rec.ajEquip || '';
+  if (rec.type === 'out') {
+    const _cnos = new Set();
+    for (const sp of (rec.specs||[])) (sp.equipNos||[]).forEach(n=>_cnos.add(n));
+    if (rec.ajEquip) rec.ajEquip.split(/[,\s]+/).filter(Boolean).forEach(n=>_cnos.add(n));
+    if (_cnos.size) _confirmEquip = [..._cnos].join(', ');
+  }
+  const _ok = await _showCompleteConfirm(verb, rec.company, rec.date, _confirmEquip);
   if (!_ok) return;
 
   rec.status   = verb;
@@ -2285,7 +2292,7 @@ function _updateProjectChips(){
   const row = document.getElementById('tr-project-row');
   const chipsEl = document.getElementById('tr-project-chips');
   const isIn = document.querySelector('#tr-type-chips .chip.on')?.textContent==='반입';
-  if(row) row.style.display = (projects.length) ? '' : 'none';
+  if(row) row.style.display = (projects.length && isIn) ? '' : 'none';
   if(chipsEl){
     chipsEl.innerHTML = projects.map(p=>
       `<div class="chip" onclick="selectOne(this,'tr-project-chips')">${p}</div>`
@@ -3627,6 +3634,13 @@ function renderAdmin(){
     </div>
 
     <div class="menu-list">
+      ${(isAJ||isSub)?`
+      <div class="mrow" onclick="openSheet('sh-qr-gen');document.getElementById('qr-equip-input').value=''">
+        <div class="mrow-ico" style="background:rgba(139,92,246,.12);color:rgb(139,92,246)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="3" height="3"/><rect x="18" y="14" width="3" height="3"/><rect x="14" y="18" width="3" height="3"/><rect x="18" y="18" width="3" height="3"/></svg></div>
+        <div class="mrow-inf"><div class="mrow-title">QR 코드 생성</div><div class="mrow-desc">장비번호별 QR 코드 PDF 출력</div></div>
+        <div class="mrow-arr">›</div>
+      </div>
+      `:''}
       ${isAJ?`
       <div class="mrow" onclick="openSheet('sh-sites')">
         <div class="mrow-ico" style="background:rgba(245,158,11,.12);color:rgb(245,158,11)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg></div>
@@ -4698,6 +4712,55 @@ function migrateFromV2(){
   if(v2url && !DB.g(K.GS_URL,'')) DB.s(K.GS_URL, v2url);
 
   localStorage.setItem('migrated_v2_to_v3','1');
+}
+
+// ── QR 코드 PDF 생성 ────────────────────────────────────────
+async function generateQrPdf(){
+  const raw = document.getElementById('qr-equip-input')?.value || '';
+  const equipNos = raw.split(/[,，\s]+/).map(s=>s.trim().toUpperCase()).filter(Boolean);
+  if(!equipNos.length){ toast('장비번호를 입력하세요','err'); return; }
+  if(typeof QRCode === 'undefined'){ toast('QR 라이브러리 로드 중입니다. 잠시 후 다시 시도하세요','warn'); return; }
+
+  toast('QR 생성 중...','ok', 1500);
+  const baseUrl = location.origin + location.pathname;
+
+  try {
+    // 각 장비번호의 QR data URL 생성
+    const items = await Promise.all(equipNos.map(async no => {
+      const url = baseUrl + '?equip=' + encodeURIComponent(no);
+      const dataUrl = await QRCode.toDataURL(url, { width: 600, margin: 3, color:{dark:'#000',light:'#fff'} });
+      return { no, dataUrl };
+    }));
+
+    // 인쇄용 창 생성 (A4 1장 = QR 1개)
+    const win = window.open('', '_blank', 'width=800,height=600');
+    if(!win){ toast('팝업이 차단되었습니다. 팝업 허용 후 다시 시도하세요','err',4000); return; }
+    const pages = items.map(({no, dataUrl})=>`
+      <div class="page">
+        <div class="equip-no">${no}</div>
+        <img src="${dataUrl}" alt="QR ${no}">
+        <div class="hint">스캔하면 가동현황 사용신청폼이 열립니다</div>
+      </div>`).join('');
+    win.document.write(`<!DOCTYPE html><html lang="ko"><head>
+      <meta charset="UTF-8">
+      <title>QR 코드 — ${equipNos.join(', ')}</title>
+      <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:'Noto Sans KR',sans-serif;background:#fff}
+        .page{width:210mm;height:297mm;display:flex;flex-direction:column;align-items:center;justify-content:center;page-break-after:always;padding:20mm}
+        .equip-no{font-size:36pt;font-weight:900;letter-spacing:2px;margin-bottom:12mm;color:#111}
+        img{width:160mm;height:160mm;object-fit:contain}
+        .hint{font-size:11pt;color:#666;margin-top:10mm}
+        @media print{.page{page-break-after:always}}
+      </style>
+    </head><body>${pages}
+      <script>window.onload=function(){window.print();}<\/script>
+    </body></html>`);
+    win.document.close();
+  } catch(e) {
+    console.error('[generateQrPdf]', e);
+    toast('QR 생성 중 오류가 발생했습니다','err');
+  }
 }
 
 /* ═══════════════════════════════════════════

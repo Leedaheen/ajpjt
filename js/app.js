@@ -45,6 +45,16 @@ function spinner(on,txt='처리 중...'){
 }
 function openSheet(id){ document.getElementById(id).classList.add('on'); onSheetOpen(id); }
 function closeSheet(id){ document.getElementById(id).classList.remove('on'); }
+
+// ── 시트 스와이프 닫기 유틸리티 ────────────────────────────
+let _swipeY0 = 0;
+function _swipeStart(e){
+  _swipeY0 = e.touches[0].clientY;
+}
+function _swipeMove(e, sheetId){
+  const dy = e.touches[0].clientY - _swipeY0;
+  if(dy > 80) closeSheet(sheetId);
+}
 function onSheetOpen(id){
   if(id==='sh-sites') renderSiteMgr();
   if(id==='sh-company') renderCoMgr();
@@ -1311,6 +1321,16 @@ function enterApp(){
   document.removeEventListener('visibilitychange', _onVisibilityChange);
   document.addEventListener('visibilitychange', _onVisibilityChange);
   setTimeout(_initScrollTopBtn, 400);
+  // QR 스캔 URL 파라미터 처리 (?equip=GJ265 → 가동현황 탭 + 장비번호 자동입력)
+  const _qp = new URLSearchParams(location.search);
+  const _qrEquip = _qp.get('equip');
+  if(_qrEquip){
+    setTimeout(()=>{
+      goTab('pg-ops');
+      const el = document.getElementById('f-equip');
+      if(el){ el.value = _qrEquip.toUpperCase(); el.focus(); }
+    }, 600);
+  }
 }
 
 /* ── 네트워크 오프라인 감지 ──────────────────────────────── */
