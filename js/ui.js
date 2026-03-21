@@ -3586,7 +3586,7 @@ function renderAnalysis(){
     <div style="padding:14px 14px 0">
     <!-- 가동률 인사이트 + AI 분석 버튼 통합 -->
     <div class="ai-panel">
-      <div class="ai-hd"><div class="ai-tag">자동 분석</div><div style="font-size:12px;font-weight:700;margin-left:2px">가동률 인사이트</div><span style="font-size:9px;background:rgba(99,102,241,.18);color:#818cf8;padding:2px 7px;border-radius:10px;margin-left:auto;font-weight:700">Gemini Flash</span></div>
+      <div class="ai-hd"><div class="ai-tag">자동 분석</div><div style="font-size:12px;font-weight:700;margin-left:2px">가동률 인사이트</div><span style="font-size:9px;background:rgba(96,165,250,.18);color:#60a5fa;padding:2px 7px;border-radius:10px;margin-left:auto;font-weight:700">Open-Meteo 날씨</span></div>
       <div style="display:flex;flex-wrap:wrap;gap:5px;margin:8px 0">${aiQBtns}</div>
       <div id="ai-query-result"></div>
       <div class="ai-text" id="ai-text"><div style="display:flex;align-items:center;gap:7px;color:var(--tx3);font-size:11px"><div style="width:14px;height:14px;border:2px solid var(--br);border-top-color:var(--purple);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0"></div>분석 중...</div></div>
@@ -3724,120 +3724,174 @@ async function _renderHeatmapAsync(){
   hg.innerHTML=html;
 }
 
-/* ── Gemini AI 자연어 분석 ────────────────────────────────── */
+/* ── 데이터 기반 분석 (Open-Meteo 날씨 연동) ────────────────── */
 async function _askAI(type){
-  const key = DB.g('gemini_api_key','');
-  if(!key){ toast('Gemini API 키를 먼저 등록하세요 (관리 탭 → AI API 키 설정)','warn'); return; }
   const el = document.getElementById('ai-query-result');
   if(!el) return;
-  el.innerHTML = `<div class="ai-qres" style="display:flex;align-items:center;gap:8px"><div style="width:13px;height:13px;border:2px solid var(--br);border-top-color:#818cf8;border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0"></div><span style="font-size:11px;color:var(--tx3)">AI 분석 중...</span></div>`;
+  el.innerHTML = `<div class="ai-qres" style="display:flex;align-items:center;gap:8px"><div style="width:13px;height:13px;border:2px solid var(--br);border-top-color:#60a5fa;border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0"></div><span style="font-size:11px;color:var(--tx3)">데이터 분석 중...</span></div>`;
 
   const siteId  = S?.siteId==='all' ? null : S?.siteId;
   const site    = S?.siteName || '현장';
   const allLogs = getLogs().filter(l => siteId ? l.siteId===siteId : true);
   const allTr   = getTransit().filter(r => siteId ? r.siteId===siteId : true);
-  const td      = today();
   const now     = new Date();
 
   // 공통 통계
-  const logDone   = allLogs.filter(l=>l.status==='end');
-  const rate7d    = (() => {
-    const cut = new Date(now); cut.setDate(cut.getDate()-7);
-    const cutS = cut.toISOString().split('T')[0];
-    const r7 = allLogs.filter(l=>l.date>=cutS);
-    return r7.length ? Math.round(r7.filter(l=>l.status==='end').length/r7.length*100) : 0;
-  })();
-  const hrs = logDone.reduce((s,l)=>s+(+l.duration||0),0).toFixed(1);
+  const logDone = allLogs.filter(l=>l.status==='end');
+  const cut7    = new Date(now); cut7.setDate(cut7.getDate()-7);
+  const cut7S   = cut7.toISOString().split('T')[0];
+  const logs7   = allLogs.filter(l=>l.date>=cut7S);
+  const rate7d  = logs7.length ? Math.round(logs7.filter(l=>l.status==='end').length/logs7.length*100) : 0;
+  const hrs     = logDone.reduce((s,l)=>s+(+l.duration||0),0);
 
   // 업체별 집계
   const coMap = {};
   allLogs.forEach(l=>{ if(!l.company) return; if(!coMap[l.company]) coMap[l.company]={tot:0,done:0,hrs:0}; coMap[l.company].tot++; if(l.status==='end'){coMap[l.company].done++;coMap[l.company].hrs+=(+l.duration||0);} });
-  const coSummary = Object.entries(coMap).sort((a,b)=>b[1].done-a[1].done).slice(0,10)
-    .map(([co,v])=>`${co}: ${v.done}/${v.tot}건 (${v.tot?Math.round(v.done/v.tot*100):0}%) ${v.hrs.toFixed(1)}h`).join('\n');
+  const coEntries = Object.entries(coMap).sort((a,b)=>b[1].done-a[1].done);
 
   // 장비별 집계
   const eqMap = {};
   allLogs.forEach(l=>{ if(!l.equip) return; if(!eqMap[l.equip]) eqMap[l.equip]={tot:0,done:0,hrs:0,company:l.company}; eqMap[l.equip].tot++; if(l.status==='end'){eqMap[l.equip].done++;eqMap[l.equip].hrs+=(+l.duration||0);} });
-  const eqTop = Object.entries(eqMap).sort((a,b)=>b[1].hrs-a[1].hrs).slice(0,10)
-    .map(([eq,v])=>`${eq}(${v.company}): ${v.hrs.toFixed(1)}h/${v.done}완료`).join('\n');
+  const eqEntries = Object.entries(eqMap).sort((a,b)=>b[1].hrs-a[1].hrs);
 
-  // 반입반출 통계
+  // 반입반출
   const trIn  = allTr.filter(r=>r.type==='in');
   const trOut = allTr.filter(r=>r.type==='out');
-  const trDone = allTr.filter(r=>['반입완료','반출완료','인계완료'].includes(r.status));
 
   // 위치별
   const locMap = {};
-  allLogs.forEach(l=>{ const loc=l.location||l.floor||'미상'; locMap[loc]=(locMap[loc]||0)+1; });
-  const locSummary = Object.entries(locMap).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k}:${v}건`).join(', ');
+  allLogs.forEach(l=>{ const loc=l.floor||l.location||'미상'; locMap[loc]=(locMap[loc]||0)+1; });
+  const locEntries = Object.entries(locMap).sort((a,b)=>b[1]-a[1]);
 
-  // 타입별 프롬프트
-  const prompts = {
-    'weekly':      `현장 "${site}" 주간 운영 리포트를 한국어로 작성해. 핵심지표: 최근7일 가동률${rate7d}%, 누적가동시간${hrs}h, 총기록${allLogs.length}건. 업체별현황:\n${coSummary}\n주요장비:\n${eqTop}\n3~5개 불릿으로 성과·문제·개선사항을 간결하게. 불릿마다 굵게 강조 포함.`,
-    'top-equip':   `현장 "${site}" 이달 가장 많이 사용된 장비 분석. 장비별 데이터:\n${eqTop}\n상위 5개 장비를 순위·사용시간·특이사항 포함해 한국어로 분석해줘.`,
-    'as-heavy':    `현장 "${site}" AS 요청이 많은 장비 분석. 장비별 총기록:\n${eqTop}\n가동률이 낮거나 이상이 의심되는 장비를 찾아 AS 필요성을 한국어로 3~5개 불릿으로 설명해줘.`,
-    'location':    `현장 "${site}" 위치별 장비 배포 현황. 위치별 기록: ${locSummary}. 총반입:${trIn.length}건, 총반출:${trOut.length}건. 위치별 장비 밀집도와 효율을 한국어로 분석해줘.`,
-    'overload':    `현장 "${site}" 장비 과부하 분석. 장비별 가동시간:\n${eqTop}\n가동시간이 집중된 장비, 교체나 점검이 필요한 장비를 한국어로 3~5개 불릿으로 분석해줘.`,
-    'shortage':    `현장 "${site}" 장비 부족 분석. 업체별 현황:\n${coSummary}\n위치별 현황: ${locSummary}. 장비 부족이 의심되는 업체나 위치를 한국어로 구체적으로 분석해줘.`,
-    'pattern':     `현장 "${site}" 고객사(협력업체) 사용 패턴 분석. 업체별 데이터:\n${coSummary}\n각 업체의 사용 특징, 가동 패턴, 개선점을 한국어로 업체별로 간결하게 분석해줘.`,
-    'inefficient': `현장 "${site}" 비효율 장비 분석. 장비별 데이터:\n${eqTop}\n가동률이 낮거나 사용시간이 적은 비효율 장비를 찾아 재배치나 반출 권고와 함께 한국어로 분석해줘.`,
-    'transit':     `현장 "${site}" 반입/반출 데이터 분석. 반입:${trIn.length}건(완료:${trIn.filter(r=>r.status==='반입완료').length}건), 반출:${trOut.length}건(완료:${trOut.filter(r=>r.status==='반출완료').length}건), 완료합계:${trDone.length}건. 업체별 반입반출 패턴을 한국어로 3~5개 불릿으로 분석해줘.`,
-  };
-
-  const prompt = (prompts[type] || prompts['weekly']) + '\n\n답변은 반드시 한국어로, 이모지와 불릿(•) 포함, 5줄 이내로 간결하게.';
-
-  try {
-    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:600,temperature:0.7}})
-    });
-    const data = await resp.json();
-    if(!resp.ok) throw new Error(data?.error?.message || `API 오류 ${resp.status}`);
-    const text = (data?.candidates?.[0]?.content?.parts?.[0]?.text || '결과를 가져오지 못했습니다.')
-      .replace(/\*\*(.*?)\*\*/g,'<b>$1</b>')
-      .replace(/\*(.*?)\*/g,'<i>$1</i>')
-      .replace(/\n/g,'<br>');
-    el.innerHTML = `<div class="ai-qres"><div style="font-size:10px;font-weight:700;color:#818cf8;margin-bottom:7px">🤖 Gemini Flash 분석결과</div>${text}</div>`;
-  } catch(err) {
-    el.innerHTML = `<div class="ai-qres" style="border-color:rgba(239,68,68,.3);color:#f87171"><b>오류:</b> ${err.message}<br><span style="font-size:10px;color:var(--tx3)">API 키를 확인하거나 Google AI Studio에서 키를 재발급해 주세요.</span></div>`;
+  // Open-Meteo 날씨 (필요한 타입만)
+  let weatherLines = [];
+  if(['weekly','overload','as-heavy'].includes(type)){
+    try{
+      const lat=DB.g('site_lat','37.5665'); const lng=DB.g('site_lng','126.9780');
+      const wr=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=precipitation_sum,wind_speed_10m_max,weathercode&timezone=Asia%2FSeoul&past_days=7&forecast_days=1`);
+      const wd=await wr.json();
+      if(wd.daily){
+        const rainDays=wd.daily.precipitation_sum.filter(r=>r>1).length;
+        const windDays=wd.daily.wind_speed_10m_max.filter(w=>w>10).length;
+        if(rainDays>2) weatherLines.push(`🌧 최근 7일 중 <b>${rainDays}일 우천</b> — 날씨 영향으로 가동 저조 가능성`);
+        if(windDays>1) weatherLines.push(`💨 최근 7일 중 <b>${windDays}일 강풍</b>(10m/s↑) — 고소작업 제한 요인`);
+      }
+    }catch(_){}
   }
+
+  // 타입별 분석 생성
+  let lines = [];
+  const fH2 = h => h>=1 ? `${h.toFixed(1)}h` : `${Math.round(h*60)}분`;
+
+  if(type==='weekly'){
+    lines.push(`📋 <b>${site}</b> 주간 운영 리포트`);
+    lines.push(`• 최근 7일 가동률 <b>${rate7d}%</b> ${rate7d>=70?'— 목표 달성 ✓':'— 목표(70%) 미달 ⚠'}`);
+    lines.push(`• 누적 가동시간 <b>${fH2(hrs)}</b> · 총 기록 <b>${allLogs.length}건</b>`);
+    if(coEntries.length) lines.push(`• 최다 가동 업체: <b>${coEntries[0][0]}</b> ${coEntries[0][1].done}건 완료`);
+    if(eqEntries.length) lines.push(`• 최다 사용 장비: <b>${eqEntries[0][0]}</b> ${fH2(eqEntries[0][1].hrs)}`);
+    lines.push(...weatherLines);
+  } else if(type==='top-equip'){
+    lines.push(`🏆 <b>${site}</b> 장비별 사용시간 TOP ${Math.min(eqEntries.length,7)}`);
+    eqEntries.slice(0,7).forEach(([eq,v],i)=>lines.push(`${i+1}. <b>${eq}</b> ${fH2(v.hrs)} · ${v.done}완료/${v.tot}건 · ${v.company}`));
+    if(!eqEntries.length) lines.push('• 장비 사용 기록이 없습니다');
+  } else if(type==='as-heavy'){
+    // 가동률 낮은 장비 (AS 의심)
+    const lowRate = eqEntries.filter(([,v])=>v.tot>=2&&v.done/v.tot<0.6).sort((a,b)=>(a[1].done/a[1].tot)-(b[1].done/b[1].tot));
+    lines.push(`🔧 <b>${site}</b> AS 주의 장비 분석`);
+    if(lowRate.length){
+      lowRate.slice(0,5).forEach(([eq,v])=>lines.push(`• <b>${eq}</b> 가동률 ${Math.round(v.done/v.tot*100)}%(${v.done}/${v.tot}) — ${v.company}`));
+    } else {
+      lines.push('• 가동률 60% 미만 장비 없음 — 양호한 상태입니다');
+    }
+    lines.push(...weatherLines);
+  } else if(type==='location'){
+    lines.push(`📍 <b>${site}</b> 위치별 가동 현황`);
+    locEntries.slice(0,7).forEach(([loc,cnt])=>lines.push(`• <b>${loc}</b> — ${cnt}건`));
+    lines.push(`• 반입 <b>${trIn.length}건</b> · 반출 <b>${trOut.length}건</b>`);
+    if(!locEntries.length) lines.push('• 위치 기록이 없습니다');
+  } else if(type==='overload'){
+    lines.push(`⚡ <b>${site}</b> 장비 과부하 분석`);
+    const heavy = eqEntries.filter(([,v])=>v.hrs>50);
+    if(heavy.length){
+      heavy.slice(0,5).forEach(([eq,v])=>lines.push(`• <b>${eq}</b> <span style="color:#f87171;font-weight:700">${fH2(v.hrs)}</span> — 정기점검 권고 (${v.company})`));
+    } else {
+      const avg = eqEntries.length ? hrs/eqEntries.length : 0;
+      lines.push(`• 50h 초과 장비 없음. 장비별 평균 ${fH2(avg)}`);
+    }
+    lines.push(...weatherLines);
+  } else if(type==='shortage'){
+    lines.push(`🚨 <b>${site}</b> 장비 부족 분석`);
+    // 업체별 가동률 낮은 곳 = 장비 부족 가능성
+    const lowCo = coEntries.filter(([,v])=>v.tot>=3&&v.done/v.tot<0.5);
+    if(lowCo.length){
+      lowCo.slice(0,4).forEach(([co,v])=>lines.push(`• <b>${co}</b> 완료율 ${Math.round(v.done/v.tot*100)}% — 장비 보충 검토`));
+    } else {
+      lines.push('• 업체별 가동률 양호 — 장비 부족 징후 없음');
+    }
+    if(locEntries.length) lines.push(`• 집중 위치: <b>${locEntries[0][0]}</b> ${locEntries[0][1]}건`);
+  } else if(type==='pattern'){
+    lines.push(`👥 <b>${site}</b> 업체별 사용 패턴`);
+    coEntries.slice(0,6).forEach(([co,v])=>{
+      const r=Math.round(v.done/v.tot*100);
+      lines.push(`• <b>${co}</b> 가동률 ${r}%(${v.done}/${v.tot}) ${fH2(v.hrs)} — ${r>=80?'우수':r>=60?'보통':'개선필요'}`);
+    });
+    if(!coEntries.length) lines.push('• 업체 기록이 없습니다');
+  } else if(type==='inefficient'){
+    lines.push(`💤 <b>${site}</b> 비효율 장비 분석`);
+    const ineff = eqEntries.filter(([,v])=>v.hrs<5&&v.tot>=2).sort((a,b)=>a[1].hrs-b[1].hrs);
+    if(ineff.length){
+      ineff.slice(0,5).forEach(([eq,v])=>lines.push(`• <b>${eq}</b> ${fH2(v.hrs)} (${v.tot}건) — 재배치 또는 반출 검토 (${v.company})`));
+    } else {
+      lines.push('• 5h 미만 저사용 장비 없음');
+    }
+  } else if(type==='transit'){
+    lines.push(`🚛 <b>${site}</b> 반입/반출 현황`);
+    lines.push(`• 반입 <b>${trIn.length}건</b> (완료 ${trIn.filter(r=>r.status==='반입완료').length}건)`);
+    lines.push(`• 반출 <b>${trOut.length}건</b> (완료 ${trOut.filter(r=>r.status==='반출완료').length}건)`);
+    // 업체별 반입 TOP3
+    const trCoMap={};
+    allTr.forEach(r=>{if(!r.company)return;if(!trCoMap[r.company])trCoMap[r.company]={in:0,out:0};if(r.type==='in')trCoMap[r.company].in++;else trCoMap[r.company].out++;});
+    Object.entries(trCoMap).sort((a,b)=>(b[1].in+b[1].out)-(a[1].in+a[1].out)).slice(0,3)
+      .forEach(([co,v])=>lines.push(`• ${co}: 반입 ${v.in}건 / 반출 ${v.out}건`));
+  } else {
+    lines.push(`• 분석 타입을 인식할 수 없습니다`);
+  }
+
+  const html = lines.map(l=>`<div style="font-size:11px;line-height:1.7;padding:1px 0">${l}</div>`).join('');
+  el.innerHTML = `<div class="ai-qres"><div style="font-size:10px;font-weight:700;color:#60a5fa;margin-bottom:7px">📊 데이터 분석 결과</div>${html}</div>`;
 }
 
 async function runAI(){
   const el=document.getElementById('ai-text'); if(!el) return;
-  el.innerHTML=`<div style="display:flex;align-items:center;gap:7px;color:var(--tx3);font-size:11px"><div style="width:14px;height:14px;border:2px solid var(--br);border-top-color:var(--purple);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0"></div>분석 중...</div>`;
+  el.innerHTML=`<div style="display:flex;align-items:center;gap:7px;color:var(--tx3);font-size:11px"><div style="width:14px;height:14px;border:2px solid var(--br);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0"></div>날씨 데이터 연동 중...</div>`;
 
-  const siteId=S.siteId==='all'?null:S.siteId;
-  const allLogs=getLogs().filter(l=>siteId?l.siteId===siteId:true);
-  const logs=allLogs.slice(0,150);
-  const tl=allLogs.filter(l=>l.date===today());
-  const tr=tl.length>0?(tl.filter(l=>l.status==='end').length/tl.length*100).toFixed(0):'N/A';
-  const hrs=allLogs.filter(l=>l.status==='end').reduce((s,l)=>s+(+l.duration||0),0).toFixed(1);
-  const site=S.siteName;
+  const siteId  = S.siteId==='all'?null:S.siteId;
+  const allLogs = getLogs().filter(l=>siteId?l.siteId===siteId:true);
+  const tl      = allLogs.filter(l=>l.date===today());
+  const tr      = tl.length>0?(tl.filter(l=>l.status==='end').length/tl.length*100).toFixed(0):'N/A';
+  const hrs     = allLogs.filter(l=>l.status==='end').reduce((s,l)=>s+(+l.duration||0),0);
 
-  // ── 최근 1개월 내 1주일 미사용 장비 계산 ──
-  const now7 = new Date();
-  const cut7  = new Date(now7); cut7.setDate(cut7.getDate()-7);
-  const cut1m = new Date(now7); cut1m.setMonth(cut1m.getMonth()-1);
-  const cut7Str  = cut7.toISOString().split('T')[0];
-  const cut1mStr = cut1m.toISOString().split('T')[0];
-  // 최근 1개월 내 로그만 대상
-  const recentLogs = allLogs.filter(l=>l.date >= cut1mStr);
-  const lastUsed = new Map(); // equip → {date, company}
+  // ── 최근 1개월 내 1주일 미사용 장비 ──
+  const now7=new Date();
+  const cut7=new Date(now7); cut7.setDate(cut7.getDate()-7);
+  const cut1m=new Date(now7); cut1m.setMonth(cut1m.getMonth()-1);
+  const cut7Str=cut7.toISOString().split('T')[0];
+  const cut1mStr=cut1m.toISOString().split('T')[0];
+  const recentLogs=allLogs.filter(l=>l.date>=cut1mStr);
+  const lastUsed=new Map();
   for(const l of recentLogs){
     if(!l.equip) continue;
-    const prev = lastUsed.get(l.equip);
-    if(!prev || l.date > prev.date) lastUsed.set(l.equip, {date:l.date, company:l.company});
+    const prev=lastUsed.get(l.equip);
+    if(!prev||l.date>prev.date) lastUsed.set(l.equip,{date:l.date,company:l.company});
   }
-  const unused7 = [];
-  for(const [equip, info] of lastUsed){
-    if(info.date < cut7Str) unused7.push({equip, company:info.company, lastDate:info.date});
+  const unused7=[];
+  for(const [equip,info] of lastUsed){
+    if(info.date<cut7Str) unused7.push({equip,company:info.company,lastDate:info.date});
   }
   unused7.sort((a,b)=>a.lastDate.localeCompare(b.lastDate));
 
-  const unusedHTML = unused7.length > 0
-    ? `<div style="margin-top:10px;padding:10px 12px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:8px">
+  const unusedHTML=unused7.length>0
+    ?`<div style="margin-top:10px;padding:10px 12px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:8px">
         <div style="font-size:11px;font-weight:800;color:#f87171;margin-bottom:6px">최근 1개월 내 1주일 미사용 장비 (${unused7.length}대)</div>
         ${unused7.slice(0,10).map(u=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--br)">
           <span style="font-size:11px;font-weight:700;color:var(--tx);font-family:'JetBrains Mono',monospace">${u.equip}</span>
@@ -3846,17 +3900,83 @@ async function runAI(){
         </div>`).join('')}
         ${unused7.length>10?`<div style="font-size:10px;color:var(--tx3);margin-top:4px;text-align:right">외 ${unused7.length-10}대 더</div>`:''}
       </div>`
-    : `<div style="margin-top:8px;font-size:11px;color:var(--green,#4ade80)">최근 1개월 내 1주일 이상 미사용 장비 없음</div>`;
+    :`<div style="margin-top:8px;font-size:11px;color:var(--green,#4ade80)">최근 1개월 내 1주일 이상 미사용 장비 없음</div>`;
+
+  // ── Open-Meteo 날씨 데이터 ──
+  const lat=DB.g('site_lat','37.5665');
+  const lng=DB.g('site_lng','126.9780');
+  let insightLines=[];
+  let weatherHTML='';
 
   try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:800,messages:[{role:'user',content:`건설현장 고소작업대 가동현황 분석. 현장:${site} 오늘가동률:${tr}% 총누적시간:${hrs}h 총기록:${logs.length}건 목표70%. 3~4개 불릿(•)으로 볼드 포함 한국어 간결하게.`}]})});
-    const data=await res.json();
-    const txt=data.content?.[0]?.text||'';
-    el.innerHTML=txt.split('\n').filter(l=>l.trim()).map(line=>`<span class="ai-bul">${line.replace(/\*\*(.*?)\*\*/g,'<b>$1</b>')}</span>`).join('') + unusedHTML;
-    const te=document.getElementById('ai-time'); if(te) te.textContent=new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})+' 완료';
+    const wr=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=precipitation_sum,temperature_2m_max,temperature_2m_min,wind_speed_10m_max,weathercode&timezone=Asia%2FSeoul&past_days=7&forecast_days=1`);
+    const wd=await wr.json();
+    if(wd.daily){
+      const dates=wd.daily.time;
+      const rain=wd.daily.precipitation_sum;
+      const tmax=wd.daily.temperature_2m_max;
+      const wind=wd.daily.wind_speed_10m_max;
+      const wcode=wd.daily.weathercode;
+
+      // 오늘 날씨
+      const todayIdx=dates.indexOf(today());
+      const todayRain=todayIdx>=0?rain[todayIdx]:0;
+      const todayWind=todayIdx>=0?wind[todayIdx]:0;
+      const todayTemp=todayIdx>=0?tmax[todayIdx]:null;
+
+      // 최근 7일 통계 (과거 7일만)
+      const past=rain.slice(0,7);
+      const rainDays7=past.filter(r=>r>1).length;
+      const windDays7=wind.slice(0,7).filter(w=>w>10).length;
+      const avgTemp=tmax.length?(tmax.reduce((s,t)=>s+(t||0),0)/tmax.length).toFixed(1):null;
+
+      // 인사이트 생성
+      const rateNum=tr!=='N/A'?+tr:null;
+      if(rateNum!==null){
+        const ok=rateNum>=70;
+        const reason=todayRain>1?'우천':todayWind>10?'강풍':'';
+        insightLines.push(`<span class="ai-bul">• 오늘 가동률 <b>${tr}%</b> — 목표(70%) ${ok?'달성 ✓':'미달'+(reason?' ('+reason+' 영향)':'')}</span>`);
+      }
+      if(todayRain>5)      insightLines.push(`<span class="ai-bul">• <b>오늘 강수 ${todayRain}mm</b> — 고소작업 중단·안전장구 확인 필요</span>`);
+      else if(todayRain>1) insightLines.push(`<span class="ai-bul">• 오늘 소우 ${todayRain}mm — 작업 조건 주의</span>`);
+      if(todayWind>14)     insightLines.push(`<span class="ai-bul">• <b>오늘 강풍 ${todayWind}m/s</b> — 고소작업대 운용 위험. 작업 중지 검토 ⚠</span>`);
+      else if(todayWind>10)insightLines.push(`<span class="ai-bul">• 오늘 바람 ${todayWind}m/s — 고소작업 시 주의</span>`);
+      if(rainDays7>=3)     insightLines.push(`<span class="ai-bul">• 최근 7일 중 <b>${rainDays7}일 우천</b> — 날씨 영향 구간</span>`);
+      insightLines.push(`<span class="ai-bul" style="color:var(--tx3);font-size:10px">• 누적 가동 <b>${hrs.toFixed(1)}h</b>${todayTemp!==null?' | 오늘 최고 '+todayTemp+'°C':''} | 최근 7일 평균 ${avgTemp||'-'}°C</span>`);
+
+      // 날씨 미니 카드
+      const iconOf=code=>{
+        if(code===0||code===1) return '☀️';
+        if(code<=3) return '⛅';
+        if(code<=67||code<=82) return '🌧';
+        if(code<=77) return '❄️';
+        return '🌩';
+      };
+      weatherHTML=`<div style="margin-top:10px;padding:8px 10px;background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.2);border-radius:8px">
+        <div style="font-size:10px;font-weight:800;color:#60a5fa;margin-bottom:6px">🌤 최근 8일 날씨 (Open-Meteo)</div>
+        <div style="display:flex;gap:3px;overflow-x:auto;padding-bottom:2px">
+          ${dates.map((d,i)=>{
+            const r=rain[i]||0; const w=wind[i]||0; const t=tmax[i]??'—';
+            const ico=iconOf(wcode[i]||0);
+            const isToday=d===today();
+            return `<div style="flex-shrink:0;width:38px;text-align:center;padding:4px 2px;background:${isToday?'rgba(96,165,250,.15)':'var(--bg3)'};border-radius:5px;${isToday?'border:1px solid rgba(96,165,250,.4)':''}">
+              <div style="font-size:13px">${ico}</div>
+              <div style="font-size:8px;color:${isToday?'#60a5fa':'var(--tx3)'};font-weight:${isToday?'700':'400'}">${d.slice(5)}</div>
+              <div style="font-size:9px;color:var(--tx2)">${t}°</div>
+              ${r>0?`<div style="font-size:8px;color:#60a5fa">${r}mm</div>`:''}
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+    }
   }catch(_e){
-    el.innerHTML=`<span class="ai-bul"><b>오늘 ${tr}%</b> — 목표70% ${tr!=='N/A'&&+tr>=70?'초과':'미달'}</span><span class="ai-bul"><b>누적 ${hrs}h</b> 장비 사용 기록됨</span><span class="ai-bul" style="color:var(--tx3);font-size:10px">* AI 연결 실패 — 로컬 분석</span>` + unusedHTML;
+    insightLines.push(`<span class="ai-bul"><b>오늘 ${tr}%</b> — 목표70% ${tr!=='N/A'&&+tr>=70?'달성 ✓':'미달'}</span>`);
+    insightLines.push(`<span class="ai-bul"><b>누적 ${hrs.toFixed(1)}h</b> 가동 기록됨</span>`);
+    insightLines.push(`<span class="ai-bul" style="color:var(--tx3);font-size:10px">* 날씨 데이터 연동 실패 — 로컬 분석</span>`);
   }
+
+  el.innerHTML=insightLines.join('')+weatherHTML+unusedHTML;
+  const te=document.getElementById('ai-time'); if(te) te.textContent=new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})+' 완료';
 }
 
 /* ═══════════════════════════════════════════
@@ -3913,15 +4033,16 @@ function toggleNotice(id){
 /* ═══════════════════════════════════════════
    ADMIN
 ═══════════════════════════════════════════ */
-function _saveGeminiKey(){
-  const inp = document.getElementById('gemini-key-input');
-  const key = inp?.value.trim();
-  if(!key){ toast('API 키를 입력하세요','err'); return; }
-  DB.s('gemini_api_key', key);
-  if(inp) inp.type='password';
-  const st=document.getElementById('gemini-key-status');
-  if(st){ st.textContent='✓ API 키 등록됨 — AI 분석 사용 가능'; st.style.color='#4ade80'; }
-  toast('Gemini API 키 저장 완료','ok');
+function _saveSiteCoords(){
+  const lat=document.getElementById('site-lat-input')?.value.trim();
+  const lng=document.getElementById('site-lng-input')?.value.trim();
+  const latN=parseFloat(lat); const lngN=parseFloat(lng);
+  if(isNaN(latN)||isNaN(lngN)||latN<33||latN>39||lngN<124||lngN>132){
+    toast('유효한 좌표를 입력하세요 (위도 33~39, 경도 124~132)','err'); return;
+  }
+  DB.s('site_lat', latN.toFixed(4));
+  DB.s('site_lng', lngN.toFixed(4));
+  toast('현장 위치 저장 완료 — 날씨 연동에 반영됩니다','ok');
   renderAdmin();
 }
 
@@ -4071,25 +4192,28 @@ function renderAdmin(){
       `:''}
     </div>
 
-    <!-- AI API 키 설정 (AJ 관리자 전용) -->
+    <!-- 현장 위치 설정 (AJ 관리자 전용, 날씨 연동) -->
     ${isAJ?`<div style="background:var(--bg2);border:1px solid var(--br);border-radius:12px;margin-bottom:14px;overflow:hidden">
-      <div onclick="(()=>{const b=document.getElementById('ai-key-body');const a=document.getElementById('ai-key-arrow');if(b){const o=b.style.display!=='none';b.style.display=o?'none':'block';a.style.transform=o?'':'rotate(180deg)';}})()" style="display:flex;align-items:center;gap:8px;padding:12px 14px;cursor:pointer">
-        <span style="font-size:13px;font-weight:800;flex:1">🤖 AI API 키 설정</span>
-        <span style="font-size:10px;padding:2px 8px;border-radius:6px;font-weight:700;${DB.g('gemini_api_key','')?'background:rgba(34,197,94,.15);color:#22c55e':'background:rgba(248,113,113,.1);color:#f87171'}">${DB.g('gemini_api_key','')?'등록됨':'미등록'}</span>
-        <span id="ai-key-arrow" style="font-size:12px;color:var(--tx3);transition:transform .2s">▼</span>
+      <div onclick="(()=>{const b=document.getElementById('site-coords-body');const a=document.getElementById('site-coords-arrow');if(b){const o=b.style.display!=='none';b.style.display=o?'none':'block';a.style.transform=o?'':'rotate(180deg)';}})()" style="display:flex;align-items:center;gap:8px;padding:12px 14px;cursor:pointer">
+        <span style="font-size:13px;font-weight:800;flex:1">📍 현장 위치 설정 (날씨 연동)</span>
+        <span style="font-size:10px;padding:2px 8px;border-radius:6px;font-weight:700;${DB.g('site_lat','')?'background:rgba(96,165,250,.15);color:#60a5fa':'background:rgba(248,113,113,.1);color:#f87171'}">${DB.g('site_lat','')?'설정됨':'기본값'}</span>
+        <span id="site-coords-arrow" style="font-size:12px;color:var(--tx3);transition:transform .2s">▼</span>
       </div>
-      <div id="ai-key-body" style="display:none;padding:0 14px 14px;border-top:1px solid var(--br)">
-        <div style="font-size:10px;color:var(--tx3);margin:10px 0 8px;line-height:1.6">Google AI Studio에서 발급한 Gemini API 키를 입력하세요.<br>가동 분석 탭의 AI 분석 기능에 사용됩니다.</div>
-        <div style="display:flex;gap:6px">
-          <input type="password" id="gemini-key-input" class="fg-input"
-            value="${DB.g('gemini_api_key','')}"
-            placeholder="AIzaSy..."
-            style="flex:1;font-size:11px;font-family:monospace;margin:0">
-          <button onclick="_saveGeminiKey()" style="padding:6px 14px;font-size:11px;font-weight:700;background:rgba(96,165,250,.15);border:1px solid rgba(96,165,250,.3);border-radius:7px;color:#60a5fa;cursor:pointer;flex-shrink:0;white-space:nowrap">저장</button>
+      <div id="site-coords-body" style="display:none;padding:0 14px 14px;border-top:1px solid var(--br)">
+        <div style="font-size:10px;color:var(--tx3);margin:10px 0 8px;line-height:1.6">현장 위·경도를 입력하면 가동 분석 탭에서 실시간 날씨를 연동합니다.<br>미입력 시 서울 기본값(37.5665, 126.9780) 사용. <a href="https://map.kakao.com" target="_blank" style="color:#60a5fa">카카오맵</a>에서 좌표 확인 가능.</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+          <div>
+            <div style="font-size:10px;color:var(--tx3);margin-bottom:4px">위도 (Latitude)</div>
+            <input type="number" id="site-lat-input" class="fg-input" step="0.0001" min="33" max="39"
+              value="${DB.g('site_lat','37.5665')}" placeholder="37.5665" style="margin:0;font-size:12px;font-family:monospace">
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--tx3);margin-bottom:4px">경도 (Longitude)</div>
+            <input type="number" id="site-lng-input" class="fg-input" step="0.0001" min="124" max="132"
+              value="${DB.g('site_lng','126.9780')}" placeholder="126.9780" style="margin:0;font-size:12px;font-family:monospace">
+          </div>
         </div>
-        <div id="gemini-key-status" style="font-size:10px;margin-top:6px;color:${DB.g('gemini_api_key','')?'#4ade80':'var(--tx3)'}">
-          ${DB.g('gemini_api_key','')?'✓ API 키 등록됨 — AI 분석 사용 가능':'미등록 — 저장 후 사용 가능'}
-        </div>
+        <button onclick="_saveSiteCoords()" style="width:100%;padding:7px;font-size:11px;font-weight:700;background:rgba(96,165,250,.15);border:1px solid rgba(96,165,250,.3);border-radius:7px;color:#60a5fa;cursor:pointer">저장</button>
       </div>
     </div>`:``}
 
