@@ -1208,6 +1208,26 @@ function renderASPage(){
   _attachASListSentinel(canFullAS);
 }
 
+// ── 업체별 고유 아바타 색상 ────────────────────────────────────
+function _companyColor(name) {
+  const PALETTE = [
+    ['#60a5fa','#2563eb'], // blue
+    ['#34d399','#059669'], // green
+    ['#a78bfa','#7c3aed'], // purple
+    ['#fb923c','#ea580c'], // orange
+    ['#f472b6','#db2777'], // pink
+    ['#38bdf8','#0284c7'], // sky
+    ['#facc15','#ca8a04'], // yellow
+    ['#4ade80','#16a34a'], // lime
+    ['#e879f9','#a21caf'], // fuchsia
+    ['#2dd4bf','#0f766e'], // teal
+  ];
+  let h = 0;
+  for (let i = 0; i < (name||'').length; i++) h = (h * 31 + (name||'').charCodeAt(i)) & 0xffffff;
+  const [c1, c2] = PALETTE[Math.abs(h) % PALETTE.length];
+  return `linear-gradient(135deg,${c1},${c2})`;
+}
+
 // ── AS 댓글 헬퍼 ──────────────────────────────────────────────
 function _asCommentBubbles(r){
   // 마이그레이션: comments 없으면 resolvedNote → comments[0]
@@ -1220,7 +1240,7 @@ function _asCommentBubbles(r){
   if(!comments.length) return '';
   const bubbles = comments.map(c=>{
     const isAJ = c.role==='aj' || c.company==='AJ네트웍스' || !c.role;
-    const avBg = isAJ ? 'linear-gradient(135deg,#DE1F23,#9f1214)' : 'linear-gradient(135deg,#60a5fa,#2563eb)';
+    const avBg = isAJ ? 'linear-gradient(135deg,#DE1F23,#9f1214)' : _companyColor(c.company||c.author||'');
     const namCol = isAJ ? '#DE1F23' : '#60a5fa';
     const msgBg = isAJ ? 'rgba(222,31,35,.06)' : 'rgba(96,165,250,.07)';
     const msgBdr = isAJ ? 'rgba(222,31,35,.15)' : 'rgba(96,165,250,.15)';
@@ -1364,7 +1384,7 @@ function _asCard(r, canAct){
       </div>
       <div class="lc-time" style="text-align:right">
         <div>${_fmtAsDate(r.requestedAt)}</div>
-        <div style="font-size:9px;color:var(--tx3);margin-top:1px;font-family:monospace">${seqNo?'No.'+seqNo:''}</div>
+        <div style="font-size:9px;color:var(--tx3);margin-top:1px;font-family:monospace">${seqNo||''}</div>
       </div>
     </div>
 
@@ -2163,7 +2183,7 @@ function _trCard(r, seqNo, canEdit, canMsg){
       ? '<button data-rid="'+r.id+'" data-idx="'+i+'" onclick="var b=this;_delTransitMsg(b.dataset.rid,+b.dataset.idx)" style="margin-left:auto;background:none;border:none;color:var(--tx3);font-size:12px;cursor:pointer;padding:0 4px;line-height:1">×</button>'
       : '';
     const _isAJMsg = m.role === 'aj' || (!m.role && (m.author === 'AJ' || m.company === 'AJ네트웍스' || (S?.role==='aj')));
-    const _avatarBg = _isAJMsg ? 'linear-gradient(135deg,#DE1F23,#9f1214)' : 'linear-gradient(135deg,#60a5fa,#2563eb)';
+    const _avatarBg = _isAJMsg ? 'linear-gradient(135deg,#DE1F23,#9f1214)' : _companyColor(m.company||m.author||'');
     const _nameCol = _isAJMsg ? '#DE1F23' : '#60a5fa';
     const _msgBg = _isAJMsg ? 'rgba(222,31,35,.06)' : 'rgba(96,165,250,.07)';
     const _msgBdr = _isAJMsg ? 'rgba(222,31,35,.15)' : 'rgba(96,165,250,.15)';
@@ -2194,7 +2214,7 @@ function _trCard(r, seqNo, canEdit, canMsg){
   const _olderBlock = _olderCnt > 0
     ? '<div id="'+_accordId+'" style="display:none">'+_olderHtml+'</div>'
     : '';
-  const _myAvBg = S?.role==='aj' ? 'linear-gradient(135deg,#DE1F23,#9f1214)' : 'linear-gradient(135deg,var(--blue),#1d4ed8)';
+  const _myAvBg = S?.role==='aj' ? 'linear-gradient(135deg,#DE1F23,#9f1214)' : _companyColor(S?.company||S?.name||'');
   const _commentBox = _canAddMsg
     ? '<div style="display:flex;gap:8px;align-items:center;padding-top:8px;border-top:1px solid rgba(222,31,35,.15)">'
       + '<div style="width:28px;height:28px;border-radius:50%;background:'+_myAvBg+';display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:900;color:white;flex-shrink:0">'+_myInitials+'</div>'
@@ -2231,12 +2251,22 @@ function _trCard(r, seqNo, canEdit, canMsg){
     const completeBtnColor = isIn ? '#22c55e' : '#fb923c';
     const hasDispatch = !!(r.dispatch && _parseDispatch(r.dispatch).length);
     const dispBtnLabel = hasDispatch ? '배차정보 확인' : '배차정보 등록';
+    // 반입 카드: 장비번호 인라인 입력란 (반입예정 + 반입지연 공통)
+    const inlineEquipHtml = isIn
+      ? `<div style="display:flex;align-items:center;gap:6px;margin-top:6px;margin-bottom:2px">` +
+        `<input type="text" id="inline-equip-${r.id}" value="${r.ajEquip||''}" placeholder="장비번호 입력 (쉼표 구분)" oninput="this.value=this.value.toUpperCase()" autocomplete="off"` +
+        ` style="flex:1;padding:5px 8px;font-size:11px;font-family:monospace;font-weight:700;text-transform:uppercase;background:var(--bg2);border:1px solid var(--br);border-radius:6px;color:#60a5fa;outline:none">` +
+        `<button onclick="_saveInlineEquip('${r.id}')" style="padding:5px 10px;font-size:10px;font-weight:700;background:rgba(96,165,250,.15);border:1px solid rgba(96,165,250,.3);border-radius:6px;color:#60a5fa;cursor:pointer;white-space:nowrap">저장</button>` +
+        `</div>`
+      : '';
     actionHtml =
-      `<div style="display:flex;gap:6px;margin-top:4px;border-top:1px solid var(--br);padding-top:8px">` +
+      `<div style="margin-top:4px;border-top:1px solid var(--br);padding-top:8px">` +
+      inlineEquipHtml +
+      `<div style="display:flex;gap:6px;${isIn?'margin-top:6px':''}">` +
       `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:#a78bfa;border-color:rgba(167,139,250,.3)" onclick="openDispatchPopup('${r.id}')">${dispBtnLabel}</button>` +
       `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:#f87171;border-color:rgba(248,113,113,.3)" onclick="cancelTransit('${r.id}')">취소</button>` +
       `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:${completeBtnColor};border-color:${completeBtnColor}40;font-weight:700" onclick="completeTransit('${r.id}')">${completeBtnLabel}</button>` +
-      `</div>`;
+      `</div></div>`;
   } else if (canEdit && (alreadyDone(r) || st.done) && r.status !== '취소') {
     // 완료 후 안내만 (장비번호 수정은 specBlock 입력란에서)
     if (r.type === 'in' && (!r.ajEquip || !(r.specs||[]).every(s=>s.equipNos&&s.equipNos.length))) {
@@ -2295,7 +2325,7 @@ function _trCard(r, seqNo, canEdit, canMsg){
         ${actionHtml}
         ${doneByHtml}
         ${syncFailBanner}
-        <div style="text-align:right;font-size:9px;color:var(--tx3);font-family:monospace;margin-top:4px">${seqNo?'No.'+seqNo:''}</div>
+        <div style="text-align:right;font-size:9px;color:var(--tx3);font-family:monospace;margin-top:4px">${seqNo||''}</div>
       </div>
     </div>
   </div>`;
@@ -2891,6 +2921,7 @@ async function completeTransit(id) {
     const changed = await registerEquipFromTransit(rec);
     if (changed) {
       toast(`${verb} · 장비 마스터 등록 완료`, 'ok');
+      _syncToSupabase().catch(e=>console.warn('[completeTransit equip sync]',e));
     } else {
       toast(verb + ' 처리 완료' + (rec.ajEquip ? '' : ' (장비번호 미입력)'), rec.ajEquip ? 'ok' : 'warn');
     }
