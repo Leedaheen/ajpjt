@@ -227,7 +227,10 @@ async function submitStart(){
   };
   try {
     spinner(true,'저장 중...');
-    await saveLog(entry);          // IDB 단건 저장
+    // ① 서버 우선 저장
+    await pushToGS(entry);
+    // ② IDB 로컬 저장 (synced 상태 포함)
+    await saveLog(entry);
     // 장비별 층수 데이터 수집 (새 층수로 덮어쓰기)
     if(equip && floors){ const _fm=DB.g('equip_floors',{}); _fm[equip]={floor:floors,detail:locationDetail}; DB.s('equip_floors',_fm); }
     // 장비마스터 위치(층수) 자동 업데이트 — 해당 장비 기록이 있을 때만
@@ -244,11 +247,10 @@ async function submitStart(){
         }
       }
     }
-    await pushToGS(entry);         // 서버 직접 저장 (실패 시 내부에서 재시도 예약)
     toast(entry.synced?'사용 신청 완료':'로컬 저장 (자동 재시도 예정)', entry.synced?'ok':'warn');
     updatePendingBanner(); updateLogBadge();
-    // 이력 목록 즉시 갱신
-    if(document.getElementById('log-body')) _logLoadTimer = setTimeout(_doRenderLog, 300);
+    // ③ 이력 목록 즉시 갱신 (서버 저장 완료 후 직접 호출)
+    if(document.getElementById('log-body')){ clearTimeout(_logLoadTimer); _doRenderLog(); }
     document.getElementById('f-equip').value='';
     document.getElementById('f-meter-start').value='';
     document.getElementById('f-starttime').value=nowHM();
@@ -300,8 +302,9 @@ async function submitEnd(){
     await saveLog(entry);          // ② IDB 저장 (synced 상태 포함)
     toast(entry.synced?`사용 종료 완료 (${dur?fH(dur):'—'})`: '로컬 저장 (자동 재시도 예정)', entry.synced?'ok':'warn');
     updatePendingBanner(); updateLogBadge();
-    // 이력 목록 즉시 갱신 (종료 처리 후 → fetch → 목록갱신)
+    // ③ 이력 목록 즉시 갱신 (종료 처리 후 → fetch → 목록갱신)
     if(document.getElementById('log-body')){ clearTimeout(_logLoadTimer); _doRenderLog(); }
+    _fetchFromSB().catch(()=>{});   // 다른 기기 변경사항 병행 동기화
     document.getElementById('f-meter-end').value='';
     populateOpenSessions();
   } catch(e) {

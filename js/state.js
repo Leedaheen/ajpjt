@@ -126,7 +126,7 @@ async function getLogsByRange(from, to, siteId=null, limit=200) {
   const sbUrl = DB.g(K.SB_URL,'');
   if(sbUrl){
     // Supabase 서버사이드 쿼리 — select=* 대신 필요 컬럼만 지정 (payload 절감)
-    const LOG_COLS = 'record_id,id,date,site_id,company,floor,equip,recorder,status,start_time,end_time,used_hours,meter_start,meter_end,off_reason,created_at';
+    const LOG_COLS = 'record_id,id,date,site_id,company,floor,location_detail,equip,recorder,team,project,status,start_time,end_time,used_hours,meter_start,meter_end,off_reason,created_at';
     let q = `?select=${LOG_COLS}&date=gte.${from}&date=lte.${to}&order=created_at.desc&limit=${limit}`;
     if(siteId) q += `&site_id=eq.${siteId}`;
     try {
@@ -285,22 +285,26 @@ async function saveMembers(arr){
 // Supabase 응답 → 로컬 로그 형식 변환
 function _sbLogToLocal(r) {
   return {
-    id:         r.record_id || String(r.id),
-    siteId:     r.site_id,
-    date:       r.date,
-    company:    r.company,
-    floor:      r.floor,
-    equip:      r.equip,
-    name:       r.recorder,
-    status:     r.status,
-    startTime:  r.start_time,
-    endTime:    r.end_time,
-    duration:   r.used_hours,
-    meterStart: r.meter_start,
-    meterEnd:   r.meter_end,
-    offReason:  r.off_reason,
-    ts:         r.created_at ? new Date(r.created_at).getTime() : 0,
-    synced:     true,
+    id:             r.record_id || String(r.id),
+    siteId:         r.site_id,
+    date:           r.date,
+    company:        r.company,
+    floor:          r.floor,
+    locationDetail: r.location_detail || '',
+    equip:          r.equip,
+    name:           r.recorder,
+    team:           r.team || '',
+    project:        r.project || '',
+    status:         r.status,
+    startTime:      r.start_time,
+    endTime:        r.end_time,
+    duration:       r.used_hours,
+    meterStart:     r.meter_start,
+    meterEnd:       r.meter_end,
+    offReason:      r.off_reason,
+    reason:         r.off_reason || '',
+    ts:             r.created_at ? new Date(r.created_at).getTime() : 0,
+    synced:         true,
   };
 }
 
