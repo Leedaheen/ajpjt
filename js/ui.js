@@ -949,6 +949,27 @@ function _addASComment(id){
   // 즉시 서버 동기화 (AJ 정비기사에게 알람)
   _directPushAS(r).catch(e=>{ console.warn('[ASComment push]',e); scheduleRetrySync(); });
   addNotif({icon:'💬', title:`AS 댓글 [${r.equip||''}]`, desc:`${S?.name||''}(${S?.company||''}) — ${text.slice(0,40)}`});
+  // 댓글 알림: 신청인에게 (내가 AJ인 경우) 또는 AJ에게 (내가 sub인 경우)
+  if(S?.role === 'aj'){
+    pushSBNotif({
+      target_user_id: r.submitterMemberId || null,
+      target_role: r.submitterMemberId ? null : 'sub',
+      site_id: r.siteId || null,
+      type: 'as_comment',
+      title: `💬 AS 댓글 [${r.equip||''}]`,
+      body: `${S?.name||''}(${S?.company||''}) — ${text.slice(0,50)}`,
+      ref_id: r.id,
+    }).catch(()=>{});
+  } else {
+    pushSBNotif({
+      target_role: 'aj',
+      type: 'as_comment',
+      title: `💬 AS 댓글 [${r.equip||''}]`,
+      body: `${S?.name||''}(${S?.company||''}) — ${text.slice(0,50)}`,
+      ref_id: r.id,
+      site_id: r.siteId || null,
+    }).catch(()=>{});
+  }
   renderASPage();
   toast('댓글 등록됨','ok');
 }
@@ -1090,10 +1111,29 @@ function updateASStatus(id, status){
     // 담당기사 미입력 시 현재 로그인 AJ 멤버 이름으로 자동 설정
     if(!r.techName && S?.name) r.techName = S.name;
     addNotif({icon:'', title:`AS처리완료: ${r.equip}`, desc:`${r.company} — ${r.techName||'기사'}님 처리 완료`});
+    // 신청인에게 알림 (submitterMemberId가 있으면 직접, 없으면 site의 sub 전체)
+    pushSBNotif({
+      target_user_id: r.submitterMemberId || null,
+      target_role: r.submitterMemberId ? null : 'sub',
+      site_id: r.siteId || null,
+      type: 'as_complete',
+      title: `✅ AS처리완료: ${r.equip}`,
+      body: `${r.company} — ${r.techName||'기사'}님이 처리 완료했습니다.`,
+      ref_id: r.id,
+    }).catch(()=>{});
   }
   if(status==='자재수급중'){
     r.materialAt = r.materialAt || Date.now();
     addNotif({icon:'', title:`자재수급중: ${r.equip}`, desc:`${r.company} — 자재 수급 진행 중`});
+    pushSBNotif({
+      target_user_id: r.submitterMemberId || null,
+      target_role: r.submitterMemberId ? null : 'sub',
+      site_id: r.siteId || null,
+      type: 'as_material',
+      title: `🔩 자재수급중: ${r.equip}`,
+      body: `${r.company} — 자재 수급이 진행 중입니다.`,
+      ref_id: r.id,
+    }).catch(()=>{});
   }
   r.synced = false;
   reqs[idx] = r;
@@ -3112,6 +3152,7 @@ async function submitAS(){
     // 사진: 썸네일은 record에 보존, 원본은 메모리 캐시
     photoThumb: _pendingAsPhoto?.thumb || null,
     ts: Date.now(), synced: false,
+    submitterMemberId: S?.memberId || '',
   };
   // 원본 사진 메모리 캐시 등록
   if(_pendingAsPhoto?.full) _asPhotoCache.set(req.id, _pendingAsPhoto.full);
@@ -3119,6 +3160,7 @@ async function submitAS(){
 
   const reqs = getAsReqs(); reqs.unshift(req); saveAsReqs(reqs);
   addNotif({icon:'🔧', title:`AS신청: ${equip}`, desc:`${company} — ${desc.slice(0,30)}`});
+  pushSBNotif({target_role:'aj', type:'as_new', title:`🔧 AS신청: ${equip}`, body:`${company} — ${desc.slice(0,60)}`, ref_id:req.id, site_id:req.siteId}).catch(()=>{});
   toast('AS 신청이 등록되었습니다','ok');
   _directPushAS(req).catch(e => { console.warn('[submitAS push]', e); scheduleRetrySync(); });
   updateASBadge();

@@ -109,6 +109,28 @@ async function sbBatchUpsert(table, rows){
   }
 }
 
+/* ── 크로스 디바이스 알림 푸시 ─────────────────────────────
+   Supabase notifications 테이블에 INSERT.
+   수신측은 _fetchFromSB에서 자신에게 해당하는 알림만 pull.
+──────────────────────────────────────────────────────────── */
+async function pushSBNotif(notif){
+  try {
+    await sbReq('notifications','POST',{
+      target_role:    notif.target_role    || null,
+      target_aj_type: notif.target_aj_type || null,
+      target_user_id: notif.target_user_id || null,
+      site_id:        notif.site_id        || null,
+      type:           notif.type           || 'info',
+      title:          notif.title          || '',
+      body:           notif.body           || '',
+      ref_id:         notif.ref_id         || null,
+      sender_phone:   S?.phone             || null,
+    });
+  } catch(e){
+    console.warn('[pushSBNotif]',e);
+  }
+}
+
 /* GS(Google Sheets) 폴백 — 기존 방식 유지 */
 async function gsReq(action,payload={}){
   const url=DB.g(K.GS_URL,'');

@@ -370,6 +370,21 @@ function _sbAsToLocal(row){
   };
 }
 let _lastFetchTs=0;
+let _lastNotifFetchTs = 0;
+function _buildNotifFilter(){
+  if(!S) return null;
+  const conds = [];
+  if(S.role === 'aj'){
+    conds.push('target_role.eq.aj');
+    if(S.ajType) conds.push(`target_aj_type.eq.${encodeURIComponent(S.ajType)}`);
+  } else if(S.role === 'sub'){
+    conds.push('target_role.eq.sub');
+  } else if(S.role === 'tech'){
+    conds.push('target_role.eq.tech');
+  }
+  if(S.memberId) conds.push(`target_user_id.eq.${encodeURIComponent(S.memberId)}`);
+  return conds.length ? `or=(${conds.join(',')})` : null;
+}
 async function _fetchFromSB(){
   const sbUrl=DB.g(K.SB_URL,'');
   if(!sbUrl||!S) return false;
@@ -468,6 +483,27 @@ async function _fetchFromSB(){
       }
       if(asChanged){ changed=true; await saveAsReqs(localAs); }
     }
+    // ── 크로스 디바이스 알림 수신 ────────────────────────────
+    const _nFilter = _buildNotifFilter();
+    if(_nFilter && _lastNotifFetchTs > 0){
+      const _nSince = new Date(_lastNotifFetchTs).toISOString();
+      const _sExcl  = S?.phone ? `&sender_phone=neq.${encodeURIComponent(S.phone)}` : '';
+      const _nRows  = await sbReq('notifications','GET',null,
+        `?${_nFilter}&created_at=gt.${_nSince}${_sExcl}&order=created_at.asc&limit=30`).catch(()=>[]);
+      if(Array.isArray(_nRows) && _nRows.length){
+        const _nIcons = {as_new:'🔧',as_comment:'💬',as_complete:'✅',as_material:'🔩',signup_request:'👤',signup_approved:'🎉'};
+        let _nMaxTs = _lastNotifFetchTs;
+        for(const n of _nRows){
+          addNotif({icon:_nIcons[n.type]||'📢', title:n.title, desc:n.body||''});
+          const _t = new Date(n.created_at).getTime();
+          if(_t > _nMaxTs) _nMaxTs = _t;
+        }
+        _lastNotifFetchTs = _nMaxTs;
+        DB.s('_lastNotifFetchTs', String(_lastNotifFetchTs));
+        changed = true;
+      }
+    }
+    // ─────────────────────────────────────────────────────────
     _lastFetchTs=Date.now();
     if(changed){
       if(curPg==='pg-transit') renderTransit();

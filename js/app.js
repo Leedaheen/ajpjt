@@ -436,7 +436,7 @@ async function _doGoogleSubLogin(email, googleName){
       S={role:'sub',name:member.name,title:member.title||'',phone:member.phone||'',
          company:member.company,siteId:member.siteId,
          siteName:getSites().find(s=>s.id===member.siteId)?.name||member.siteId,
-         loginAt:Date.now()};
+         loginAt:Date.now(), memberId:member.id||''};
       DB.s(K.SESSION,S); DB.s('auto_login',true);
       toast(`${member.name}님 환영합니다!`,'ok');
       enterApp();
@@ -549,6 +549,7 @@ async function doGoogleProfileSubmit(){
     // 가입 신청 완료 메시지
     addNotif({icon:'',title:`신규 관리자 가입신청: ${co}`,
       desc:`${co} ${name}님이 가입을 신청했습니다. 승인이 필요합니다.`});
+    pushSBNotif({target_role:'aj', type:'signup_request', title:`신규 가입신청: ${co}`, body:`${co} ${name}님이 가입을 신청했습니다. 승인이 필요합니다.`, ref_id:record.id}).catch(()=>{});
     toast('가입 신청 완료! AJ관리자 승인 후 로그인 가능합니다.','ok',4000);
   }
 }
@@ -567,7 +568,8 @@ async function _doGoogleAjLogin(email, googleName){
   if(_st==='rejected'){ toast('가입이 거절되었습니다. AJ 관리자에게 문의하세요.','err',4000); return; }
   DB.s(K.AJ_MEMBER, member);
   S={ role:'aj', name:member.name, phone:member.phone||'', ajType:member.aj_type||'관리자',
-      company:'AJ네트웍스', siteId:'all', siteName:'전체 현장', loginAt:Date.now(), empNo:member.emp_no };
+      company:'AJ네트웍스', siteId:'all', siteName:'전체 현장', loginAt:Date.now(), empNo:member.emp_no,
+      memberId: member.record_id||member.id||'' };
   DB.s(K.SESSION, S); DB.s('auto_login', true);
   toast(`${member.name}님 환영합니다!`,'ok'); enterApp();
 }
@@ -904,6 +906,7 @@ function approveMember(id){
   saveMembers(all);
   // Supabase 업데이트
   sbReq('members','PATCH',{status:'approved'},`?record_id=eq.${encodeURIComponent(id)}`).catch(()=>{});
+  pushSBNotif({target_user_id:id, type:'signup_approved', title:'가입이 승인되었습니다', body:`${m.company} ${m.name}님의 가입이 승인되었습니다. 로그인 가능합니다.`, ref_id:id}).catch(()=>{});
   toast(`${m.name}님을 승인했습니다`,'ok');
   renderAcctSubList();
 }
@@ -1298,6 +1301,7 @@ async function doLogin(role){
         const _all=getMembers(); _all.push(_newMbr); saveMembers(_all);
         addNotif({icon:'',title:`신규 관리자 가입신청: ${co}`,
           desc:`${co} ${name}님이 가입을 신청했습니다. 승인이 필요합니다.`});
+        pushSBNotif({target_role:'aj', type:'signup_request', title:`신규 가입신청: ${co}`, body:`${co} ${name}님이 가입을 신청했습니다. 승인이 필요합니다.`, ref_id:_newMbr.id}).catch(()=>{});
         toast('가입 신청 완료! AJ관리자 승인 후 로그인 가능합니다 ✓','ok',4000);
       } catch(e){
         const _em=e?.message||'';
@@ -1306,7 +1310,7 @@ async function doLogin(role){
       }
       return;
     }
-    S={role:'sub',name,title:subTitle||existing?.title||'',phone:subPhone||existing?.phone||'',company:co,siteId:site,siteName:getSites().find(s=>s.id===site)?.name||site,loginAt:Date.now()};
+    S={role:'sub',name,title:subTitle||existing?.title||'',phone:subPhone||existing?.phone||'',company:co,siteId:site,siteName:getSites().find(s=>s.id===site)?.name||site,loginAt:Date.now(),memberId:existing?.id||''};
   } else {
     // AJ 관리자 로그인 — 이름+연락처+비밀번호 기반
     const ajName  = document.getElementById('ajName').value.trim();
@@ -1352,7 +1356,7 @@ async function doLogin(role){
     const ajPwHash = await sha256(ajPw);
     if(ajPwHash !== member.pw_hash){ toast('비밀번호가 틀렸습니다.','err'); return; }
     DB.s(K.AJ_MEMBER, member);
-    S={role:'aj',name:member.name,phone:member.phone||ajPhone,ajType:member.aj_type||ajType,company:'AJ네트웍스',siteId:'all',siteName:'전체 현장',loginAt:Date.now(),empNo:member.emp_no};
+    S={role:'aj',name:member.name,phone:member.phone||ajPhone,ajType:member.aj_type||ajType,company:'AJ네트웍스',siteId:'all',siteName:'전체 현장',loginAt:Date.now(),empNo:member.emp_no,memberId:member.record_id||member.id||''};
   }
   DB.s(K.SESSION,S);
   // 자동 로그인 설정 저장
@@ -1433,6 +1437,11 @@ function enterApp(){
   if(typeof _initRealtime==='function') setTimeout(_initRealtime, 1200);
   // Pull-to-refresh 초기화 (중복 방지)
   if(!window._ptrInitDone){ window._ptrInitDone=true; _initPullToRefresh(); }
+  // 알림 수신 타임스탬프 초기화 (세션 최초 진입 시)
+  if(!_lastNotifFetchTs){
+    _lastNotifFetchTs = Date.now() - 5*60*1000; // 5분 lookback
+    DB.s('_lastNotifFetchTs', String(_lastNotifFetchTs));
+  }
   // QR 스캔 URL 파라미터 처리 (?equip=GJ265 → 가동현황 탭 + 장비번호 자동입력)
   const _qp = new URLSearchParams(location.search);
   const _qrEquip = _qp.get('equip');
