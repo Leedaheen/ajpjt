@@ -4240,6 +4240,18 @@ function renderAdmin(){
         </div>
       </div>
       <button class="btn-full" style="margin-top:12px" onclick="saveMyProfile()">저장</button>
+      <!-- 캐시 삭제 (모든 역할 공통) -->
+      <div style="margin-top:16px;padding:12px;background:rgba(99,102,241,.07);border:1px solid rgba(99,102,241,.2);border-radius:12px;display:flex;align-items:center;gap:12px">
+        <div style="font-size:22px;flex-shrink:0">🗑️</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:800;margin-bottom:2px">앱 캐시 삭제</div>
+          <div style="font-size:10px;color:var(--tx3)">화면 오류·구버전 증상 시 캐시를 삭제하고 새로 로드합니다</div>
+        </div>
+        <button onclick="clearAppCache()"
+          style="padding:7px 12px;font-size:11px;font-weight:800;background:rgba(99,102,241,.18);border:1px solid rgba(99,102,241,.35);border-radius:8px;color:#a5b4fc;cursor:pointer;flex-shrink:0;white-space:nowrap">
+          캐시 삭제
+        </button>
+      </div>
     </div>`; return;
   }
   const isSub=role==='sub';
@@ -4405,8 +4417,44 @@ function renderAdmin(){
       </button>
     </div>
 
+    <!-- 캐시 삭제 -->
+    <div style="margin-top:10px;padding:12px;background:rgba(99,102,241,.07);border:1px solid rgba(99,102,241,.2);border-radius:12px;display:flex;align-items:center;gap:12px">
+      <div style="font-size:22px;flex-shrink:0">🗑️</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:800;margin-bottom:2px">앱 캐시 삭제</div>
+        <div style="font-size:10px;color:var(--tx3)">화면 오류·구버전 증상 시 캐시를 삭제하고 새로 로드합니다</div>
+      </div>
+      <button onclick="clearAppCache()"
+        style="padding:7px 12px;font-size:11px;font-weight:800;background:rgba(99,102,241,.18);border:1px solid rgba(99,102,241,.35);border-radius:8px;color:#a5b4fc;cursor:pointer;flex-shrink:0;white-space:nowrap">
+        캐시 삭제
+      </button>
+    </div>
+
     <div style="height:16px"></div>
     </div>`;
+}
+
+// ── 앱 캐시 삭제 (전 사용자 접근 가능) ────────────────────────
+async function clearAppCache(){
+  if(!confirm('앱 캐시를 삭제하고 새로 로드할까요?\n\n(저장된 데이터는 삭제되지 않습니다)')) return;
+  try {
+    // 1. Service Worker 캐시 전체 삭제
+    if('caches' in window){
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+    // 2. Service Worker 등록 해제 (다음 로드 시 최신 버전으로 재등록)
+    if('serviceWorker' in navigator){
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }
+    toast('캐시 삭제 완료 — 새로 로드합니다', 'ok', 1500);
+    setTimeout(() => location.reload(true), 1200);
+  } catch(e) {
+    console.warn('[clearAppCache]', e);
+    toast('캐시 삭제 후 새로 로드합니다', 'ok', 1200);
+    setTimeout(() => location.reload(true), 1000);
+  }
 }
 
 // ── 장비 마스터 관리 시트 ────────────────────────────────────
