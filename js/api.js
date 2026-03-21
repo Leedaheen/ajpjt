@@ -419,7 +419,8 @@ async function _directPushTransit(rec){
     status:           rec.status||'예정',
     messages:         JSON.stringify(rec.ajMsgs||[]),
     dispatch:         rec.dispatch||'',
-    // plan_type / plan_name: transit 테이블에 미존재 → 전송 제외
+    plan_type:        rec.planType||'',
+    plan_name:        rec.planName||'',
 
     created_at:       rec.createdAt ? new Date(rec.createdAt).toISOString() : now,
     updated_at:       now,
