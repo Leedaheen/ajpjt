@@ -454,7 +454,7 @@ async function _directPushAS(req){
     resolve_note:  req.resolvedNote||'',
     material_at:   req.materialAt?new Date(req.materialAt).toISOString():null,
     requested_at:  req.requestedAt?new Date(req.requestedAt).toISOString():null,
-    comments:      JSON.stringify(req.comments||[]),
+    // comments 컬럼: Supabase DB에 미존재 확인 → 전송 제외 (로컬 IDB에만 보존)
     worker_name:   req.workerName||'',
     worker_phone:  req.workerPhone||'',
     // 썸네일(~5KB base64) 저장 — 컬럼 없으면 sbBatchUpsert가 자동 제거

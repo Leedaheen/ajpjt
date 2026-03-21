@@ -399,7 +399,7 @@ async function _fetchFromSB(){
     const sinceStr=since.toISOString();
     // select=* 대신 필요한 컬럼만 지정 → payload 30~50% 절감
     const TR_COLS = 'record_id,id,date,type,site_id,site_name,company,equip_specs,aj_equip,reporter_name,reporter_phone,manager_name,manager_phone,manager_location,note,status,messages,dispatch,created_at,updated_at';
-    const AS_COLS = 'record_id,id,date,site_id,site_name,company,equip,location,fault_type,description,reporter_name,reporter_phone,status,tech_name,tech_phone,resolved_at,resolve_note,requested_at,material_at,comments,worker_name,worker_phone,photo_data,created_at,updated_at';
+    const AS_COLS = 'record_id,id,date,site_id,site_name,company,equip,location,fault_type,description,reporter_name,reporter_phone,status,tech_name,tech_phone,resolved_at,resolve_note,requested_at,material_at,worker_name,worker_phone,photo_data,created_at,updated_at';
 
     // 컬럼 오류 시 select=* fallback 헬퍼
     const _sbGetWithFallback = async (table, q, fallbackQ) => {
