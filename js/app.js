@@ -57,10 +57,10 @@ function spinner(on,txt='처리 중...'){
   document.getElementById('sp-ov').classList.toggle('on',on);
   document.getElementById('sp-txt').textContent=txt;
 }
-function openSheet(id){ document.getElementById(id).classList.add('on'); onSheetOpen(id); }
+function openSheet(id){ document.getElementById(id).classList.add('on'); onSheetOpen(id); setTimeout(_setupAllSheetSwipe, 50); }
 function closeSheet(id){ document.getElementById(id).classList.remove('on'); }
 
-// ── 시트 스와이프 닫기 유틸리티 ────────────────────────────
+// ── 시트 스와이프 닫기 유틸리티 (전역 자동 적용) ────────────
 let _swipeY0 = 0;
 function _swipeStart(e){
   _swipeY0 = e.touches[0].clientY;
@@ -68,6 +68,55 @@ function _swipeStart(e){
 function _swipeMove(e, sheetId){
   const dy = e.touches[0].clientY - _swipeY0;
   if(dy > 80) closeSheet(sheetId);
+}
+// 모든 .soverlay > .sheet 에 120px 스와이프 닫기 + 드래그 애니메이션 자동 설정
+function _setupAllSheetSwipe(){
+  document.querySelectorAll('.soverlay').forEach(overlay=>{
+    const sheet = overlay.querySelector('.sheet');
+    if(!sheet || sheet.dataset.swipeSetup) return;
+    sheet.dataset.swipeSetup = '1';
+    let _sy = 0, _cy = 0, _dragging = false;
+    const _getScrollParent = el => {
+      // 스크롤 가능한 부모가 최상단(sheet 자신)인 경우만 swipe 허용
+      let p = el;
+      while(p && p !== sheet){ if(p.scrollTop > 0) return p; p = p.parentElement; }
+      return null;
+    };
+    sheet.addEventListener('touchstart', e => {
+      _sy = e.touches[0].clientY; _cy = _sy; _dragging = false;
+      sheet.style.transition = 'none';
+    }, {passive: true});
+    sheet.addEventListener('touchmove', e => {
+      _cy = e.touches[0].clientY;
+      const dy = _cy - _sy;
+      if(dy <= 0) return; // 위로 스와이프는 무시
+      // 내부 스크롤 중이면 무시
+      if(_getScrollParent(e.target)) return;
+      _dragging = true;
+      sheet.style.transform = `translateY(${dy}px)`;
+    }, {passive: true});
+    sheet.addEventListener('touchend', () => {
+      const dy = _cy - _sy;
+      sheet.style.transition = '';
+      if(_dragging && dy >= 120){
+        // 아래로 빠르게 내려가며 닫기
+        sheet.style.transition = 'transform .18s cubic-bezier(.4,0,1,1)';
+        sheet.style.transform = 'translateY(110%)';
+        const ovId = overlay.id;
+        setTimeout(() => {
+          sheet.style.transform = '';
+          sheet.style.transition = '';
+          closeSheet(ovId);
+        }, 180);
+      } else {
+        // 원위치 복귀
+        sheet.style.transition = 'transform .2s cubic-bezier(.33,1,.68,1)';
+        sheet.style.transform = '';
+        setTimeout(() => { sheet.style.transition = ''; }, 200);
+      }
+      _dragging = false;
+    }, {passive: true});
+  });
 }
 function onSheetOpen(id){
   if(id==='sh-sites') renderSiteMgr();
