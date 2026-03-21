@@ -98,7 +98,7 @@ function _setupAllSheetSwipe(){
     sheet.addEventListener('touchend', () => {
       const dy = _cy - _sy;
       sheet.style.transition = '';
-      if(_dragging && dy >= 120){
+      if(_dragging && dy >= 150){
         // 아래로 빠르게 내려가며 닫기
         sheet.style.transition = 'transform .18s cubic-bezier(.4,0,1,1)';
         sheet.style.transform = 'translateY(110%)';
@@ -1025,12 +1025,33 @@ function closeAcctAjForm(){
 /* ══════════════════════════════════════════════
    AS 현황 분석 (AJ 전용)
 ══════════════════════════════════════════════ */
-function openASAnalysis(){
+function openASAnalysis(filterUpdate){
+  if(!window._asAnalFilter) window._asAnalFilter={period:'3',company:'',equip:'',type:''};
+  if(filterUpdate) Object.assign(window._asAnalFilter, filterUpdate);
+  const f=window._asAnalFilter;
+
   const siteId=S?.siteId==='all'?null:S?.siteId;
-  const reqs=getAsReqs().filter(r=>!siteId||r.siteId===siteId);
+  const allSiteReqs=getAsReqs().filter(r=>!siteId||r.siteId===siteId);
+
+  // 필터 드롭다운 옵션
+  const allCos=[...new Set(allSiteReqs.map(r=>r.company||'').filter(Boolean))].sort();
+  const allTypes=[...new Set(allSiteReqs.map(r=>r.faultType||r.type||'기타').filter(Boolean))].sort();
+
+  // 기간 필터
+  let reqs=allSiteReqs;
+  if(f.period!=='all'){
+    const months=parseInt(f.period)||3;
+    const cut=new Date(); cut.setMonth(cut.getMonth()-months);
+    const cutStr=cut.toISOString().slice(0,10);
+    reqs=reqs.filter(r=>(r.date||r.created_at?.slice(0,10)||'')>=cutStr);
+  }
+  if(f.company) reqs=reqs.filter(r=>r.company===f.company);
+  if(f.equip)   reqs=reqs.filter(r=>(r.equip||'').toUpperCase().includes(f.equip.toUpperCase()));
+  if(f.type)    reqs=reqs.filter(r=>(r.faultType||r.type||'기타')===f.type);
+
   const total=reqs.length;
   const pending=reqs.filter(r=>!r.status||r.status==='대기'||r.status==='접수').length;
-  const inProg=reqs.filter(r=>r.status==='진행중'||r.status==='부품대기').length;
+  const inProg=reqs.filter(r=>r.status==='진행중'||r.status==='부품대기'||r.status==='자재수급중').length;
   const resolved=reqs.filter(r=>r.status==='완료'||r.status==='처리완료').length;
   // 고장유형별
   const byType={};
@@ -1065,13 +1086,31 @@ function openASAnalysis(){
       <div style="font-size:11px;font-weight:700;color:var(--tx2);min-width:20px;text-align:right">${v}</div>
     </div>`).join('');
   const mMax=sortedMonths.length?Math.max(...sortedMonths.map(m=>monthly[m]),1):1;
+  const periodBtn=(p,label)=>`<button onclick="openASAnalysis({period:'${p}'})" style="padding:3px 10px;font-size:10px;font-weight:700;border-radius:6px;cursor:pointer;border:1px solid;${f.period===p?'background:rgba(96,165,250,.2);color:#60a5fa;border-color:rgba(96,165,250,.4)':'background:var(--bg2);color:var(--tx3);border-color:var(--br)'}">${label}</button>`;
   document.getElementById('adm-content').innerHTML=`
-    <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:14px 14px 0;margin-bottom:10px">
-      <button class="btn-ghost" style="padding:2px 6px;font-size:9px;justify-self:start;white-space:nowrap" onclick="renderAdmin()">← 뒤로</button>
+    <div style="display:grid;grid-template-columns:1fr 2fr 1fr;align-items:center;padding:14px 14px 0;margin-bottom:8px">
+      <button class="btn-ghost" style="padding:1px 5px;font-size:8px;justify-self:start;white-space:nowrap;line-height:1.8" onclick="renderAdmin()">← 뒤로</button>
       <div style="font-size:14px;font-weight:800;text-align:center">AS 현황 분석</div>
       <div style="font-size:10px;color:var(--tx3);justify-self:end">총 ${total}건</div>
     </div>
     <div style="padding:0 14px 14px">
+      <!-- 필터 컨트롤 -->
+      <div style="background:var(--bg2);border:1px solid var(--br);border-radius:10px;padding:10px 12px;margin-bottom:12px">
+        <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
+          ${periodBtn('1','최근 1개월')}${periodBtn('3','최근 3개월')}${periodBtn('all','전체')}
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+          <select onchange="openASAnalysis({company:this.value})" style="font-size:10px;padding:4px 6px;border:1px solid var(--br);border-radius:6px;background:var(--bg1);color:var(--tx)">
+            <option value="">전체 업체</option>
+            ${allCos.map(c=>`<option value="${c}"${f.company===c?' selected':''}>${c}</option>`).join('')}
+          </select>
+          <input type="text" value="${f.equip}" onchange="openASAnalysis({equip:this.value})" onkeydown="if(event.key==='Enter')openASAnalysis({equip:this.value})" placeholder="장비번호 검색" style="font-size:10px;padding:4px 6px;border:1px solid var(--br);border-radius:6px;background:var(--bg1);color:var(--tx)">
+          <select onchange="openASAnalysis({type:this.value})" style="font-size:10px;padding:4px 6px;border:1px solid var(--br);border-radius:6px;background:var(--bg1);color:var(--tx)">
+            <option value="">전체 유형</option>
+            ${allTypes.map(t=>`<option value="${t}"${f.type===t?' selected':''}>${t}</option>`).join('')}
+          </select>
+        </div>
+      </div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:14px">
         <div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:8px;padding:8px;text-align:center">
           <div style="font-size:20px;font-weight:900;color:#60a5fa">${pending}</div><div style="font-size:10px;color:var(--tx3)">대기</div>

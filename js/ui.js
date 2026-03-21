@@ -1098,7 +1098,7 @@ function updateASStatus(id, status){
   r.synced = false;
   reqs[idx] = r;
   saveAsReqs(reqs);
-  _syncToSupabase().catch(()=>{});
+  _directPushAS(r).catch(()=>_syncToSupabase().catch(()=>{}));
   updateASBadge();
   renderASPage();
   toast(status==='처리완료'?'처리 완료로 변경됨':'자재수급중으로 변경됨','ok');
@@ -1201,54 +1201,67 @@ function renderTransit(){
     return true;
   });
 
+  // ── KPI 탭 상태 ─────────────────────────────
+  const _kt = window._trKpiTab || null;
+
   // ── KPI는 전체 기준 ─────────────────────────
   const DONE_ST = ['반입완료','반출완료','인계완료'];
-  const kpiIn   = allRecs.filter(r=>r.type==='in'&&r.status!=='취소').length;
-  const kpiOut  = allRecs.filter(r=>r.type==='out'&&r.status!=='취소').length;
+  const kpiIn   = allRecs.filter(r=>r.type==='in'&&r.status==='예정').length;
+  const kpiOut  = allRecs.filter(r=>r.type==='out'&&r.status==='예정').length;
   const kpiHo   = allRecs.filter(r=>r.type==='handover'&&r.status!=='취소').length;
   const kpiCan  = allRecs.filter(r=>r.status==='취소').length;
   const kpiDone = allRecs.filter(r=>DONE_ST.includes(r.status)).length;
 
+  // ── KPI 탭 필터 (검색 필터 위에 추가 적용) ──
+  const tabFiltered = !_kt ? filtered : filtered.filter(r=>{
+    if(_kt==='반입예정') return r.type==='in'&&r.status==='예정';
+    if(_kt==='반출예정') return r.type==='out'&&r.status==='예정';
+    if(_kt==='인수인계') return r.type==='handover';
+    if(_kt==='취소')     return r.status==='취소';
+    if(_kt==='완료')     return DONE_ST.includes(r.status);
+    return true;
+  });
+
   // ── 섹션 분류 (상태 기준) ──────────────────
   // 진행 예정: 아직 완료/취소 안된 것
-  const active    = filtered.filter(r => r.status === '예정');
+  const active    = tabFiltered.filter(r => r.status === '예정');
   // 완료: 완료 버튼이 눌러진 것
-  const done      = filtered.filter(r => DONE_ST.includes(r.status));
+  const done      = tabFiltered.filter(r => DONE_ST.includes(r.status));
   // 취소
-  const cancelled = filtered.filter(r => r.status === '취소');
+  const cancelled = tabFiltered.filter(r => r.status === '취소');
 
   // 날짜 정렬
   active.sort((a,b)=>a.date.localeCompare(b.date));
   done.sort((a,b)=>b.date.localeCompare(a.date));
 
-  const hasFilter = !!(fDateFrom || fDateTo || fCompany || fSpec || fStatus);
+  const hasFilter = !!(fDateFrom || fDateTo || fCompany || fSpec || fStatus || _kt);
   const filterBadge = hasFilter
-    ? `<span style="font-size:10px;background:rgba(59,139,255,.2);color:#60a5fa;padding:2px 8px;border-radius:6px">${filtered.length}건</span>`
+    ? `<span style="font-size:10px;background:rgba(59,139,255,.2);color:#60a5fa;padding:2px 8px;border-radius:6px">${tabFiltered.length}건</span>`
     : '';
 
   el.innerHTML=`
-  <!-- KPI sticky bar -->
-  <div id="tr-kpi-bar" style="position:sticky;top:0;z-index:20;background:var(--bg1);padding:8px 14px 6px;border-bottom:1px solid var(--br)">
-  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px">
-    <div class="kpi" style="text-align:center;padding:8px 4px;cursor:pointer" onclick="openTransitCalendar('in','반입')">
-      <div style="font-size:16px;font-weight:900;color:var(--blue)">${kpiIn}</div>
-      <div style="font-size:9px;color:var(--tx2)">반입</div>
+  <!-- KPI 필터 탭 -->
+  <div id="tr-kpi-bar" style="position:sticky;top:0;z-index:20;background:var(--bg1);padding:6px 8px 5px;border-bottom:1px solid var(--br)">
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:3px">
+    <div class="kpi" style="text-align:center;padding:6px 2px;cursor:pointer;border-radius:7px;border:1px solid ${_kt==='반입예정'?'var(--blue)':'transparent'};background:${_kt==='반입예정'?'rgba(59,130,246,.08)':'transparent'}" onclick="_setTrKpiTab('반입예정')">
+      <div style="font-size:15px;font-weight:900;color:var(--blue)">${kpiIn}</div>
+      <div style="font-size:8px;color:${_kt==='반입예정'?'var(--blue)':'var(--tx2)'};font-weight:${_kt==='반입예정'?800:400}">반입예정</div>
     </div>
-    <div class="kpi" style="text-align:center;padding:8px 4px;cursor:pointer" onclick="openTransitCalendar('out','반출')">
-      <div style="font-size:16px;font-weight:900;color:var(--orange)">${kpiOut}</div>
-      <div style="font-size:9px;color:var(--tx2)">반출</div>
+    <div class="kpi" style="text-align:center;padding:6px 2px;cursor:pointer;border-radius:7px;border:1px solid ${_kt==='반출예정'?'var(--orange)':'transparent'};background:${_kt==='반출예정'?'rgba(249,115,22,.08)':'transparent'}" onclick="_setTrKpiTab('반출예정')">
+      <div style="font-size:15px;font-weight:900;color:var(--orange)">${kpiOut}</div>
+      <div style="font-size:8px;color:${_kt==='반출예정'?'var(--orange)':'var(--tx2)'};font-weight:${_kt==='반출예정'?800:400}">반출예정</div>
     </div>
-    <div class="kpi" style="text-align:center;padding:8px 4px;cursor:pointer" onclick="openTransitCalendar('handover','인수인계')">
-      <div style="font-size:16px;font-weight:900;color:#14b8a6">${kpiHo}</div>
-      <div style="font-size:9px;color:var(--tx2)">인수인계</div>
+    <div class="kpi" style="text-align:center;padding:6px 2px;cursor:pointer;border-radius:7px;border:1px solid ${_kt==='인수인계'?'#14b8a6':'transparent'};background:${_kt==='인수인계'?'rgba(20,184,166,.08)':'transparent'}" onclick="_setTrKpiTab('인수인계')">
+      <div style="font-size:15px;font-weight:900;color:#14b8a6">${kpiHo}</div>
+      <div style="font-size:8px;color:${_kt==='인수인계'?'#14b8a6':'var(--tx2)'};font-weight:${_kt==='인수인계'?800:400}">인수인계</div>
     </div>
-    <div class="kpi" style="text-align:center;padding:8px 4px;cursor:pointer" onclick="openTransitCalendar('cancel','취소')">
-      <div style="font-size:16px;font-weight:900;color:var(--tx3)">${kpiCan}</div>
-      <div style="font-size:9px;color:var(--tx2)">취소</div>
+    <div class="kpi" style="text-align:center;padding:6px 2px;cursor:pointer;border-radius:7px;border:1px solid ${_kt==='취소'?'rgba(148,163,184,.5)':'transparent'};background:${_kt==='취소'?'rgba(148,163,184,.08)':'transparent'}" onclick="_setTrKpiTab('취소')">
+      <div style="font-size:15px;font-weight:900;color:var(--tx3)">${kpiCan}</div>
+      <div style="font-size:8px;color:${_kt==='취소'?'var(--tx2)':'var(--tx2)'};font-weight:${_kt==='취소'?800:400}">취소</div>
     </div>
-    <div class="kpi" style="text-align:center;padding:8px 4px;cursor:pointer" onclick="openTransitCalendar('done','완료')">
-      <div style="font-size:16px;font-weight:900;color:#22c55e">${kpiDone}</div>
-      <div style="font-size:9px;color:var(--tx2)">완료</div>
+    <div class="kpi" style="text-align:center;padding:6px 2px;cursor:pointer;border-radius:7px;border:1px solid ${_kt==='완료'?'#22c55e':'transparent'};background:${_kt==='완료'?'rgba(34,197,94,.08)':'transparent'}" onclick="_setTrKpiTab('완료')">
+      <div style="font-size:15px;font-weight:900;color:#22c55e">${kpiDone}</div>
+      <div style="font-size:8px;color:${_kt==='완료'?'#22c55e':'var(--tx2)'};font-weight:${_kt==='완료'?800:400}">완료</div>
     </div>
   </div>
   </div><!-- /tr-kpi-bar -->
@@ -1260,6 +1273,7 @@ function renderTransit(){
       <span style="font-size:11px;font-weight:700;color:var(--tx2)">🔍 검색 필터</span>
       ${hasFilter?`<button onclick="_clearTransitFilter()" style="font-size:10px;padding:2px 8px;border-radius:6px;background:rgba(239,68,68,.12);color:#f87171;border:1px solid rgba(239,68,68,.25);cursor:pointer">✕ 초기화</button>`:''}
       ${filterBadge}
+      <button onclick="_openTransitSchedule()" style="margin-left:auto;font-size:10px;padding:3px 10px;border-radius:6px;background:rgba(20,184,166,.1);color:#14b8a6;border:1px solid rgba(20,184,166,.3);cursor:pointer;font-weight:700;flex-shrink:0">📅 스케쥴표</button>
     </div>
     <div style="display:flex;align-items:center;gap:4px;margin-bottom:6px">
       <input type="date" id="tr-filter-date-from" value="${fDateFrom}" onchange="_filterTransit()" placeholder="시작일" title="시작일" style="flex:1;min-width:0;font-size:11px;padding:5px 6px;border:1px solid var(--br);border-radius:8px;background:var(--bg1);color:var(--tx);box-sizing:border-box">
@@ -1330,7 +1344,47 @@ function _filterTransit(){
 
 function _clearTransitFilter(){
   window._trFilter = {dateFrom:'', dateTo:'', company:'', spec:'', status:''};
+  window._trKpiTab = null;
   renderTransit();
+}
+
+function _setTrKpiTab(tab){
+  window._trKpiTab = (window._trKpiTab === tab) ? null : tab;
+  renderTransit();
+}
+
+function _openTransitSchedule(){
+  const siteId=S?.siteId==='all'?null:S?.siteId;
+  const allRecs=getTransit().filter(r=>siteId?r.siteId===siteId:true);
+  const byDate={};
+  allRecs.forEach(r=>{
+    if(!r.date) return;
+    if(!byDate[r.date]) byDate[r.date]={in:0,out:0,handover:0,cancel:0};
+    if(r.status==='취소'){byDate[r.date].cancel++;return;}
+    if(r.type==='in')          byDate[r.date].in++;
+    else if(r.type==='out')    byDate[r.date].out++;
+    else if(r.type==='handover') byDate[r.date].handover++;
+  });
+  const dates=Object.keys(byDate).sort();
+  let ov=document.getElementById('tr-sched-ov');
+  if(!ov){ov=document.createElement('div');ov.id='tr-sched-ov';ov.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.65);z-index:9999;display:flex;align-items:flex-end;justify-content:center';ov.onclick=function(e){if(e.target===this)this.remove();};document.body.appendChild(ov);}
+  ov.innerHTML=`<div style="background:var(--bg1);border-radius:16px 16px 0 0;width:100%;max-width:480px;max-height:70vh;overflow-y:auto;padding:16px 14px 24px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-size:15px;font-weight:800">📅 스케쥴표</div>
+      <button onclick="document.getElementById('tr-sched-ov').remove()" style="background:none;border:none;font-size:20px;color:var(--tx3);cursor:pointer;line-height:1">×</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:4px;font-size:10px;font-weight:700;color:var(--tx3);padding-bottom:6px;border-bottom:1px solid var(--br);margin-bottom:6px;text-align:center">
+      <span style="text-align:left">날짜</span><span style="color:var(--blue)">반입</span><span style="color:var(--orange)">반출</span><span style="color:#14b8a6">인수인계</span><span>취소</span>
+    </div>
+    ${dates.length===0?'<div style="text-align:center;color:var(--tx3);padding:20px;font-size:12px">데이터 없음</div>':
+      dates.map(d=>{const v=byDate[d];return`<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:4px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.05);align-items:center;text-align:center">
+        <span style="font-size:11px;font-weight:700;color:var(--tx);text-align:left;white-space:nowrap">${d}</span>
+        <span style="font-size:12px;font-weight:900;color:${v.in?'var(--blue)':'var(--tx3)'}">${v.in||'—'}</span>
+        <span style="font-size:12px;font-weight:900;color:${v.out?'var(--orange)':'var(--tx3)'}">${v.out||'—'}</span>
+        <span style="font-size:12px;font-weight:900;color:${v.handover?'#14b8a6':'var(--tx3)'}">${v.handover||'—'}</span>
+        <span style="font-size:12px;font-weight:900;color:${v.cancel?'var(--tx2)':'var(--tx3)'}">${v.cancel||'—'}</span>
+      </div>`;}).join('')}
+  </div>`;
 }
 
 // ── KPI 달력 팝업 ─────────────────────────────────────────────
@@ -1576,23 +1630,31 @@ function _trCard(r, _unused, canEdit, canMsg){
     : '<span style="color:var(--tx3)">—</span>';
   const contactHtml = '<table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:6px">'
     + '<tr>'
-    + '<td style="padding:4px 8px 2px 0;vertical-align:top;text-align:left;width:50%">'
-    + '<div style="color:var(--tx3);font-size:10px;font-weight:600;margin-bottom:3px">신청자</div>'
-    + '<div>'+_repNameHtml+'</div>'
+    + '<td style="padding:4px 8px 3px 0;vertical-align:middle;text-align:left;width:50%">'
+    + '<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">'
+    + '<span style="color:var(--tx3);font-size:10px;font-weight:600;flex-shrink:0">신청자</span>'
+    + _repNameHtml
+    + '</div>'
     + '</td>'
-    + '<td style="padding:4px 0 2px 8px;vertical-align:top;text-align:left;border-left:1px solid var(--br2)">'
-    + '<div style="color:var(--tx3);font-size:10px;font-weight:600;margin-bottom:3px">양중담당</div>'
-    + '<div>'+_mgrNameHtml+'</div>'
+    + '<td style="padding:4px 0 3px 8px;vertical-align:middle;text-align:left;border-left:1px solid var(--br2)">'
+    + '<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">'
+    + '<span style="color:var(--tx3);font-size:10px;font-weight:600;flex-shrink:0">양중담당</span>'
+    + _mgrNameHtml
+    + '</div>'
     + '</td>'
     + '</tr>'
     + '<tr>'
-    + '<td style="padding:4px 8px 0 0;vertical-align:top;text-align:left">'
-    + '<div style="color:var(--tx3);font-size:10px;font-weight:600;margin-bottom:2px">비고</div>'
-    + '<div style="color:var(--tx2)">'+(r.note&&r.note.trim()?r.note:'—')+'</div>'
+    + '<td style="padding:3px 8px 0 0;vertical-align:middle;text-align:left">'
+    + '<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">'
+    + '<span style="color:var(--tx3);font-size:10px;font-weight:600;flex-shrink:0">비고</span>'
+    + '<span style="color:var(--tx2)">'+(r.note&&r.note.trim()?r.note:'—')+'</span>'
+    + '</div>'
     + '</td>'
-    + '<td style="padding:4px 0 0 8px;vertical-align:top;text-align:left;border-left:1px solid var(--br2)">'
-    + '<div style="color:var(--tx3);font-size:10px;font-weight:600;margin-bottom:2px">양중위치</div>'
-    + '<div style="color:var(--tx2)">'+(r.managerLocation||'—')+'</div>'
+    + '<td style="padding:3px 0 0 8px;vertical-align:middle;text-align:left;border-left:1px solid var(--br2)">'
+    + '<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">'
+    + '<span style="color:var(--tx3);font-size:10px;font-weight:600;flex-shrink:0">양중위치</span>'
+    + '<span style="color:var(--tx2)">'+(r.managerLocation||'—')+'</span>'
+    + '</div>'
     + '</td>'
     + '</tr>'
     + '</table>';
@@ -2005,13 +2067,11 @@ function _renderSpecBlock(r, canEdit) {
     return `<div style="margin-bottom:8px;padding:8px 10px;background:rgba(96,165,250,.04);border:1px solid rgba(96,165,250,.15);border-radius:8px">
       <div style="font-size:10px;font-weight:700;color:#60a5fa;margin-bottom:7px">🏷 제원별 장비번호 입력</div>
       ${rows}
-      <div style="display:flex;align-items:center;gap:6px;margin-top:6px;padding-top:6px;border-top:1px solid rgba(96,165,250,.12)">
-        <button class="btn-ghost" style="flex:1;font-size:10px;padding:5px" onclick="editTransitDate('${rid}')">날짜변경</button>
+      <div style="display:flex;justify-content:flex-end;gap:4px;margin-top:6px;padding-top:6px;border-top:1px solid rgba(96,165,250,.12)">
+        <button onclick="editTransitDate('${rid}')"
+          style="width:12.5%;padding:5px 0;font-size:11px;font-weight:700;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.25);border-radius:6px;color:#60a5fa;cursor:pointer">날짜변경</button>
         <button id="${btnId}" onclick="_saveAllSpecEquip('${rid}')"
-          style="flex:1;padding:5px;font-size:11px;font-weight:700;background:rgba(96,165,250,.18);
-            border:1px solid rgba(96,165,250,.35);border-radius:6px;color:#60a5fa;cursor:pointer;white-space:nowrap">
-          저장
-        </button>
+          style="width:12.5%;padding:5px 0;font-size:11px;font-weight:700;background:rgba(96,165,250,.18);border:1px solid rgba(96,165,250,.35);border-radius:6px;color:#60a5fa;cursor:pointer">저장</button>
       </div>
     </div>`;
   }
@@ -3730,14 +3790,14 @@ function renderAdmin(){
       </div>
       `:''}
       ${isAJ?`
-      <div class="mrow" onclick="openSheet('sh-sites')">
-        <div class="mrow-ico" style="background:rgba(245,158,11,.12);color:rgb(245,158,11)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg></div>
-        <div class="mrow-inf"><div class="mrow-title">현장 관리</div><div class="mrow-desc">현장 추가·삭제 및 목록 관리</div></div>
+      <div class="mrow" onclick="openEquipMasterSheet()">
+        <div class="mrow-ico" style="background:rgba(96,165,250,.12);color:rgb(96,165,250)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></div>
+        <div class="mrow-inf"><div class="mrow-title">가동 장비 내역</div><div class="mrow-desc">현재 현장 반입 중 장비 목록 · 자동완성 데이터 관리</div></div>
         <div class="mrow-arr">›</div>
       </div>
-      <div class="mrow" onclick="openSheet('sh-company')">
-        <div class="mrow-ico" style="background:rgba(59,139,255,.12);color:rgb(59,139,255)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg></div>
-        <div class="mrow-inf"><div class="mrow-title">협력사 관리</div><div class="mrow-desc">현장별 업체·장비 수량 추가·수정</div></div>
+      <div class="mrow" onclick="openSheet('sh-admin-hub');setTimeout(()=>{renderSiteMgr();renderCoMgr();},30)">
+        <div class="mrow-ico" style="background:rgba(245,158,11,.12);color:rgb(245,158,11)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg></div>
+        <div class="mrow-inf"><div class="mrow-title">현장 관리</div><div class="mrow-desc">현장 · 협력사 · 계정 통합 관리</div></div>
         <div class="mrow-arr">›</div>
       </div>
       <div class="mrow" onclick="openSheet('sh-alert');setTimeout(renderCustomAlertList,30)">
@@ -3759,16 +3819,6 @@ function renderAdmin(){
         <div class="mrow-arr">›</div>
       </div>
       ${isAJ?`
-      <div class="mrow" onclick="openAcctMgr('aj')" style="${(()=>{const subCnt=getMembers().filter(m=>(m.role==='sub'||(!m.role&&m.title!=='기술인'))&&(m.status||'approved')==='pending').length;const ajCnt=_getAjMembers().filter(m=>(m.status||'approved')==='pending').length;return (subCnt+ajCnt)?'border-color:rgba(245,158,11,.4)':'';})()}">
-        <div class="mrow-ico" style="background:rgba(222,31,35,.12);color:rgb(222,31,35)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></div>
-        <div class="mrow-inf"><div class="mrow-title">관리자 계정 관리 ${(()=>{const subCnt=getMembers().filter(m=>(m.role==='sub'||(!m.role&&m.title!=='기술인'))&&(m.status||'approved')==='pending').length;const ajCnt=_getAjMembers().filter(m=>(m.status||'approved')==='pending').length;const cnt=subCnt+ajCnt;return cnt?`<span class="mbr-badge pending">승인대기 ${cnt}</span>`:'';})()} </div><div class="mrow-desc">AJ·협력사 관리자 계정 및 가입 승인 관리</div></div>
-        <div class="mrow-arr">›</div>
-      </div>
-      <div class="mrow" onclick="openEquipMasterSheet()">
-        <div class="mrow-ico" style="background:rgba(96,165,250,.12);color:rgb(96,165,250)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></div>
-        <div class="mrow-inf"><div class="mrow-title">반입 장비 마스터</div><div class="mrow-desc">현재 현장 반입 중 장비 목록 · 자동완성 데이터 관리</div></div>
-        <div class="mrow-arr">›</div>
-      </div>
       <div class="mrow" onclick="openASAnalysis()">
         <div class="mrow-ico" style="background:rgba(220,38,38,.12);color:rgb(220,38,38)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><polyline points="9 11 12 14 16 10"/></svg></div>
         <div class="mrow-inf"><div class="mrow-title">AS 현황 분석</div><div class="mrow-desc">AS 요청 통계 · 유형별 분석</div></div>
@@ -3812,7 +3862,6 @@ function renderAdmin(){
       </button>
     </div>
 
-    ${S?.role!=='guest'?`<button class="btn-ghost" style="width:100%;margin-top:8px;color:#f87171;border-color:rgba(239,68,68,.3)" onclick="openASSheet()">장비 AS 요청</button>`:''}
     <div style="height:16px"></div>
     </div>`;
 }

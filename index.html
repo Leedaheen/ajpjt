@@ -1937,6 +1937,32 @@ create index if not exists idx_aj_status on aj_members(status);</pre>
   </div>
 </div>
 
+<!-- Admin Hub sheet — 현장·협력사·계정 통합 관리 -->
+<div class="soverlay" id="sh-admin-hub" onclick="if(event.target===this)closeSheet('sh-admin-hub')">
+  <div class="sheet">
+    <div class="sh-handle"></div>
+    <div class="sh-title">현장 관리</div>
+    <div class="menu-list" style="margin-bottom:10px">
+      <div class="mrow" onclick="closeSheet('sh-admin-hub');setTimeout(()=>{openSheet('sh-sites');renderSiteMgr();},60)">
+        <div class="mrow-ico" style="background:rgba(245,158,11,.12);color:rgb(245,158,11)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg></div>
+        <div class="mrow-inf"><div class="mrow-title">현장</div><div class="mrow-desc">현장 추가·삭제 및 목록 관리</div></div>
+        <div class="mrow-arr">›</div>
+      </div>
+      <div class="mrow" onclick="closeSheet('sh-admin-hub');setTimeout(()=>{openSheet('sh-company');renderCoMgr();},60)">
+        <div class="mrow-ico" style="background:rgba(59,139,255,.12);color:rgb(59,139,255)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg></div>
+        <div class="mrow-inf"><div class="mrow-title">협력사</div><div class="mrow-desc">현장별 업체·장비 수량 추가·수정</div></div>
+        <div class="mrow-arr">›</div>
+      </div>
+      <div class="mrow" onclick="closeSheet('sh-admin-hub');setTimeout(()=>openAcctMgr('aj'),60)">
+        <div class="mrow-ico" style="background:rgba(222,31,35,.12);color:rgb(222,31,35)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></div>
+        <div class="mrow-inf"><div class="mrow-title">계정 관리</div><div class="mrow-desc">AJ·협력사 관리자 계정 및 가입 승인 관리</div></div>
+        <div class="mrow-arr">›</div>
+      </div>
+    </div>
+    <button class="btn-ghost" onclick="closeSheet('sh-admin-hub')" style="width:100%">닫기</button>
+  </div>
+</div>
+
 <!-- Sites manager sheet -->
 <div class="soverlay" id="sh-sites" onclick="if(event.target===this)closeSheet('sh-sites')">
   <div class="sheet">
