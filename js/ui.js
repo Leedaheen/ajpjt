@@ -1499,8 +1499,8 @@ function _openTransitSchedule(){
   const byDate={};
   allRecs.forEach(r=>{
     if(!r.date) return;
-    if(!byDate[r.date]) byDate[r.date]={in:0,out:0,handover:0,cancel:0};
-    if(r.status==='취소'){byDate[r.date].cancel++;return;}
+    if(r.status==='취소') return; // 취소 건 집계 제외
+    if(!byDate[r.date]) byDate[r.date]={in:0,out:0,handover:0};
     if(r.type==='in')            byDate[r.date].in++;
     else if(r.type==='out')      byDate[r.date].out++;
     else if(r.type==='handover') byDate[r.date].handover++;
@@ -1530,8 +1530,8 @@ function _renderSchedCalendar(){
     const mm=String(month+1).padStart(2,'0');
     const dd=String(d).padStart(2,'0');
     const ds=`${year}-${mm}-${dd}`;
-    const v=byDate[ds]||{in:0,out:0,handover:0,cancel:0};
-    const hasData=v.in||v.out||v.handover||v.cancel;
+    const v=byDate[ds]||{in:0,out:0,handover:0};
+    const hasData=v.in||v.out||v.handover;
     const isToday=ds===todayStr;
     const dow=(firstDay+d-1)%7;
     const dateCol=isToday?'#fff':dow===0?'#f87171':dow===6?'#93c5fd':'var(--tx)';
@@ -1540,9 +1540,8 @@ function _renderSchedCalendar(){
       v.in      ?`<span style="color:var(--blue);font-size:8px;font-weight:900;line-height:1.3">↓${v.in}</span>`:'',
       v.out     ?`<span style="color:var(--orange);font-size:8px;font-weight:900;line-height:1.3">↑${v.out}</span>`:'',
       v.handover?`<span style="color:#14b8a6;font-size:8px;font-weight:900;line-height:1.3">⇄${v.handover}</span>`:'',
-      v.cancel  ?`<span style="color:var(--tx3);font-size:7px;font-weight:700;line-height:1.3">✕${v.cancel}</span>`:'',
     ].filter(Boolean).join('');
-    cellHtml+=`<div style="text-align:center;padding:3px 1px;min-height:52px;border-radius:8px;${hasData?'background:rgba(255,255,255,.04);':''}" >
+    cellHtml+=`<div onclick="${hasData?`_schedSelectDate('${ds}')`:''}" style="text-align:center;padding:3px 1px;min-height:52px;border-radius:8px;${hasData?'background:rgba(255,255,255,.04);cursor:pointer;':''}" >
       <div style="font-size:12px;font-weight:${isToday||hasData?700:400};color:${dateCol};${dateBg}">${d}</div>
       <div style="display:flex;flex-direction:column;align-items:center;gap:0;margin-top:2px">${badges}</div>
     </div>`;
@@ -1562,7 +1561,7 @@ function _renderSchedCalendar(){
       <span style="font-size:10px;color:var(--blue);font-weight:700">↓ 반입</span>
       <span style="font-size:10px;color:var(--orange);font-weight:700">↑ 반출</span>
       <span style="font-size:10px;color:#14b8a6;font-weight:700">⇄ 인수인계</span>
-      <span style="font-size:10px;color:var(--tx3);font-weight:700">✕ 취소</span>
+      <span style="font-size:10px;color:var(--tx3)">날짜 클릭 → 해당 내역 조회</span>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
       <button onclick="_schedNavMonth(-1)" style="font-size:22px;background:none;border:none;color:var(--tx2);cursor:pointer;padding:2px 8px;border-radius:8px">‹</button>
@@ -1583,6 +1582,19 @@ function _schedNavMonth(delta){
   window._schedCalState.year=year;
   window._schedCalState.month=month;
   _renderSchedCalendar();
+}
+
+function _schedSelectDate(ds){
+  // 스케쥴표 닫기
+  document.getElementById('tr-sched-ov')?.remove();
+  // 날짜 필터 적용
+  if(!window._trFilter) window._trFilter={dateFrom:'',dateTo:'',company:'',spec:'',status:''};
+  window._trFilter.dateFrom=ds;
+  window._trFilter.dateTo=ds;
+  window._trKpiTab=null; // KPI 탭 초기화
+  // 반입반출 탭으로 이동하거나 렌더
+  if(typeof goTab==='function') goTab('pg-transit');
+  else renderTransit();
 }
 
 // ── KPI 달력 팝업 ─────────────────────────────────────────────
@@ -4516,7 +4528,33 @@ function saveMyProfile(){
   renderAdmin();
 }
 
-function openMemberMgr(){
+async function openMemberMgr(){
+  // 서버에서 최신 sub 멤버 목록 pull
+  try {
+    const sbUrl=DB.g(K.SB_URL,'');
+    if(sbUrl && S){
+      const siteId2=S?.siteId==='all'?null:S?.siteId;
+      const siteFilter=siteId2?`&site_id=eq.${encodeURIComponent(siteId2)}`:'';
+      const rows=await sbReq('members','GET',null,`?role=eq.sub${siteFilter}&order=joined_at.desc&limit=300`);
+      if(Array.isArray(rows)&&rows.length){
+        const allMembers=getMembers();
+        const allMap=new Map(allMembers.map(m=>[m.id,m]));
+        for(const row of rows){
+          const id=row.record_id||String(row.id);
+          allMap.set(id,{
+            id, name:row.name||'', company:row.company||'', siteId:row.site_id||'',
+            siteName:row.site_name||'', phone:row.phone||'', title:row.title||'',
+            role:'sub', status:row.status||'approved',
+            google_email:row.google_email||'',
+            joinedAt:row.joined_at?new Date(row.joined_at).getTime():0,
+            synced:true
+          });
+        }
+        saveMembers([...allMap.values()]);
+      }
+    }
+  } catch(e){ console.warn('[openMemberMgr] SB pull 실패:',e); }
+
   const siteId=S?.siteId==='all'?null:S?.siteId;
   const subMembers=getMembers().filter(m=>
     (m.role==='sub'||(!m.role&&m.title!=='기술인'))&&

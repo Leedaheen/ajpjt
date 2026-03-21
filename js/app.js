@@ -528,17 +528,20 @@ async function doGoogleProfileSubmit(){
     role, status, google_email:email,
     joinedAt: member?.joinedAt||Date.now(), synced:false
   };
+  // Supabase 서버 먼저 저장
+  try {
+    await sbReq('members','POST',[{
+      record_id:record.id, name:record.name, company:record.company,
+      site_id:record.siteId, site_name:record.siteName, phone:record.phone, title:record.title,
+      google_email:email, status:record.status, role:record.role,
+      joined_at:new Date(record.joinedAt).toISOString()
+    }],'?on_conflict=record_id');
+    record.synced=true;
+  } catch(e){ console.warn('[doGoogleProfileSubmit] SB 저장 실패:',e); }
   // 로컬 저장
   const idx = allMembers.findIndex(m=>m.id===id);
   if(idx>=0) allMembers[idx]=record; else allMembers.push(record);
   saveMembers(allMembers);
-  // Supabase 저장 (fire-and-forget)
-  sbReq('members','POST',[{
-    record_id:record.id, name:record.name, company:record.company,
-    site_id:record.siteId, site_name:record.siteName, phone:record.phone, title:record.title,
-    google_email:email, status:record.status, role:record.role,
-    joined_at:new Date(record.joinedAt).toISOString()
-  }],'?on_conflict=record_id').then(()=>{record.synced=true;saveMembers(getMembers());}).catch(()=>{});
   document.getElementById('modal-gprofile').style.display='none';
   if(mode==='tech'){
     // 바로 로그인
@@ -1752,8 +1755,16 @@ function goTab(pgId){
   document.getElementById(PG_NT[pgId])?.classList.add('on');
   if(pgId==='pg-home')    renderHome();
   if(pgId==='pg-ops'){     initOpsPanel(curOpsTab); _fetchFromSB().catch(()=>{}); }
-  if(pgId==='pg-transit'){ renderTransit(); _fetchFromSB().catch(()=>{}); }
-  if(pgId==='pg-as'){      renderASPage();  _fetchFromSB().catch(()=>{}); }
+  if(pgId==='pg-transit'){
+    const _tel=document.getElementById('transit-content');
+    if(_tel) _tel.innerHTML=`<div style="display:flex;justify-content:center;align-items:center;padding:48px;gap:8px"><span style="font-size:12px;color:var(--tx3)">서버에서 불러오는 중…</span></div>`;
+    _fetchFromSB().catch(()=>{}).finally(()=>renderTransit());
+  }
+  if(pgId==='pg-as'){
+    const _ael=document.getElementById('as-content');
+    if(_ael) _ael.innerHTML=`<div style="display:flex;justify-content:center;align-items:center;padding:48px;gap:8px"><span style="font-size:12px;color:var(--tx3)">서버에서 불러오는 중…</span></div>`;
+    _fetchFromSB().catch(()=>{}).finally(()=>renderASPage());
+  }
   if(pgId==='pg-admin')   renderAdmin();
 }
 
