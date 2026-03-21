@@ -111,8 +111,8 @@ function initInputForm(){
   document.getElementById('f-meter-end').value='';
   const isAJ2 = S?.role === 'aj';
   const _setRO = (id, ro) => { const el=document.getElementById(id); if(el){ el.readOnly=ro; el.style.opacity=ro?'.55':'1'; el.style.pointerEvents=ro?'none':''; } };
-  _setRO('f-date',     !isAJ2);
-  _setRO('f-starttime',!isAJ2);
+  _setRO('f-date',     true);      // 날짜는 모든 역할 수정 불가 (자동 오늘 날짜)
+  _setRO('f-starttime',true);      // 신청 시작시간도 자동 입력 후 수정 불가
   _setRO('f-endtime',  !isAJ2);
   // 팀명 자동 입력 (tech: 세션 팀명으로 pre-fill 후 수정 가능, AJ: 직접 입력)
   const _fTeamEl = document.getElementById('f-team');
@@ -298,8 +298,8 @@ async function submitEnd(){
     await saveLog(entry);          // ② IDB 저장 (synced 상태 포함)
     toast(entry.synced?`사용 종료 완료 (${dur?fH(dur):'—'})`: '로컬 저장 (자동 재시도 예정)', entry.synced?'ok':'warn');
     updatePendingBanner(); updateLogBadge();
-    // 이력 목록 즉시 갱신
-    if(document.getElementById('log-body')) _logLoadTimer = setTimeout(_doRenderLog, 300);
+    // 이력 목록 즉시 갱신 (종료 처리 후 → fetch → 목록갱신)
+    if(document.getElementById('log-body')){ clearTimeout(_logLoadTimer); _doRenderLog(); }
     document.getElementById('f-meter-end').value='';
     populateOpenSessions();
   } catch(e) {
@@ -432,7 +432,7 @@ function setOpsTab(tab, el){
   document.getElementById('ops-log-panel').style.display   = tab==='log'  ?'block':'none';
   document.getElementById('ops-ana-panel').style.display   = tab==='ana'  ?'block':'none';
   if(tab==='input') initInputForm();
-  if(tab==='log')   renderOpsLog();
+  if(tab==='log'){   renderOpsLog(); _fetchFromSB().catch(()=>{}).then(()=>{ if(curOpsTab==='log') _doRenderLog(); }); }
   if(tab==='ana')  { renderAnalysis(); setTimeout(runAI,300); }
 }
 
@@ -514,7 +514,7 @@ function _getInputFormHTML(){
   </div>
   <div id="start-fields">
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px">
-      <div class="fg" style="margin:0"><label class="fg-lbl">날짜 <span class="req">*</span></label><input type="date" class="fg-input" id="f-date"></div>
+      <div class="fg" style="margin:0"><label class="fg-lbl">날짜</label><input type="date" class="fg-input" id="f-date"></div>
       <div class="fg" style="margin:0"><label class="fg-lbl">현장</label><div class="fg-display" id="f-site-disp">—</div></div>
       <div class="fg" style="margin:0"><label class="fg-lbl">소속 업체</label><div class="fg-display" id="f-co-disp">—</div></div>
     </div>
@@ -548,9 +548,9 @@ function _getInputFormHTML(){
       <label class="fg-lbl">장비번호 <span class="req">*</span></label>
       <input type="text" class="fg-input" id="f-equip" placeholder="예: GK228" style="text-transform:uppercase" autocomplete="off">
     </div>
-    <div class="fg"><label class="fg-lbl">팀명</label><input type="text" class="fg-input" id="f-team" placeholder="소속 팀명 (예: 전기팀)" maxlength="30"></div>
+    <div class="fg"><label class="fg-lbl">팀명</label><input type="text" class="fg-input" id="f-team" placeholder="소속 팀명 (예: 홍길동팀)" maxlength="30"></div>
     <div class="fg"><label class="fg-lbl">신청 시작시간</label><input type="time" class="fg-input" id="f-starttime"></div>
-    <div class="fg"><label class="fg-lbl">계기판 시작 시간 (h) <span class="req">*</span></label><input type="number" class="fg-input" id="f-meter-start" placeholder="예: 1234.5" step="0.1" min="0"></div>
+    <div class="fg"><label class="fg-lbl">계기판 시작 시간 (h)</label><input type="number" class="fg-input" id="f-meter-start" placeholder="예: 1234.5" step="0.1" min="0"></div>
   </div>
   <div id="end-fields" style="display:none">
     <div class="fg">

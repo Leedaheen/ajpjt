@@ -80,14 +80,16 @@ async function sbReq(table, method='GET', data=null, query=''){
 }
 
 // 배치 upsert — SB_BATCH 단위로 분할 전송 (컬럼 불일치 시 최대 5회 반복 재시도)
-async function sbBatchUpsert(table, rows){
+async function sbBatchUpsert(table, rows, conflictCol=''){
   if(!rows.length) return;
+  // conflictCol 명시 시 PostgREST on_conflict 쿼리 추가 → 정확한 upsert 보장
+  const _q = conflictCol ? `?on_conflict=${encodeURIComponent(conflictCol)}` : '';
   for(let i=0; i<rows.length; i+=SB_BATCH){
     let batch = rows.slice(i, i+SB_BATCH);
     let lastErr = null;
     for(let attempt=0; attempt<5; attempt++){
       try {
-        await sbReq(table,'POST', batch);
+        await sbReq(table,'POST', batch, _q);
         lastErr = null;
         break;
       } catch(e) {
@@ -807,10 +809,11 @@ async function pushToGS(entry){
         used_hours:       entry.duration||0,
         meter_start:      String(entry.meterStart||''),
         meter_end:        String(entry.meterEnd||''),
-        off_reason:       entry.offReason||'',
+        off_reason:       entry.reason||entry.offReason||'',
         created_at:       entry.createdAt?new Date(entry.createdAt).toISOString():new Date(entry.ts||Date.now()).toISOString(),
+        updated_at:       new Date().toISOString(),
       };
-      await sbBatchUpsert('logs',[row]);
+      await sbBatchUpsert('logs',[row],'record_id');
       entry.synced=true;
     } catch(e){
       console.warn('[pushToGS Supabase]',e);
