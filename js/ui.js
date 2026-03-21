@@ -4244,12 +4244,12 @@ function renderAdmin(){
       <div style="margin-top:16px;padding:12px;background:rgba(99,102,241,.07);border:1px solid rgba(99,102,241,.2);border-radius:12px;display:flex;align-items:center;gap:12px">
         <div style="font-size:22px;flex-shrink:0">🗑️</div>
         <div style="flex:1;min-width:0">
-          <div style="font-size:12px;font-weight:800;margin-bottom:2px">앱 캐시 삭제</div>
-          <div style="font-size:10px;color:var(--tx3)">화면 오류·구버전 증상 시 캐시를 삭제하고 새로 로드합니다</div>
+          <div style="font-size:12px;font-weight:800;margin-bottom:2px">모든 캐시 삭제</div>
+          <div style="font-size:10px;color:var(--tx3)">화면 오류·구버전 증상 시 로컬 캐시를 전부 삭제 후 서버에서 새로 로드합니다</div>
         </div>
         <button onclick="clearAppCache()"
           style="padding:7px 12px;font-size:11px;font-weight:800;background:rgba(99,102,241,.18);border:1px solid rgba(99,102,241,.35);border-radius:8px;color:#a5b4fc;cursor:pointer;flex-shrink:0;white-space:nowrap">
-          캐시 삭제
+          모든 캐시 삭제
         </button>
       </div>
     </div>`; return;
@@ -4434,26 +4434,43 @@ function renderAdmin(){
     </div>`;
 }
 
-// ── 앱 캐시 삭제 (전 사용자 접근 가능) ────────────────────────
+// ── 모든 캐시 삭제 (전 사용자 접근 가능) ──────────────────────
 async function clearAppCache(){
-  if(!confirm('앱 캐시를 삭제하고 새로 로드할까요?\n\n(저장된 데이터는 삭제되지 않습니다)')) return;
+  if(!confirm(
+    '모든 캐시를 삭제하고 서버에서 새로 로드합니다.\n\n' +
+    '⚠ 로컬에 저장된 데이터(로그·반입반출·AS 등)가\n' +
+    '모두 삭제되며 서버 데이터로 교체됩니다.\n' +
+    '(서버에 동기화된 데이터는 보존됩니다)\n\n' +
+    '로그아웃 후 다시 로그인이 필요합니다.\n계속하시겠습니까?'
+  )) return;
+
   try {
     // 1. Service Worker 캐시 전체 삭제
     if('caches' in window){
       const keys = await caches.keys();
       await Promise.all(keys.map(k => caches.delete(k)));
     }
-    // 2. Service Worker 등록 해제 (다음 로드 시 최신 버전으로 재등록)
+    // 2. Service Worker 등록 해제 (다음 로드 시 최신 버전 재등록)
     if('serviceWorker' in navigator){
       const regs = await navigator.serviceWorker.getRegistrations();
       await Promise.all(regs.map(r => r.unregister()));
     }
-    toast('캐시 삭제 완료 — 새로 로드합니다', 'ok', 1500);
-    setTimeout(() => location.reload(true), 1200);
+    // 3. IndexedDB 전체 삭제 (aj_v3)
+    await new Promise((res, rej) => {
+      const req = indexedDB.deleteDatabase('aj_v3');
+      req.onsuccess = () => res();
+      req.onerror   = () => rej(req.error);
+      req.onblocked = () => { console.warn('[clearCache] IDB delete blocked'); res(); };
+    });
+    // 4. localStorage 전체 삭제
+    localStorage.clear();
   } catch(e) {
     console.warn('[clearAppCache]', e);
-    toast('캐시 삭제 후 새로 로드합니다', 'ok', 1200);
-    setTimeout(() => location.reload(true), 1000);
+    // 오류가 있어도 LS는 확실히 삭제 후 reload
+    try { localStorage.clear(); } catch(_) {}
+  } finally {
+    // 5. 서버에서 새로 로드
+    location.reload(true);
   }
 }
 
