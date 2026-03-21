@@ -1498,19 +1498,13 @@ textarea.fg-input{height:72px;line-height:1.5;}
           </div>
         </div>
 
-        <!-- Monthly chart -->
-        <div class="chart-card">
-          <div class="chart-label">월별 평균 가동률</div>
-          <div class="bars" id="monthBars"></div>
-          <div style="display:flex;gap:4px;margin-top:3px" id="monthLabels"></div>
-        </div>
+        <!-- 인사이트 바 (동적) -->
+        <div id="home-insight-bar"></div>
 
-        <!-- Company list -->
-        <div class="shd">
-          <span class="shd-title">업체별 현황</span>
-          <span class="shd-more" id="homeRankBtn" onclick="goTab('pg-ops');setTimeout(()=>setOpsTab('ana',document.getElementById('opst-ana')),80)" style="display:none">순위보기 →</span>
-        </div>
-        <div class="co-list" id="coList"></div>
+        <!-- 3개 모듈 섹션 컨테이너 -->
+        <div id="home-transit-sec" style="padding:0 14px"></div>
+        <div id="home-ops-sec" style="padding:0 14px"></div>
+        <div id="home-as-sec" style="padding:0 14px"></div>
         <div style="height:16px"></div>
       </div>
     </div>

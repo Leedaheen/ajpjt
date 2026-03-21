@@ -1542,18 +1542,33 @@ let _pwaInstallEvent = null;
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   _pwaInstallEvent = e;
+  // 안드로이드/크롬: 이벤트 확보 즉시 배너 트리거 (2초 딜레이)
+  setTimeout(_showPwaInstallBanner, 2000);
 });
+
+async function _installPWA() {
+  if (!_pwaInstallEvent) { toast('현재 브라우저에서 설치를 지원하지 않거나 이미 설치되어 있습니다.', 'warn'); return; }
+  try {
+    _pwaInstallEvent.prompt();
+    const { outcome } = await _pwaInstallEvent.userChoice;
+    if (outcome === 'accepted') toast('앱 설치 완료! 홈 화면에서 실행하세요 🎉', 'ok', 4000);
+    _pwaInstallEvent = null;
+  } catch(e) {
+    toast('설치 중 오류: ' + e.message, 'err');
+  }
+  document.getElementById('pwa-install-popup')?.remove();
+}
 
 function _showPwaInstallBanner() {
   // 이미 설치된 경우 스킵 (standalone 모드)
   if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) return;
+  const _isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  // 비-iOS: 설치 이벤트가 없으면 배너 표시 불필요 (버튼이 동작 안 함)
+  if (!_isIOS && !_pwaInstallEvent) return;
   // 7일 이내에 이미 표시한 경우 스킵
   const _lastShown = parseInt(localStorage.getItem('_pwa_prompt_ts') || '0');
   if (Date.now() - _lastShown < 7 * 24 * 3600 * 1000) return;
   localStorage.setItem('_pwa_prompt_ts', String(Date.now()));
-
-  const _isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  const _isAndroid = /android/i.test(navigator.userAgent);
 
   const popup = document.createElement('div');
   popup.id = 'pwa-install-popup';
@@ -1585,21 +1600,8 @@ function _showPwaInstallBanner() {
       </div>
       <div style="display:flex;gap:8px">
         <button onclick="document.getElementById('pwa-install-popup')?.remove()" style="flex:1;padding:10px;font-size:12px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:rgba(255,255,255,.6);cursor:pointer">나중에</button>
-        <button id="pwa-install-btn" style="flex:2;padding:10px;font-size:13px;font-weight:700;background:linear-gradient(135deg,#DE1F23,#9f1214);border:none;border-radius:8px;color:#fff;cursor:pointer">📲 설치하기</button>
+        <button onclick="_installPWA()" style="flex:2;padding:10px;font-size:13px;font-weight:700;background:linear-gradient(135deg,#DE1F23,#9f1214);border:none;border-radius:8px;color:#fff;cursor:pointer">📲 설치하기</button>
       </div>`;
-    setTimeout(() => {
-      const btn = document.getElementById('pwa-install-btn');
-      if (!btn) return;
-      btn.addEventListener('click', async () => {
-        if (_pwaInstallEvent) {
-          _pwaInstallEvent.prompt();
-          const { outcome } = await _pwaInstallEvent.userChoice;
-          if (outcome === 'accepted') { toast('앱 설치 완료! 홈 화면에서 실행하세요 🎉', 'ok', 4000); }
-          _pwaInstallEvent = null;
-        }
-        document.getElementById('pwa-install-popup')?.remove();
-      });
-    }, 100);
   }
   document.body.appendChild(popup);
 }

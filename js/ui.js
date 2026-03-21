@@ -10,11 +10,12 @@ async function _renderHomeAsync(){
   const siteId=S.siteId==='all'?null:S.siteId;
   const td=today();
 
-  // IDB에서 오늘 로그만 조회 (전체 로드 없음)
-  let todayAll = await getTodayLogs();
+  // 오늘 로그
+  let todayAll=await getTodayLogs();
   const todayLogs=siteId?todayAll.filter(l=>l.siteId===siteId):todayAll;
   const completedToday=todayLogs.filter(l=>l.status==='end');
 
+  // KPI 업데이트
   const rate=todayLogs.length>0?completedToday.length/todayLogs.length:null;
   const totalHrs=completedToday.reduce((s,l)=>s+(+l.duration||0),0);
   document.getElementById('kpi-rate').textContent=rate!==null?fPct(rate):'—';
@@ -22,15 +23,21 @@ async function _renderHomeAsync(){
   document.getElementById('kpi-on').textContent=completedToday.length;
   document.getElementById('kpi-entries').textContent=todayLogs.length;
 
-  // 월별 차트 (정적 데이터)
-  const maxR=Math.max(...HIST.map(m=>m.r));
-  document.getElementById('monthBars').innerHTML=HIST.map((m,i)=>{
-    const h=Math.max(2,(m.r/maxR)*52);
-    return `<div class="bar-col"><div class="bar-fill" style="height:${h}px;background:${rCol(m.r)};opacity:${i===HIST.length-1?1:.5}"></div></div>`;
-  }).join('');
-  document.getElementById('monthLabels').innerHTML=HIST.map(m=>`<div class="bar-col"><div class="bar-lbl">${m.l}</div></div>`).join('');
+  // 반입반출 데이터
+  const allTr=getTransit().filter(r=>siteId?r.siteId===siteId:true);
+  const pendingTr=allTr.filter(r=>r.date===td&&!['반입완료','반출완료','인계완료','취소'].includes(r.status));
+  const doneTrCount=allTr.filter(r=>['반입완료','반출완료','인계완료'].includes(r.status)).length;
+  const ddayTr=pendingTr.slice(0,4);
 
-  // 업체별 현황 — 오늘 로그만 사용
+  // AS 데이터
+  const allAS=getAsReqs().filter(r=>siteId?r.siteId===siteId:true);
+  const openAS=allAS.filter(r=>r.status!=='처리완료');
+  // AS 순번맵 (시간순)
+  const asSeqSorted=[...allAS].sort((a,b)=>(a.requestedAt||a.ts||0)-(b.requestedAt||b.ts||0));
+  const asSeqLocal=new Map(asSeqSorted.map((r,i)=>[r.id,i+1]));
+  const recentOpenAS=[...openAS].sort((a,b)=>(b.requestedAt||0)-(a.requestedAt||0)).slice(0,3);
+
+  // 업체별 현황
   const sites=siteId?[{id:siteId}]:getSites();
   const coRows=[];
   for(const site of sites){
@@ -43,27 +50,104 @@ async function _renderHomeAsync(){
   }
   coRows.sort((a,b)=>(b.rate||0)-(a.rate||0));
 
-  const coListEl = document.getElementById('coList');
-  if(!coRows.length){
-    const _emptyHint = S.role==='tech'
-      ? '<div class="empty-sub">가동현황 탭에서 오늘 작업 상태를 입력해 주세요</div>'
-      : S.role==='sub'
-        ? '<div class="empty-sub">기술인에게 오늘 가동현황 입력을 요청하세요</div>'
-        : '<div class="empty-sub">업체 등록 후 현황 입력 시 여기에 표시됩니다</div>';
-    coListEl.innerHTML=`<div class="empty"><div class="empty-ico">📋</div><div class="empty-txt">오늘 입력된 현황이 없습니다</div>${_emptyHint}</div>`;
+  // 미입력 업체
+  const allCosForSite=[];
+  for(const site of sites) for(const co of getCos(site.id)) allCosForSite.push({...co,siteId:site.id});
+  const submittedCos=new Set(todayLogs.map(l=>l.company));
+  const missingCos=allCosForSite.filter(co=>!submittedCos.has(co.name));
+
+  // ── 인사이트 바 ──
+  const ibEl=document.getElementById('home-insight-bar');
+  if(ibEl){
+    const ins=[];
+    if(openAS.length>0) ins.push({color:'#f87171',bg:'rgba(248,113,113,.1)',ico:'🔧',text:`미처리 AS <b>${openAS.length}건</b>`,go:'pg-as'});
+    if(pendingTr.length>0) ins.push({color:'#60a5fa',bg:'rgba(96,165,250,.1)',ico:'🚛',text:`오늘 반입/반출 대기 <b>${pendingTr.length}건</b>`,go:'pg-transit'});
+    if(missingCos.length>0&&(S.role==='aj'||S.role==='sub')){
+      const names=missingCos.slice(0,3).map(c=>c.name).join(', ');
+      ins.push({color:'#fbbf24',bg:'rgba(251,191,36,.1)',ico:'⚠️',text:`미입력: <b>${names}${missingCos.length>3?' 외 '+(missingCos.length-3)+'건':''}</b>`,go:'pg-ops'});
+    }
+    ibEl.innerHTML=ins.length
+      ?`<div style="padding:6px 14px 0">${ins.map(i=>`<div onclick="goTab('${i.go}')" style="display:flex;align-items:center;gap:8px;padding:8px 12px;margin-bottom:6px;background:${i.bg};border-radius:9px;cursor:pointer;border:1px solid ${i.color}22"><span style="font-size:14px">${i.ico}</span><span style="font-size:11px;color:var(--tx);line-height:1.4">${i.text}</span><span style="margin-left:auto;font-size:14px;color:${i.color}">›</span></div>`).join('')}</div>`
+      :'';
   }
-  else coListEl.innerHTML=coRows.slice(0,8).map(co=>{
-    const col=rCol(co.rate);
-    return `<div class="co-card">
-      <div class="co-avi" style="background:${co.color}18;color:${co.color}">${co.name.slice(0,2)}</div>
-      <div class="co-inf"><div class="co-nm">${co.name}</div><div class="co-mt">장비 ${co.equip}대 · ${co.cnt}건</div></div>
-      <div class="co-rt">
-        <div class="co-pct" style="color:${col}">${fPct(co.rate)}</div>
-        <div class="co-bar"><div class="co-bar-f" style="width:${co.rate*100}%;background:${col}"></div></div>
+
+  // ── 반입/반출 섹션 ──
+  const trEl=document.getElementById('home-transit-sec');
+  if(trEl){
+    const trPreview=ddayTr.map(r=>{
+      const isIn=r.type==='in'; const clr=isIn?'#60a5fa':'#fb923c';
+      return `<div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--br)">
+        <span style="font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:${isIn?'rgba(96,165,250,.15)':'rgba(251,146,60,.15)'};color:${clr};flex-shrink:0">${isIn?'반입':'반출'}</span>
+        <span style="font-size:11px;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.company||'—'}</span>
+        <span style="font-size:10px;font-family:monospace;color:#60a5fa;flex-shrink:0">${(r.equip||'').split(/[\s,]/)[0]||'—'}</span>
+        <span style="font-size:9px;color:#fbbf24;font-weight:700;flex-shrink:0">★D-DAY</span>
+      </div>`;
+    }).join('');
+    trEl.innerHTML=`<div style="background:var(--bg2);border:1px solid var(--br);border-radius:12px;margin-bottom:10px;overflow:hidden">
+      <div style="display:flex;align-items:center;padding:11px 14px;gap:6px;border-bottom:1px solid ${pendingTr.length||doneTrCount?'var(--br)':'transparent'}">
+        <span style="font-size:13px;font-weight:800">🚛 반입 / 반출</span>
+        ${pendingTr.length>0?`<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:8px;background:rgba(96,165,250,.15);color:#60a5fa">${pendingTr.length}건 대기</span>`:''}
+        ${doneTrCount>0?`<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:8px;background:rgba(34,197,94,.12);color:#22c55e">${doneTrCount}건 완료</span>`:''}
+        <button onclick="goTab('pg-transit')" style="margin-left:auto;font-size:11px;font-weight:700;padding:4px 10px;border-radius:8px;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.25);color:#60a5fa;cursor:pointer">내역 →</button>
       </div>
+      ${ddayTr.length>0
+        ?`<div style="padding:2px 14px 8px">${trPreview}${pendingTr.length>4?`<div style="font-size:10px;color:var(--tx3);padding:5px 0 0;text-align:center">외 ${pendingTr.length-4}건 더</div>`:''}</div>`
+        :`<div style="padding:10px 14px;font-size:11px;color:var(--tx3)">오늘 예정 없음</div>`}
     </div>`;
-  }).join('');
-  if(S.role==='sub'||S.role==='aj') document.getElementById('homeRankBtn').style.display='';
+  }
+
+  // ── 가동현황 섹션 ──
+  const opsEl=document.getElementById('home-ops-sec');
+  if(opsEl){
+    const coHtml=coRows.slice(0,5).map(co=>{
+      const col=rCol(co.rate);
+      return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0">
+        <div style="width:22px;height:22px;border-radius:50%;background:${co.color||'#3b82f6'}18;color:${co.color||'#3b82f6'};font-size:8px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">${(co.name||'').slice(0,2)}</div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
+            <span style="font-size:11px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px">${co.name}</span>
+            <span style="font-size:11px;font-weight:800;color:${col}">${fPct(co.rate)}</span>
+          </div>
+          <div style="height:4px;background:var(--br);border-radius:2px"><div style="height:4px;border-radius:2px;background:${col};width:${Math.round(co.rate*100)}%;transition:width .4s"></div></div>
+        </div>
+      </div>`;
+    }).join('');
+    opsEl.innerHTML=`<div style="background:var(--bg2);border:1px solid var(--br);border-radius:12px;margin-bottom:10px;overflow:hidden">
+      <div style="display:flex;align-items:center;padding:11px 14px;gap:6px;border-bottom:1px solid ${coRows.length?'var(--br)':'transparent'}">
+        <span style="font-size:13px;font-weight:800">⚡ 가동현황</span>
+        ${rate!==null?`<span style="font-size:13px;font-weight:900;color:${rCol(rate)}">${fPct(rate)}</span>`:''}
+        ${missingCos.length>0?`<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:8px;background:rgba(251,191,36,.12);color:#fbbf24">미입력 ${missingCos.length}업체</span>`:''}
+        <button onclick="goTab('pg-ops')" style="margin-left:auto;font-size:11px;font-weight:700;padding:4px 10px;border-radius:8px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.2);color:#22c55e;cursor:pointer">입력 →</button>
+      </div>
+      ${coRows.length>0
+        ?`<div style="padding:6px 14px 10px">${coHtml}${coRows.length>5?`<div style="font-size:10px;color:var(--tx3);margin-top:4px;text-align:center">외 ${coRows.length-5}개 업체</div>`:''}</div>`
+        :`<div style="padding:10px 14px;font-size:11px;color:var(--tx3)">오늘 입력된 현황 없음</div>`}
+    </div>`;
+  }
+
+  // ── AS 섹션 ──
+  const asEl=document.getElementById('home-as-sec');
+  if(asEl){
+    const asPreview=recentOpenAS.map(r=>{
+      const stCol=r.status==='자재수급중'?'#f59e0b':'#f87171';
+      return `<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--br)">
+        <span style="font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:rgba(248,113,113,.12);color:${stCol};flex-shrink:0">${r.status}</span>
+        <span style="font-size:11px;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.company||'—'}</span>
+        <span style="font-size:10px;color:var(--tx3);flex-shrink:0;font-family:monospace">#${asSeqLocal.get(r.id)||'?'}</span>
+      </div>`;
+    }).join('');
+    asEl.innerHTML=`<div style="background:var(--bg2);border:1px solid var(--br);border-radius:12px;margin-bottom:10px;overflow:hidden">
+      <div style="display:flex;align-items:center;padding:11px 14px;gap:6px;border-bottom:1px solid ${openAS.length?'var(--br)':'transparent'}">
+        <span style="font-size:13px;font-weight:800">🔧 AS 내역</span>
+        ${openAS.length>0?`<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:8px;background:rgba(248,113,113,.12);color:#f87171">${openAS.length}건 미처리</span>`:''}
+        ${allAS.length-openAS.length>0?`<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:8px;background:rgba(34,197,94,.1);color:#22c55e">${allAS.length-openAS.length}건 완료</span>`:''}
+        <button onclick="goTab('pg-as')" style="margin-left:auto;font-size:11px;font-weight:700;padding:4px 10px;border-radius:8px;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.2);color:#f87171;cursor:pointer">내역 →</button>
+      </div>
+      ${openAS.length>0
+        ?`<div style="padding:2px 14px 8px">${asPreview}${openAS.length>3?`<div style="font-size:10px;color:var(--tx3);padding:5px 0 0;text-align:center">외 ${openAS.length-3}건 더</div>`:''}</div>`
+        :`<div style="padding:10px 14px;font-size:11px;color:var(--tx3)">미처리 AS 없음 ✓</div>`}
+    </div>`;
+  }
 }
 
 
@@ -492,9 +576,9 @@ function _getLogPanelHTML(){
         <option value="today">오늘</option>
       </select>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 72px;gap:6px;align-items:stretch">
-      <input class="log-search" id="log-q" placeholder="업체·장비번호·사용자 검색..." oninput="onLogSearch()" style="height:30px;margin-bottom:0;box-sizing:border-box">
-      <button class="btn-ghost" style="height:30px;padding:0;font-size:10px;white-space:nowrap;box-sizing:border-box" onclick="clearAllFilters()">초기화</button>
+    <div style="display:flex;gap:6px;align-items:stretch">
+      <input class="log-search" id="log-q" placeholder="업체·장비번호·사용자 검색..." oninput="onLogSearch()" style="flex:1;min-width:0;margin-bottom:0">
+      <button class="btn-ghost" style="flex-shrink:0;width:72px;padding:0;font-size:10px;white-space:nowrap" onclick="clearAllFilters()">초기화</button>
     </div>
   </div>
   <div class="log-body" id="log-body"></div>`;
@@ -936,6 +1020,9 @@ function renderASPage(){
   <div id="as-card-list">${reqs.slice(0,20).map(r=>_asCard(r, canFullAS)).join('')}</div>
   ${reqs.length>20?`<div id="as-list-sentinel" style="height:20px;text-align:center;padding:8px;color:var(--tx3);font-size:11px;cursor:pointer">▾ ${reqs.length-20}건 더 보기</div>`:''}`}
   </div>`;
+  // AS 순번맵 (신청 시간순 1부터)
+  const _allAsSorted=getAsReqs().sort((a,b)=>(a.requestedAt||a.ts||0)-(b.requestedAt||b.ts||0));
+  window._asSeqMap=new Map(_allAsSorted.map((r,i)=>[r.id,i+1]));
   // AS 카드 지연 로딩 초기화
   window._asAllCards = reqs;
   window._asCardIdx  = Math.min(20, reqs.length);
@@ -1047,7 +1134,8 @@ function _fmtAsDate(ts){
   return `${yy}-${mm}-${dd} ${ampm} ${hh}:${min}`;
 }
 function _asCard(r, canAct){
-  const idx = getAsReqs().findIndex(x=>x.id===r.id);
+  const seqNo = window._asSeqMap?.get(r.id) || 0;
+  const idx = seqNo - 1; // 하위 호환 (idx 사용하는 코드가 있을 경우)
   const isAJ = S?.role==='aj';
   const isEngineer = isAJ && S?.ajType==='정비기사';
   // 상태 색상
@@ -1090,7 +1178,7 @@ function _asCard(r, canAct){
       </div>
       <div class="lc-time" style="text-align:right">
         <div>${_fmtAsDate(r.requestedAt)}</div>
-        <div style="font-size:9px;color:var(--tx3);margin-top:1px;font-family:monospace">#${r.id?r.id.slice(-6):''}</div>
+        <div style="font-size:9px;color:var(--tx3);margin-top:1px;font-family:monospace">${seqNo?'No.'+seqNo:''}</div>
       </div>
     </div>
 
@@ -1274,7 +1362,7 @@ function _attachTrSentinels(container){
       const chunk = all.slice(idx, idx+20);
       if(!chunk.length){ sentinel.remove(); return; }
       const tmp = document.createElement('div');
-      tmp.innerHTML = chunk.map(r=>_trCard(r, r.id, false, false)).join('');
+      tmp.innerHTML = chunk.map(r=>_trCard(r, window._trSeqMap?.get(r.id)||0, false, false)).join('');
       while(tmp.firstChild) list.appendChild(tmp.firstChild);
       setIdx(idx + chunk.length);
       const remaining = all.length - getIdx();
@@ -1380,6 +1468,10 @@ function renderTransit(){
     ? `<span style="font-size:10px;background:rgba(59,139,255,.2);color:#60a5fa;padding:2px 8px;border-radius:6px">${tabFiltered.length}건</span>`
     : '';
 
+  // 반입반출 순번맵 (등록 시간순 1부터)
+  const _allTrSorted=getTransit().sort((a,b)=>(a.ts||0)-(b.ts||0));
+  window._trSeqMap=new Map(_allTrSorted.map((r,i)=>[r.id,i+1]));
+
   el.innerHTML=`
   <!-- KPI 필터 탭 -->
   <div id="tr-kpi-bar" style="position:sticky;top:0;z-index:20;background:var(--bg1);padding:6px 8px 5px;border-bottom:1px solid var(--br)">
@@ -1444,16 +1536,16 @@ function renderTransit(){
   <!-- 진행 예정 -->
   <div class="shd"><span class="shd-title">진행 예정 (${active.length}건)</span></div>
   ${active.length===0?'<div class="empty" style="margin-bottom:10px"><div class="empty-txt">예정 없음</div></div>':
-    active.map(r=>_trCard(r, r.id, isAJ, isSub)).join('')}
+    active.map(r=>_trCard(r, window._trSeqMap.get(r.id)||0, isAJ, isSub)).join('')}
 
   <!-- 완료 (상태 기준 — 완료 버튼 누른 것) -->
   ${done.length>0?`<div class="shd" style="margin-top:10px"><span class="shd-title" style="color:#22c55e">완료 (${done.length}건)</span></div>
-  <div id="tr-done-list">${done.slice(0,20).map(r=>_trCard(r, r.id, false, false)).join('')}</div>
+  <div id="tr-done-list">${done.slice(0,20).map(r=>_trCard(r, window._trSeqMap.get(r.id)||0, false, false)).join('')}</div>
   ${done.length>20?`<div class="tr-done-sentinel" style="height:20px;text-align:center;padding:8px;color:var(--tx3);font-size:11px;cursor:pointer">▾ ${done.length-20}건 더 보기</div>`:''}`:''}
 
   <!-- 취소 -->
   ${cancelled.length>0?`<div class="shd" style="margin-top:8px"><span class="shd-title" style="color:var(--tx3)">취소 (${cancelled.length}건)</span></div>
-  <div id="tr-cancel-list" style="opacity:.5">${cancelled.slice(0,20).map(r=>_trCard(r, r.id, false, false)).join('')}</div>
+  <div id="tr-cancel-list" style="opacity:.5">${cancelled.slice(0,20).map(r=>_trCard(r, window._trSeqMap.get(r.id)||0, false, false)).join('')}</div>
   ${cancelled.length>20?`<div class="tr-cancel-sentinel" style="height:20px;text-align:center;padding:8px;color:var(--tx3);font-size:11px;cursor:pointer">▾ ${cancelled.length-20}건 더 보기</div>`:''}`:''}
   </div>`;
 
@@ -1780,7 +1872,7 @@ function _trHandoverCard(r, canEdit) {
   </div>`;
 }
 
-function _trCard(r, _unused, canEdit, canMsg){
+function _trCard(r, seqNo, canEdit, canMsg){
   if (r.type === 'handover') return _trHandoverCard(r, canEdit);
   const st = trStatusLabel(r.date, r.type, r.status);
   const diff = trDiff(r.date);
@@ -2008,7 +2100,7 @@ function _trCard(r, _unused, canEdit, canMsg){
         ${ajInputHtml}
         ${actionHtml}
         ${doneByHtml}
-        <div style="text-align:right;font-size:9px;color:var(--tx3);font-family:monospace;margin-top:4px">#${r.id?r.id.slice(-6):''}</div>
+        <div style="text-align:right;font-size:9px;color:var(--tx3);font-family:monospace;margin-top:4px">${seqNo?'No.'+seqNo:''}</div>
       </div>
     </div>
   </div>`;
@@ -3741,6 +3833,11 @@ async function _askAI(type){
   const cut7    = new Date(now); cut7.setDate(cut7.getDate()-7);
   const cut7S   = cut7.toISOString().split('T')[0];
   const logs7   = allLogs.filter(l=>l.date>=cut7S);
+  // 실내/실외 분리
+  const OUTDOOR_FLOORS=['모듈동','1F외곽'];
+  const isOutdoorLog=l=>OUTDOOR_FLOORS.some(f=>(l.floor||'').includes(f)||(l.locationDetail||'').includes(f));
+  const outdoorLogs2=allLogs.filter(isOutdoorLog);
+  const indoorLogs2=allLogs.filter(l=>!isOutdoorLog(l));
   const rate7d  = logs7.length ? Math.round(logs7.filter(l=>l.status==='end').length/logs7.length*100) : 0;
   const hrs     = logDone.reduce((s,l)=>s+(+l.duration||0),0);
 
@@ -3767,7 +3864,7 @@ async function _askAI(type){
   let weatherLines = [];
   if(['weekly','overload','as-heavy'].includes(type)){
     try{
-      const lat=DB.g('site_lat','37.5665'); const lng=DB.g('site_lng','126.9780');
+      const lat=DB.g('site_lat','37.0505'); const lng=DB.g('site_lng','127.0752');
       const wr=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=precipitation_sum,wind_speed_10m_max,weathercode&timezone=Asia%2FSeoul&past_days=7&forecast_days=1`);
       const wd=await wr.json();
       if(wd.daily){
@@ -3789,6 +3886,11 @@ async function _askAI(type){
     lines.push(`• 누적 가동시간 <b>${fH2(hrs)}</b> · 총 기록 <b>${allLogs.length}건</b>`);
     if(coEntries.length) lines.push(`• 최다 가동 업체: <b>${coEntries[0][0]}</b> ${coEntries[0][1].done}건 완료`);
     if(eqEntries.length) lines.push(`• 최다 사용 장비: <b>${eqEntries[0][0]}</b> ${fH2(eqEntries[0][1].hrs)}`);
+    if(indoorLogs2.length>0||outdoorLogs2.length>0){
+      const inHrs=indoorLogs2.filter(l=>l.status==='end').reduce((s,l)=>s+(+l.duration||0),0);
+      const outHrs=outdoorLogs2.filter(l=>l.status==='end').reduce((s,l)=>s+(+l.duration||0),0);
+      lines.push(`• 실내 ${fH2(inHrs)} / 실외(모듈동·1F외곽) ${fH2(outHrs)}`);
+    }
     lines.push(...weatherLines);
   } else if(type==='top-equip'){
     lines.push(`🏆 <b>${site}</b> 장비별 사용시간 TOP ${Math.min(eqEntries.length,7)}`);
@@ -3903,8 +4005,15 @@ async function runAI(){
     :`<div style="margin-top:8px;font-size:11px;color:var(--green,#4ade80)">최근 1개월 내 1주일 이상 미사용 장비 없음</div>`;
 
   // ── Open-Meteo 날씨 데이터 ──
-  const lat=DB.g('site_lat','37.5665');
-  const lng=DB.g('site_lng','126.9780');
+  const lat=DB.g('site_lat','37.0505');
+  const lng=DB.g('site_lng','127.0752');
+  // 실외 위치: 모듈동, 1F외곽만 실외 (나머지 실내)
+  const OUTDOOR_FLOORS=['모듈동','1F외곽'];
+  const isOutdoorLog=l=>OUTDOOR_FLOORS.some(f=>(l.floor||'').includes(f)||(l.locationDetail||'').includes(f));
+  const outdoorLogs=allLogs.filter(isOutdoorLog);
+  const indoorLogs=allLogs.filter(l=>!isOutdoorLog(l));
+  const todayOutdoor=tl.filter(isOutdoorLog);
+  const todayIndoor=tl.filter(l=>!isOutdoorLog(l));
   let insightLines=[];
   let weatherHTML='';
 
@@ -3935,12 +4044,28 @@ async function runAI(){
       if(rateNum!==null){
         const ok=rateNum>=70;
         const reason=todayRain>1?'우천':todayWind>10?'강풍':'';
-        insightLines.push(`<span class="ai-bul">• 오늘 가동률 <b>${tr}%</b> — 목표(70%) ${ok?'달성 ✓':'미달'+(reason?' ('+reason+' 영향)':'')}</span>`);
+        insightLines.push(`<span class="ai-bul">• 오늘 가동률 <b>${tr}%</b> — 목표(70%) ${ok?'달성 ✓':'미달'+(reason&&outdoorLogs.length>0?' (실외 '+reason+' 영향)':'')}</span>`);
       }
-      if(todayRain>5)      insightLines.push(`<span class="ai-bul">• <b>오늘 강수 ${todayRain}mm</b> — 고소작업 중단·안전장구 확인 필요</span>`);
-      else if(todayRain>1) insightLines.push(`<span class="ai-bul">• 오늘 소우 ${todayRain}mm — 작업 조건 주의</span>`);
-      if(todayWind>14)     insightLines.push(`<span class="ai-bul">• <b>오늘 강풍 ${todayWind}m/s</b> — 고소작업대 운용 위험. 작업 중지 검토 ⚠</span>`);
-      else if(todayWind>10)insightLines.push(`<span class="ai-bul">• 오늘 바람 ${todayWind}m/s — 고소작업 시 주의</span>`);
+      // 실내/실외 구분 인사이트
+      if(outdoorLogs.length>0||indoorLogs.length>0){
+        const outRate=todayOutdoor.length>0?(todayOutdoor.filter(l=>l.status==='end').length/todayOutdoor.length*100).toFixed(0):null;
+        const inRate=todayIndoor.length>0?(todayIndoor.filter(l=>l.status==='end').length/todayIndoor.length*100).toFixed(0):null;
+        if(outRate!==null||inRate!==null){
+          const parts=[];
+          if(inRate!==null) parts.push(`실내 <b>${inRate}%</b>`);
+          if(outRate!==null) parts.push(`실외(모듈동/1F외곽) <b>${outRate}%</b>`);
+          insightLines.push(`<span class="ai-bul">• ${parts.join(' · ')}</span>`);
+        }
+      }
+      if(outdoorLogs.length>0){
+        if(todayRain>5)      insightLines.push(`<span class="ai-bul">• <b>오늘 강수 ${todayRain}mm</b> — 실외(모듈동/1F외곽) 고소작업 중단 주의 ⚠</span>`);
+        else if(todayRain>1) insightLines.push(`<span class="ai-bul">• 오늘 소우 ${todayRain}mm — 실외 작업 조건 주의</span>`);
+        if(todayWind>14)     insightLines.push(`<span class="ai-bul">• <b>오늘 강풍 ${todayWind}m/s</b> — 실외 고소작업 위험. 작업 중지 검토 ⚠</span>`);
+        else if(todayWind>10)insightLines.push(`<span class="ai-bul">• 오늘 바람 ${todayWind}m/s — 실외 고소작업 시 주의</span>`);
+      } else {
+        // 실외 작업 없음 → 날씨는 참고용
+        if(todayRain>5||todayWind>14) insightLines.push(`<span class="ai-bul" style="color:var(--tx3);font-size:10px">• 오늘 우천/강풍 — 현장 실외 작업 없음</span>`);
+      }
       if(rainDays7>=3)     insightLines.push(`<span class="ai-bul">• 최근 7일 중 <b>${rainDays7}일 우천</b> — 날씨 영향 구간</span>`);
       insightLines.push(`<span class="ai-bul" style="color:var(--tx3);font-size:10px">• 누적 가동 <b>${hrs.toFixed(1)}h</b>${todayTemp!==null?' | 오늘 최고 '+todayTemp+'°C':''} | 최근 7일 평균 ${avgTemp||'-'}°C</span>`);
 
@@ -4200,17 +4325,17 @@ function renderAdmin(){
         <span id="site-coords-arrow" style="font-size:12px;color:var(--tx3);transition:transform .2s">▼</span>
       </div>
       <div id="site-coords-body" style="display:none;padding:0 14px 14px;border-top:1px solid var(--br)">
-        <div style="font-size:10px;color:var(--tx3);margin:10px 0 8px;line-height:1.6">현장 위·경도를 입력하면 가동 분석 탭에서 실시간 날씨를 연동합니다.<br>미입력 시 서울 기본값(37.5665, 126.9780) 사용. <a href="https://map.kakao.com" target="_blank" style="color:#60a5fa">카카오맵</a>에서 좌표 확인 가능.</div>
+        <div style="font-size:10px;color:var(--tx3);margin:10px 0 8px;line-height:1.6">현장 위·경도를 입력하면 가동 분석 탭에서 실시간 날씨를 연동합니다.<br>미입력 시 평택고덕 기본값(37.0505, 127.0752) 사용. <a href="https://map.kakao.com" target="_blank" style="color:#60a5fa">카카오맵</a>에서 좌표 확인 가능.</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
           <div>
             <div style="font-size:10px;color:var(--tx3);margin-bottom:4px">위도 (Latitude)</div>
             <input type="number" id="site-lat-input" class="fg-input" step="0.0001" min="33" max="39"
-              value="${DB.g('site_lat','37.5665')}" placeholder="37.5665" style="margin:0;font-size:12px;font-family:monospace">
+              value="${DB.g('site_lat','37.0505')}" placeholder="37.0505" style="margin:0;font-size:12px;font-family:monospace">
           </div>
           <div>
             <div style="font-size:10px;color:var(--tx3);margin-bottom:4px">경도 (Longitude)</div>
             <input type="number" id="site-lng-input" class="fg-input" step="0.0001" min="124" max="132"
-              value="${DB.g('site_lng','126.9780')}" placeholder="126.9780" style="margin:0;font-size:12px;font-family:monospace">
+              value="${DB.g('site_lng','127.0752')}" placeholder="127.0752" style="margin:0;font-size:12px;font-family:monospace">
           </div>
         </div>
         <button onclick="_saveSiteCoords()" style="width:100%;padding:7px;font-size:11px;font-weight:700;background:rgba(96,165,250,.15);border:1px solid rgba(96,165,250,.3);border-radius:7px;color:#60a5fa;cursor:pointer">저장</button>
