@@ -20,10 +20,37 @@ async function _renderHomeAsync(){
 
   const OUTDOOR_FLOORS=['모듈동','1F외곽'];
   const isOut=l=>OUTDOOR_FLOORS.some(f=>(l.floor||'').includes(f)||(l.locationDetail||'').includes(f));
-  const todayOut=todayLogs.filter(isOut);
-  const todayIn=todayLogs.filter(l=>!isOut(l));
-  const outRate=todayOut.length>0?todayOut.filter(l=>l.status==='end').length/todayOut.length:null;
-  const inRate=todayIn.length>0?todayIn.filter(l=>l.status==='end').length/todayIn.length:null;
+  const todayOut=todayLogs.filter(isOut); // 날씨경고에서 사용
+
+  // ── 총 장비 수량 (마스터 → 폴백: 오늘 고유 장비번호)
+  const _equipMaster = siteId
+    ? getEquipBySite(siteId)
+    : getSites().flatMap(s=>getEquipBySite(s.id));
+  const totalEquipCount = _equipMaster.length || new Set(todayLogs.map(l=>l.equip).filter(Boolean)).size;
+
+  // ── 위치별(층별) 가동률 집계
+  const FLOOR_ORDER = ['모듈동','1F외곽','1F','2F','3F','4F','5F','6F','7F','8F','9F'];
+  const _floorGroup = l => {
+    const fl = (l.floor||'').trim();
+    const ld = (l.locationDetail||'').trim();
+    const txt = fl || ld;
+    if(txt.includes('모듈동')) return '모듈동';
+    if(txt.includes('외곽'))   return '1F외곽';
+    const m = txt.match(/^(\d+)F/i) || (fl+' '+ld).match(/(\d+)F/i);
+    if(m){ const n=+m[1]; if(n>=1&&n<=9) return n+'F'; }
+    return txt||'기타';
+  };
+  const floorMap = {};
+  for(const l of todayLogs){
+    const g = _floorGroup(l);
+    if(!floorMap[g]) floorMap[g]={total:0,done:0};
+    floorMap[g].total++;
+    if(l.status==='end') floorMap[g].done++;
+  }
+  const floorEntries = [
+    ...FLOOR_ORDER.filter(f=>floorMap[f]).map(f=>[f,floorMap[f]]),
+    ...Object.entries(floorMap).filter(([f])=>!FLOOR_ORDER.includes(f)),
+  ];
 
   // 업체별 현황
   const sites=siteId?[{id:siteId}]:getSites();
@@ -91,10 +118,24 @@ async function _renderHomeAsync(){
   }).join('');
   const missingBadge=missingCos.length>0?`<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:5px;background:rgba(251,191,36,.15);color:#fbbf24">미입력 ${missingCos.length}업체</span>`:'';
 
-  const inOutHtml=(inRate!==null||outRate!==null)?`<div style="display:flex;gap:5px;margin:4px 0">
-    ${inRate!==null?`<div style="flex:1;padding:4px 6px;background:rgba(96,165,250,.08);border-radius:6px;text-align:center"><div style="font-size:9px;color:var(--tx3)">실내</div><div style="font-size:13px;font-weight:800;color:${rateColor(inRate)}">${pctStr(inRate)}</div></div>`:''}
-    ${outRate!==null?`<div style="flex:1;padding:4px 6px;background:rgba(251,146,60,.08);border-radius:6px;text-align:center"><div style="font-size:9px;color:var(--tx3)">실외</div><div style="font-size:13px;font-weight:800;color:${rateColor(outRate)}">${pctStr(outRate)}</div></div>`:''}
-  </div>`:'';
+  // ── 위치별 가동률 테이블 (N × 2, 중앙 정렬)
+  const floorTableHtml = floorEntries.length ? (() => {
+    const row1 = floorEntries.map(([f,v])=>`<td style="text-align:center;padding:2px 6px;white-space:nowrap;border:none">
+      <div style="font-size:9px;font-weight:700;color:#e2e8f0;letter-spacing:.2px">${f}</div>
+      <div style="font-size:8px;color:var(--tx3);margin-top:1px">${v.total}대</div>
+    </td>`).join('');
+    const row2 = floorEntries.map(([f,v])=>{
+      const r=v.total>0?v.done/v.total:null;
+      return `<td style="text-align:center;padding:1px 6px;border:none">
+        <div style="font-size:13px;font-weight:900;color:${rateColor(r)};line-height:1.1">${r!==null?Math.round(r*100)+'%':'—'}</div>
+      </td>`;
+    }).join('');
+    return `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;margin:5px 0 2px">
+      <table style="border-collapse:collapse;margin:0 auto;background:transparent;table-layout:auto">
+        <tbody><tr>${row1}</tr><tr>${row2}</tr></tbody>
+      </table>
+    </div>`;
+  })() : '';
 
   const panel1=`<div style="background:var(--bg2);border:1px solid var(--br);border-radius:12px;overflow:hidden">
     <div style="display:flex;align-items:center;gap:6px;padding:9px 12px;border-bottom:1px solid var(--br)">
@@ -105,13 +146,14 @@ async function _renderHomeAsync(){
       <button onclick="goTab('pg-ops')" style="margin-left:auto;font-size:10px;font-weight:700;padding:3px 8px;border-radius:7px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.2);color:#22c55e;cursor:pointer;flex-shrink:0">가동현황 →</button>
     </div>
     <div style="padding:6px 12px 8px">
-      <div style="display:flex;gap:8px;margin-bottom:4px">
+      <div style="display:flex;gap:10px;margin-bottom:2px;align-items:flex-start">
+        <div style="text-align:center"><div style="font-size:9px;color:var(--tx3)">총 장비</div><div style="font-size:12px;font-weight:800;color:var(--tx)">${totalEquipCount>0?totalEquipCount+'대':'—'}</div></div>
         <div style="text-align:center"><div style="font-size:9px;color:var(--tx3)">장비가동</div><div style="font-size:12px;font-weight:800;color:var(--tx)">${completedToday.length}</div></div>
         <div style="text-align:center"><div style="font-size:9px;color:var(--tx3)">누적시간</div><div style="font-size:12px;font-weight:800;color:var(--tx)">${totalHrs>0?fH(totalHrs):'—'}</div></div>
         <div style="text-align:center"><div style="font-size:9px;color:var(--tx3)">입력건</div><div style="font-size:12px;font-weight:800;color:var(--tx)">${todayLogs.length}</div></div>
         <div style="flex:1"></div>
       </div>
-      ${inOutHtml}
+      ${floorTableHtml}
       ${wxWarn}
       ${p1coHtml?`<div style="margin-top:4px">${p1coHtml}</div>`:''}
       ${coRows.length>3?`<div style="font-size:10px;color:var(--tx3);text-align:center;margin-top:2px">외 ${coRows.length-3}개 업체</div>`:''}
