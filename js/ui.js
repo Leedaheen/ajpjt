@@ -24,6 +24,10 @@ async function _renderHomeAsync(){
 
   // ── 데이터 수집 ──
   let todayAll=await getTodayLogs();
+  // IDB 비어있으면 서버에서 오늘 로그 fetch (캐시 삭제 후 복구 대응)
+  if(!todayAll.length){
+    try{ todayAll = await getLogsByRange(td, td, null, 500); }catch(_e){}
+  }
   const todayLogs=siteId?todayAll.filter(l=>l.siteId===siteId):todayAll;
   const completedToday=todayLogs.filter(l=>l.status==='end');
   const rate=todayLogs.length>0?completedToday.length/todayLogs.length:null;
@@ -192,9 +196,9 @@ async function _renderHomeAsync(){
     const qty=_trQty(r); const eqStr=_trEquipStr(r);
     return `<div style="display:flex;align-items:center;gap:5px;padding:4px 0;opacity:${isDone?'.55':'1'}">
       <span style="font-size:8px;font-weight:800;padding:1px 4px;border-radius:3px;background:${bg};color:${clr};flex-shrink:0">${lbl}</span>
-      <span style="font-size:10px;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.company||'—'}</span>
-      <span style="font-size:9px;color:var(--tx3);flex-shrink:0;white-space:nowrap">총 ${qty}대</span>
-      <span style="font-size:9px;font-family:monospace;color:var(--tx3);flex-shrink:0;max-width:72px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${eqStr}</span>
+      <div style="flex:1;overflow:hidden;min-width:0;white-space:nowrap;text-overflow:ellipsis">
+        <span style="font-size:10px;font-weight:700">${r.company||'—'}</span><span style="font-size:10px;color:var(--tx3)"> · ${qty}대</span>${eqStr&&eqStr!=='—'?`<span style="font-size:10px;font-family:monospace;color:var(--tx3)"> ${eqStr}</span>`:''}
+      </div>
       ${isDone?`<span style="font-size:8px;color:#22c55e;flex-shrink:0">✓</span>`:`<span style="font-size:8px;color:#fbbf24;font-weight:700;flex-shrink:0">D-DAY</span>`}
     </div>`;
   };
@@ -228,7 +232,7 @@ async function _renderHomeAsync(){
       ${trVisHtml||`<div style="font-size:10px;color:var(--tx3);padding:4px 0">오늘 예정 없음</div>`}
       ${trHidHtml?`<div id="home-acc-body-transit" style="display:${_homeAcc.transit?'block':'none'}">${trHidHtml}</div>`:''}
       ${trAccBtn}
-      ${trTmrwHtml?`<div style="margin-top:5px;padding-top:5px;border-top:1px solid var(--br)"><div style="font-size:9px;color:var(--tx3);margin-bottom:2px">내일 예정</div>${trTmrwHtml}</div>`:''}
+      ${trTmrwHtml?`<div style="margin-top:5px;padding-top:5px;border-top:1px solid var(--br)"><div style="font-size:9px;color:var(--tx3);margin-bottom:2px">내일 예정 <span style="opacity:.7">(영업일 기준)</span></div>${trTmrwHtml}</div>`:''}
     </div>
   </div>`;
 
@@ -243,10 +247,9 @@ async function _renderHomeAsync(){
     const loc   = (r.location||'—').slice(0,10);
     return `<div style="display:flex;align-items:center;gap:5px;padding:4px 0;border-bottom:1px solid var(--br)">
       <span style="font-size:8px;font-weight:800;padding:1px 4px;border-radius:3px;background:${stBg};color:${stCol};flex-shrink:0;white-space:nowrap">${r.status||'대기'}</span>
-      <span style="font-size:8px;font-weight:700;padding:1px 3px;border-radius:3px;background:rgba(248,113,113,.1);color:#f87171;flex-shrink:0;white-space:nowrap">${sym}</span>
-      <span style="font-size:10px;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.company||'—'}</span>
-      <span style="font-size:9px;color:var(--tx3);flex-shrink:0;font-family:monospace;white-space:nowrap">${eqNo}</span>
-      <span style="font-size:9px;color:var(--tx3);flex-shrink:0;max-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${loc}</span>
+      <div style="flex:1;overflow:hidden;min-width:0;white-space:nowrap;text-overflow:ellipsis">
+        <span style="font-size:10px;font-weight:700">${r.company||'—'}</span><span style="font-size:10px;color:#f87171"> · ${sym}</span>${eqNo&&eqNo!=='—'?`<span style="font-size:10px;font-family:monospace;color:var(--tx3)"> ${eqNo}</span>`:''}${loc&&loc!=='—'?`<span style="font-size:10px;color:var(--tx3)"> ${loc}</span>`:''}
+      </div>
     </div>`;
   };
   const asVisHtml = asWaitAll.slice(0,AS_FOLD).map(asRow).join('');
