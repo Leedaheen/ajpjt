@@ -1005,15 +1005,29 @@ function _asCard(r, canAct){
         <span style="padding:1px 6px;border-radius:4px;background:rgba(248,113,113,.12);color:#f87171;font-size:9px;font-weight:700;margin-left:4px">${esc(r.type||r.faultType||'기타')}</span>
         ${r.status==='처리완료'&&r.techName?`<span style="font-size:9px;color:#4ade80;margin-left:4px;font-weight:700">· ${esc(r.techName)}</span>`:''}
       </div>
-      <div class="lc-time">${r.date}${r.requestedAt?` <span style="font-size:9px;color:var(--tx3)">${new Date(r.requestedAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})}</span>`:''}</div>
+      <div class="lc-time">${r.requestedAt?new Date(r.requestedAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}):''}</div>
     </div>
 
-    <!-- 장비번호·위치·신청인·통화하기·날짜시간 한 줄 -->
-    <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin:4px 0 5px;font-size:11px">
-      <span style="font-family:monospace;font-weight:800;color:#60a5fa">${r.equip||'—'}</span>
-      ${r.location?`<span style="color:var(--tx3)">·</span><span style="color:var(--tx2);font-size:10px">${esc(r.location)}</span>`:''}
-      ${(r.reporterName||r.reporter)?`<span style="color:var(--tx3)">·</span><b style="color:var(--tx2)">${esc(r.reporterName||r.reporter)}</b>`:''}
-      ${r.reporterPhone?`<span style="color:var(--tx3)">·</span><a href="tel:${r.reporterPhone}" style="color:#60a5fa;text-decoration:none;font-weight:700">통화하기</a>`:''}
+    <!-- 장비번호·위치 -->
+    <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin:4px 0 4px;font-size:12px">
+      <span style="font-family:monospace;font-weight:800;color:#60a5fa">${esc(r.equip)||'—'}</span>
+      ${r.location?`<span style="color:var(--tx3)">·</span><span style="color:var(--tx2)">${esc(r.location)}</span>`:''}
+    </div>
+    <!-- 신청자 · 작업자 -->
+    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:5px;font-size:11px">
+      <span style="color:var(--tx3);font-weight:600">신청자 :</span>
+      ${(r.reporterName||r.reporter)
+        ? (r.reporterPhone
+          ? `<a href="tel:${r.reporterPhone}" style="color:#60a5fa;text-decoration:none;font-weight:700">${esc(r.reporterName||r.reporter)}</a>`
+          : `<b style="color:var(--tx3)">${esc(r.reporterName||r.reporter)}</b>`)
+        : '<span style="color:var(--tx3)">—</span>'}
+      <span style="color:var(--br3);margin:0 2px">·</span>
+      <span style="color:var(--tx3);font-weight:600">작업자 :</span>
+      ${r.workerName
+        ? (r.workerPhone
+          ? `<a href="tel:${r.workerPhone}" style="color:#60a5fa;text-decoration:none;font-weight:700">${esc(r.workerName)}</a>`
+          : `<b style="color:var(--tx3)">${esc(r.workerName)}</b>`)
+        : '<span style="color:var(--tx3)">(입력 없음)</span>'}
     </div>
     <!-- 접수내용 + 사진 썸네일 -->
     <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:6px">
@@ -1547,29 +1561,41 @@ function _trCard(r, _unused, canEdit, canMsg){
       `</div>`;
   }
 
-  // 신청인/양중 담당자 정보
-  let contactHtml = '';
-  const _sep = '<span style="color:var(--br);margin:0 2px">/</span>';
-  // 신청자: 신청자 : 이름 / [통화하기] / 비고내용
-  const repLine = (r.recorder||r.reporterName||'');
-  const repTel = r.reporterPhone ? '<a href="tel:'+r.reporterPhone+'" style="color:#60a5fa;font-weight:700;text-decoration:none">통화하기</a>' : '';
-  if(repLine||repTel){
-    let repParts = [];
-    if(repLine) repParts.push('<b style="color:var(--tx)">'+repLine+'</b>');
-    if(repTel)  repParts.push(repTel);
-    if(r.note)  repParts.push('<span style="color:var(--tx2)">'+r.note+'</span>');
-    contactHtml += '<div style="grid-column:1/-1;display:flex;align-items:center;gap:4px;flex-wrap:wrap"><span style="color:var(--tx3);flex-shrink:0">신청자</span><span style="color:var(--tx3);flex-shrink:0">:</span>'+repParts.join(_sep)+'</div>';
-  }
-  // 양중담당: 양중담당 : 이름 직급 / [통화하기] / 양중위치 (이름·직급 사이 슬래시 없음, 색상 통일)
-  const mgrTel = r.managerPhone ? '<a href="tel:'+r.managerPhone+'" style="color:#60a5fa;font-weight:700;text-decoration:none">통화하기</a>' : '';
-  if(r.managerName||mgrTel){
-    let mgrParts = [];
-    const nameTitle = [r.managerName, r.managerTitle].filter(Boolean).join(' ');
-    if(nameTitle) mgrParts.push('<b style="color:var(--tx)">'+nameTitle+'</b>');
-    if(mgrTel)    mgrParts.push(mgrTel);
-    if(r.managerLocation) mgrParts.push('<span style="color:var(--tx)">'+r.managerLocation+'</span>');
-    contactHtml += '<div style="grid-column:1/-1;display:flex;align-items:center;gap:4px;flex-wrap:wrap"><span style="color:var(--tx3);flex-shrink:0">양중담당</span><span style="color:var(--tx3);flex-shrink:0">:</span>'+mgrParts.join(_sep)+'</div>';
-  }
+  // 신청인/양중 담당자 정보 — 2열 테이블
+  const _repLine = r.recorder || r.reporterName || '';
+  const _repNameHtml = _repLine
+    ? (r.reporterPhone
+        ? '<a href="tel:'+r.reporterPhone+'" style="color:#60a5fa;font-weight:700;text-decoration:none">'+_repLine+'</a>'
+        : '<b style="color:var(--tx)">'+_repLine+'</b>')
+    : '<span style="color:var(--tx3)">—</span>';
+  const _mgrNameTitle = [r.managerName, r.managerTitle].filter(Boolean).join(' ');
+  const _mgrNameHtml = _mgrNameTitle
+    ? (r.managerPhone
+        ? '<a href="tel:'+r.managerPhone+'" style="color:#60a5fa;font-weight:700;text-decoration:none">'+_mgrNameTitle+'</a>'
+        : '<b style="color:var(--tx)">'+_mgrNameTitle+'</b>')
+    : '<span style="color:var(--tx3)">—</span>';
+  const contactHtml = '<table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:6px">'
+    + '<tr>'
+    + '<td style="padding:4px 8px 2px 0;vertical-align:top;text-align:left;width:50%">'
+    + '<div style="color:var(--tx3);font-size:10px;font-weight:600;margin-bottom:3px">신청자</div>'
+    + '<div>'+_repNameHtml+'</div>'
+    + '</td>'
+    + '<td style="padding:4px 0 2px 8px;vertical-align:top;text-align:left;border-left:1px solid var(--br2)">'
+    + '<div style="color:var(--tx3);font-size:10px;font-weight:600;margin-bottom:3px">양중담당</div>'
+    + '<div>'+_mgrNameHtml+'</div>'
+    + '</td>'
+    + '</tr>'
+    + '<tr>'
+    + '<td style="padding:4px 8px 0 0;vertical-align:top;text-align:left">'
+    + '<div style="color:var(--tx3);font-size:10px;font-weight:600;margin-bottom:2px">비고</div>'
+    + '<div style="color:var(--tx2)">'+(r.note&&r.note.trim()?r.note:'—')+'</div>'
+    + '</td>'
+    + '<td style="padding:4px 0 0 8px;vertical-align:top;text-align:left;border-left:1px solid var(--br2)">'
+    + '<div style="color:var(--tx3);font-size:10px;font-weight:600;margin-bottom:2px">양중위치</div>'
+    + '<div style="color:var(--tx2)">'+(r.managerLocation||'—')+'</div>'
+    + '</td>'
+    + '</tr>'
+    + '</table>';
 
   // ── 댓글 스레드 (최대 5개) ──
   const _msgs = r.ajMsgs && r.ajMsgs.length ? r.ajMsgs : (r.ajMsg ? [{text:r.ajMsg,author:S?.name||'AJ',ts:0}] : []);
@@ -1698,7 +1724,7 @@ function _trCard(r, _unused, canEdit, canMsg){
       <div style="padding:10px 12px">
         ${_renderSpecBlock(r, isIn && isAJ)}
         ${(!isAJ || !isIn) ? ajEquipHtml : ''}
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:10px;color:var(--tx3)">${contactHtml}</div>
+        ${contactHtml}
         ${ajMsgHtml}
         ${ajInputHtml}
         ${actionHtml}
@@ -2881,6 +2907,8 @@ function openASSheet(){
   el('as-company',  S?.company || '');
   el('as-reporter-name',  S?.name  || '');
   el('as-reporter-phone', S?.phone || '');
+  el('as-worker-name',    '');
+  el('as-worker-phone',   '');
   document.querySelectorAll('#as-type-chips .chip.on').forEach(c=>c.classList.remove('on'));
   _clearAsPhoto(); // 사진 초기화
   openSheet('sh-as');
@@ -2921,6 +2949,9 @@ async function submitAS(){
   }
   const repPhone_raw = document.getElementById('as-reporter-phone')?.value || '';
   const repPhone = fmtPhone(repPhone_raw);
+  const workerName  = document.getElementById('as-worker-name')?.value.trim() || '';
+  const workerPhone_raw = document.getElementById('as-worker-phone')?.value || '';
+  const workerPhone = workerPhone_raw ? fmtPhone(workerPhone_raw) : '';
   if(!repPhone_raw){
     toast('신청인 연락처를 입력하세요','err');
     document.getElementById('as-reporter-phone')?.classList.add('shake');
@@ -2955,6 +2986,7 @@ async function submitAS(){
     date: today(), company, equip, location,
     type, desc,
     reporterName: repName, reporterPhone: repPhone,
+    workerName, workerPhone,
     requestedAt: Date.now(),
     status: '대기',
     techName: '', techPhone: '', techNote: '',
