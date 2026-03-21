@@ -643,9 +643,12 @@ function setOpsTab(tab, el){
   document.getElementById('ops-input-panel').style.display = tab==='input'?'block':'none';
   document.getElementById('ops-log-panel').style.display   = tab==='log'  ?'block':'none';
   document.getElementById('ops-ana-panel').style.display   = tab==='ana'  ?'block':'none';
-  if(tab==='input') initInputForm();
-  if(tab==='log'){   renderOpsLog(); _fetchFromSB().catch(()=>{}).then(()=>{ if(curOpsTab==='log') _doRenderLog(); }); }
-  if(tab==='ana')  { renderAnalysis(); }
+  if(tab==='input'){ initInputForm(); _fetchFromSB().catch(()=>{}); }
+  if(tab==='log'){
+    renderOpsLog();
+    _fetchFromSB().then(()=>{ if(curOpsTab==='log') _doRenderLog(); }).catch(()=>{ if(curOpsTab==='log') _doRenderLog(); });
+  }
+  if(tab==='ana')  { renderAnalysis(); _fetchFromSB().catch(()=>{}); }
 }
 
 function initOpsPanel(tab){
@@ -2395,7 +2398,7 @@ function copyInInfo(recId){
 
 
 /* ── 트랜짓 댓글 (메시지 스레드) ── */
-function _addTransitMsg(id){
+async function _addTransitMsg(id){
   const inp = document.getElementById('tr-cmt-'+id);
   if(!inp) return;
   const text = inp.value.trim();
@@ -2408,13 +2411,17 @@ function _addTransitMsg(id){
   msgs.push({text, author:S?.name||'AJ', company:S?.company||(S?.role==='aj'?'AJ네트웍스':''), ts:Date.now(), role: S?.role||'aj'});
   rec.ajMsgs = msgs;
   rec.ajMsg = msgs[0]?.text||'';
+  rec.synced = false;
   saveTransit(recs);
   inp.value = '';
-  toast('메시지 추가됨','ok');
   renderTransit();
+  // 서버 즉시 push
+  try { await _directPushTransit(rec); toast('메시지 추가됨','ok'); }
+  catch(e){ console.warn('[addTransitMsg push]',e); scheduleRetrySync(); toast('로컬 저장됨 — 자동 재시도','warn',2500); }
+  _fetchFromSB().catch(()=>{}).then(()=>renderTransit());
 }
 
-function _delTransitMsg(id, idx){
+async function _delTransitMsg(id, idx){
   if(!confirm('메시지를 삭제하시겠습니까?')) return;
   const recs = getTransit();
   const rec = recs.find(r=>r.id===id);
@@ -2423,9 +2430,13 @@ function _delTransitMsg(id, idx){
   msgs.splice(idx,1);
   rec.ajMsgs = msgs;
   rec.ajMsg = msgs[0]?.text||'';
+  rec.synced = false;
   saveTransit(recs);
-  toast('삭제됨','ok');
   renderTransit();
+  // 서버 즉시 push
+  try { await _directPushTransit(rec); toast('삭제됨','ok'); }
+  catch(e){ console.warn('[delTransitMsg push]',e); scheduleRetrySync(); toast('로컬 삭제됨 — 자동 재시도','warn',2500); }
+  _fetchFromSB().catch(()=>{}).then(()=>renderTransit());
 }
 
 // 카드 인라인 장비번호 저장 (자동완성 포함)
@@ -3220,7 +3231,9 @@ async function cancelTransit(id){
   const _cnBody = `${rec.date} · ${rec.type==='in'?'반입':'반출'}`;
   pushSBNotif({target_aj_type:'관리자', type:'transit_cancel', title:`❌ 취소: ${rec.company}`, body:_cnBody, ref_id:rec.id, site_id:rec.siteId}).catch(()=>{});
   if(rec.submitterMemberId) pushSBNotif({target_user_id:rec.submitterMemberId, type:'transit_cancel', title:`❌ 취소: ${rec.company}`, body:_cnBody, ref_id:rec.id, site_id:rec.siteId}).catch(()=>{});
-  toast('취소 처리되었습니다','warn'); renderTransit();
+  toast('취소 처리되었습니다','warn');
+  renderTransit();
+  _fetchFromSB().catch(()=>{}).then(()=>renderTransit());
 }
 
 function editTransitMsg(id){

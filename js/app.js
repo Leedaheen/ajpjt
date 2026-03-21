@@ -1755,19 +1755,34 @@ function goTab(pgId){
   curPg=pgId;
   document.getElementById(pgId)?.classList.add('on');
   document.getElementById(PG_NT[pgId])?.classList.add('on');
-  if(pgId==='pg-home')    renderHome();
-  if(pgId==='pg-ops'){     initOpsPanel(curOpsTab); _fetchFromSB().catch(()=>{}); }
+  // 로딩 스피너 헬퍼
+  const _spin = (color='var(--blue)') =>
+    `<div style="padding:40px 20px;text-align:center;color:var(--tx3);font-size:12px"><div style="width:18px;height:18px;border:2px solid var(--br);border-top-color:${color};border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 8px"></div>서버 데이터 로드 중...</div>`;
+
+  if(pgId==='pg-home'){
+    renderHome(); // 로컬 데이터로 즉시 렌더
+    _fetchFromSB().then(()=>{ if(curPg==='pg-home') renderHome(); }).catch(()=>{});
+  }
+  if(pgId==='pg-ops'){
+    const _oc=document.getElementById('ops-log-panel');
+    initOpsPanel(curOpsTab);
+    if(curOpsTab==='log' && _oc) _oc.innerHTML=_spin();
+    _fetchFromSB().then(()=>{ if(curPg==='pg-ops') initOpsPanel(curOpsTab); }).catch(()=>{ if(curPg==='pg-ops') initOpsPanel(curOpsTab); });
+  }
   if(pgId==='pg-transit'){
     const _tc=document.getElementById('transit-content');
-    if(_tc) _tc.innerHTML=`<div style="padding:40px 20px;text-align:center;color:var(--tx3);font-size:12px"><div style="width:18px;height:18px;border:2px solid var(--br);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 8px"></div>서버 데이터 로드 중...</div>`;
+    if(_tc) _tc.innerHTML=_spin('var(--blue)');
     _fetchFromSB().then(()=>renderTransit()).catch(()=>renderTransit());
   }
   if(pgId==='pg-as'){
     const _ac=document.getElementById('as-content');
-    if(_ac) _ac.innerHTML=`<div style="padding:40px 20px;text-align:center;color:var(--tx3);font-size:12px"><div style="width:18px;height:18px;border:2px solid var(--br);border-top-color:var(--red);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 8px"></div>서버 데이터 로드 중...</div>`;
+    if(_ac) _ac.innerHTML=_spin('var(--red)');
     _fetchFromSB().then(()=>{ renderASPage(); updateASBadge(); }).catch(()=>{ renderASPage(); updateASBadge(); });
   }
-  if(pgId==='pg-admin')   renderAdmin();
+  if(pgId==='pg-admin'){
+    renderAdmin();
+    _fetchFromSB().then(()=>{ if(curPg==='pg-admin') renderAdmin(); }).catch(()=>{});
+  }
 }
 
 /* ═══════════════════════════════════════════
