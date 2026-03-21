@@ -162,6 +162,28 @@ function selectOne(el,groupId){
   el.classList.add('on');
 }
 
+// ── 장비마스터 미등록 장비번호 확인 팝업 ────────────────────
+function _confirmUnknownEquip(nos){
+  return new Promise(resolve=>{
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:10001;display:flex;align-items:center;justify-content:center';
+    ov.innerHTML=`<div style="background:var(--bg2);border:1px solid var(--br);border-radius:18px;padding:24px 20px;max-width:300px;width:88%;text-align:center">
+      <div style="font-size:18px;font-weight:900;color:#fbbf24;margin-bottom:10px">⚠️ 보유 장비 아님</div>
+      <div style="font-size:12px;font-family:monospace;color:#60a5fa;margin-bottom:6px">${nos.join(', ')}</div>
+      <div style="font-size:11px;color:var(--tx2);line-height:1.6;margin-bottom:20px">해당 현장의 장비마스터에 등록되지 않은 장비번호입니다.<br>계속 진행하시겠습니까?</div>
+      <div style="display:flex;gap:10px">
+        <button id="_cueq_no" style="flex:1;padding:10px;border-radius:10px;background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.3);color:#f87171;font-size:14px;font-weight:700;cursor:pointer">취소</button>
+        <button id="_cueq_yes" style="flex:1;padding:10px;border-radius:10px;background:rgba(251,191,36,.15);border:2px solid rgba(251,191,36,.5);color:#fbbf24;font-size:14px;font-weight:900;cursor:pointer">계속</button>
+      </div>
+    </div>`;
+    document.body.appendChild(ov);
+    const done=v=>{ov.remove();resolve(v);};
+    ov.querySelector('#_cueq_yes').onclick=()=>done(true);
+    ov.querySelector('#_cueq_no').onclick=()=>done(false);
+    ov.onclick=e=>{if(e.target===ov)done(false);};
+  });
+}
+
 async function submitStart(){
   if(!S) return;
   const date=document.getElementById('f-date').value;
@@ -175,6 +197,13 @@ async function submitStart(){
   if(!locationDetail){ toast('상세위치를 입력하세요','err'); document.getElementById('f-location-detail')?.focus(); return; }
   if(!meterStartVal){ toast('계기판 시작 시간을 입력하세요','err'); document.getElementById('f-meter-start')?.focus(); return; }
   if(opsProjects.length && !project){ toast('프로젝트를 선택하세요','err'); return; }
+  // 장비마스터 유효성 검사 — 보유 장비 아니면 확인 팝업
+  const _opsSiteId = S.siteId==='all' ? (document.getElementById('f-site-sel')?.value||getSites()[0]?.id||'') : S.siteId;
+  const _opsKnownNos = getEquipBySite(_opsSiteId).map(e=>e.equipNo);
+  if(_opsKnownNos.length && !_opsKnownNos.includes(equip)){
+    const _go = await _confirmUnknownEquip([equip]);
+    if(!_go) return;
+  }
   const btn=document.getElementById('btn-start');
   btn.classList.add('loading'); btn.disabled=true;
   const entry={
@@ -192,6 +221,20 @@ async function submitStart(){
     await saveLog(entry);          // IDB 단건 저장
     // 장비별 층수 데이터 수집 (새 층수로 덮어쓰기)
     if(equip && floors){ const _fm=DB.g('equip_floors',{}); _fm[equip]={floor:floors,detail:locationDetail}; DB.s('equip_floors',_fm); }
+    // 장비마스터 위치(층수) 자동 업데이트 — 해당 장비 기록이 있을 때만
+    if(equip && (floors || locationDetail)){
+      const _em = getEquipMaster();
+      const _ei = _em.findIndex(e=>e.equipNo===equip && e.siteId===_opsSiteId && e.status==='active');
+      if(_ei>=0){
+        const _newLoc = locationDetail || floors;
+        if(_newLoc && (_em[_ei].location!==_newLoc || _em[_ei].floor!==floors)){
+          _em[_ei].location = _newLoc;
+          if(floors) _em[_ei].floor = floors;
+          _em[_ei].synced = false;
+          await saveEquipMaster(_em);
+        }
+      }
+    }
     await pushToGS(entry);         // Supabase 직접 저장 (실패 시 로컬 + 재시도 예약)
     _syncToSupabase().catch(e => console.warn('[submitStart sync]', e)); // 즉시 전체 미동기화 항목 push
     toast(entry.synced?'사용 신청 완료':'로컬 저장 (미연동)', entry.synced?'ok':'warn');
@@ -686,7 +729,7 @@ function _showTrPlanPopup(recId){
   pop.innerHTML = `
     <div style="width:100%;max-width:600px;height:90vh;display:flex;flex-direction:column;gap:10px">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
-        <span style="font-size:13px;font-weight:800;color:#fff">📄 사용계획서</span>
+        <span style="font-size:13px;font-weight:800;color:#fff">📄 반입신청서</span>
         <div style="display:flex;gap:8px;align-items:center">
           <a href="${rec.planData}" download="${fileName}"
             style="padding:6px 14px;background:rgba(99,102,241,.3);border:1px solid rgba(99,102,241,.5);border-radius:8px;color:#a5b4fc;font-size:12px;font-weight:700;text-decoration:none">💾 저장하기</a>
@@ -1635,7 +1678,7 @@ function _trCard(r, _unused, canEdit, canMsg){
         <div style="text-align:right">
           <div style="font-size:13px;font-weight:900;color:${!st.done&&diff<=1?st.color:'var(--tx)'}">${r.date}</div>
           <div style="font-size:10px;font-weight:800;color:${st.color}">${st.label}${dDayStr}</div>
-          ${isIn && r.planData ? `<button onclick="event.stopPropagation();_showTrPlanPopup('${r.id}')" style="margin-top:3px;padding:2px 8px;background:rgba(99,102,241,.18);border:1px solid rgba(99,102,241,.35);border-radius:5px;color:#a5b4fc;font-size:9px;font-weight:700;cursor:pointer">📄 계획서</button>` : ''}
+          ${isIn && r.planData ? `<button onclick="event.stopPropagation();_showTrPlanPopup('${r.id}')" style="margin-top:3px;padding:2px 8px;background:rgba(99,102,241,.18);border:1px solid rgba(99,102,241,.35);border-radius:5px;color:#a5b4fc;font-size:9px;font-weight:700;cursor:pointer">📄 신청서</button>` : ''}
         </div>
       </div>
       <span id="tr-arrow-${r.id}" style="font-size:12px;color:var(--tx3);transition:transform .2s;flex-shrink:0;align-self:center${isExpanded?';transform:rotate(180deg)':''}">▼</span>
@@ -2880,20 +2923,15 @@ async function submitAS(){
     return;
   }
   if(!equip){ toast('장비번호를 입력하세요','err'); return; }
-  // 소속 현장 장비 마스터 검증 (협력사)
-  if(S?.role === 'sub'){
-    const asSiteId = S.siteId==='all' ? null : S.siteId;
-    if(asSiteId){
-      const validNos = getEquipBySite(asSiteId).map(e=>e.equipNo);
-      if(validNos.length){
-        const invalid = equipList.filter(no=>!validNos.includes(no));
-        if(invalid.length){
-          toast(`현장에 없는 장비번호: ${invalid.join(', ')}`, 'err');
-          const eq = document.getElementById('as-equip');
-          eq?.classList.add('shake'); eq?.focus();
-          setTimeout(()=>eq?.classList.remove('shake'),500);
-          return;
-        }
+  // 장비마스터 유효성 검사 — 역할 무관, 보유 장비 아니면 확인 팝업
+  const _asSiteId = S.siteId==='all' ? null : S.siteId;
+  if(_asSiteId){
+    const _asKnownNos = getEquipBySite(_asSiteId).map(e=>e.equipNo);
+    if(_asKnownNos.length){
+      const _asInvalid = equipList.filter(no=>!_asKnownNos.includes(no));
+      if(_asInvalid.length){
+        const _go = await _confirmUnknownEquip(_asInvalid);
+        if(!_go) return;
       }
     }
   }

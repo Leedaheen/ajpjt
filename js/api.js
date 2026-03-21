@@ -801,6 +801,63 @@ async function pushToGS(entry){
   }
 }
 
+// ── Supabase Realtime (실시간 Push 동기화) ──────────────────
+let _rtWs = null;
+let _rtReconnTimer = null;
+let _rtHbTimer = null;
+
+function _initRealtime(){
+  const sbUrl = DB.g(K.SB_URL,'');
+  const sbKey = DB.g(K.SB_KEY,'');
+  if(!sbUrl || !sbKey) return;
+  if(_rtWs && (_rtWs.readyState===WebSocket.CONNECTING || _rtWs.readyState===WebSocket.OPEN)) return;
+  const wsUrl = sbUrl.replace(/^https?:\/\//i, m=>m==='https://'?'wss://':'ws://')
+    + '/realtime/v1/websocket?apikey=' + encodeURIComponent(sbKey) + '&vsn=1.0.0';
+  try {
+    _rtWs = new WebSocket(wsUrl);
+    _rtWs.onopen = ()=>{
+      console.log('[Realtime] 연결됨 — 변경사항 즉시 수신 활성화');
+      _rtWs.send(JSON.stringify({
+        topic:'realtime:public', event:'phx_join',
+        payload:{ config:{ postgres_changes:[
+          {event:'*',schema:'public',table:'transit'},
+          {event:'*',schema:'public',table:'as_requests'},
+          {event:'*',schema:'public',table:'logs'},
+          {event:'*',schema:'public',table:'equipment'},
+        ]}},
+        ref:'1'
+      }));
+      if(_rtHbTimer) clearInterval(_rtHbTimer);
+      _rtHbTimer = setInterval(()=>{
+        if(_rtWs?.readyState===WebSocket.OPEN)
+          _rtWs.send(JSON.stringify({topic:'phoenix',event:'heartbeat',payload:{},ref:null}));
+      }, 29000);
+    };
+    _rtWs.onmessage = (e)=>{
+      try{
+        const msg = JSON.parse(e.data);
+        if(msg.event==='postgres_changes' && msg.payload?.data){
+          const tbl = msg.payload.data.table;
+          console.log('[Realtime] 변경 감지:', tbl);
+          _fetchFromSB().catch(()=>{});
+        }
+      }catch(_){}
+    };
+    _rtWs.onclose = ()=>{
+      console.log('[Realtime] 연결 끊김 — 5초 후 재연결 시도');
+      if(_rtHbTimer){ clearInterval(_rtHbTimer); _rtHbTimer=null; }
+      if(_rtReconnTimer) clearTimeout(_rtReconnTimer);
+      _rtReconnTimer = setTimeout(_initRealtime, 5000);
+    };
+    _rtWs.onerror = ()=>{};
+  }catch(e){ console.warn('[Realtime] 초기화 실패:', e.message); }
+}
+function _cleanupRealtime(){
+  if(_rtHbTimer){ clearInterval(_rtHbTimer); _rtHbTimer=null; }
+  if(_rtReconnTimer){ clearTimeout(_rtReconnTimer); _rtReconnTimer=null; }
+  if(_rtWs){ _rtWs.onclose=null; try{_rtWs.close();}catch(_){} _rtWs=null; }
+}
+
 let _retrySyncTimer = null;
 let _retrySyncCount = 0;          // 연속 실패 횟수
 const _MAX_RETRY_SYNC = 5;        // 최대 재시도 5회 (총 2.5분)

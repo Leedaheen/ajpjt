@@ -2361,12 +2361,12 @@ create index if not exists idx_aj_status on aj_members(status);</pre>
       <label class="fg-lbl">비고</label>
       <textarea class="fg-input" id="tr-note" placeholder="기타 특이사항" rows="2" style="resize:none"></textarea>
     </div>
-    <!-- 사용계획서 첨부 (반입 전용 · 반입 선택 시 표시) -->
+    <!-- 반입신청서 첨부 (반입 전용 · 반입 선택 시 표시) -->
     <div class="fg" id="tr-plan-section" style="display:none">
-      <label class="fg-lbl">사용계획서 <span style="font-size:9px;color:var(--tx3)">(선택 · 이미지 자동 압축)</span></label>
+      <label class="fg-lbl">반입신청서 <span style="font-size:9px;color:var(--tx3)">(선택 · 이미지 자동 압축)</span></label>
       <div id="tr-plan-wrap" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <label for="tr-plan-input" id="tr-plan-label" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.3);border-radius:8px;font-size:12px;color:#a5b4fc;cursor:pointer;font-weight:600;flex-shrink:0">
-          <span>📎</span> 사용계획서 첨부
+          <span>📎</span> 반입신청서 첨부
           <input type="file" id="tr-plan-input" accept="image/*,.pdf" onchange="_onTrPlanSelected(this)" style="display:none">
         </label>
         <div id="tr-plan-preview" style="display:none;position:relative;flex-shrink:0">

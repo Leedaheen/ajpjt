@@ -1321,6 +1321,8 @@ function enterApp(){
   document.removeEventListener('visibilitychange', _onVisibilityChange);
   document.addEventListener('visibilitychange', _onVisibilityChange);
   setTimeout(_initScrollTopBtn, 400);
+  // Supabase Realtime 구독 — 다른 기기 변경사항 즉시 수신
+  if(typeof _initRealtime==='function') setTimeout(_initRealtime, 1200);
   // QR 스캔 URL 파라미터 처리 (?equip=GJ265 → 가동현황 탭 + 장비번호 자동입력)
   const _qp = new URLSearchParams(location.search);
   const _qrEquip = _qp.get('equip');
@@ -1370,6 +1372,7 @@ function doLogout(){
   _appIntervals.forEach(id => clearInterval(id));
   _appIntervals = [];
   document.removeEventListener('visibilitychange', _onVisibilityChange);
+  if(typeof _cleanupRealtime==='function') _cleanupRealtime();
   // 재시도 타이머 정리 (api.js 전역 참조)
   if(typeof _retrySyncTimer !== 'undefined' && _retrySyncTimer){
     clearTimeout(_retrySyncTimer); _retrySyncTimer = null;

@@ -372,8 +372,8 @@ async function _fetchFromSB(){
     const since=new Date(); since.setDate(since.getDate()-30);
     const sinceStr=since.toISOString();
     // select=* 대신 필요한 컬럼만 지정 → payload 30~50% 절감
-    const TR_COLS  = 'record_id,id,date,type,site_id,site_name,company,equip_specs,aj_equip,reporter_name,reporter_phone,manager_name,manager_phone,manager_location,note,status,messages,created_at';
-    const AS_COLS  = 'record_id,id,date,site_id,site_name,company,equip,location,fault_type,description,reporter_name,reporter_phone,status,tech_name,tech_phone,resolved_at,resolve_note,requested_at,material_at,created_at';
+    const TR_COLS  = 'record_id,id,date,type,site_id,site_name,company,equip_specs,aj_equip,reporter_name,reporter_phone,manager_name,manager_phone,manager_location,note,status,messages,dispatch,plan_type,plan_name,created_at,updated_at';
+    const AS_COLS  = 'record_id,id,date,site_id,site_name,company,equip,location,fault_type,description,reporter_name,reporter_phone,status,tech_name,tech_phone,resolved_at,resolve_note,requested_at,material_at,photo_data,created_at,updated_at';
     const [trRows,asRows]=await Promise.all([
       sbReq('transit','GET',null,`?select=${TR_COLS}&created_at=gte.${sinceStr}${siteFilter}&order=created_at.desc&limit=200`),
       sbReq('as_requests','GET',null,`?select=${AS_COLS}${siteFilter}&order=created_at.desc&limit=200`),
@@ -386,8 +386,22 @@ async function _fetchFromSB(){
         const lid=row.record_id||String(row.id);
         const loc=localMap.get(lid);
         if(!loc){ local.unshift(_sbTransitToLocal(row)); changed=true; }
-        else if(!loc.synced){ loc.synced=true; changed=true; }
-        else if(row.status&&loc.status!==row.status){ loc.status=row.status; changed=true; }
+        else {
+          // 서버 updatedAt이 더 최신이면 핵심 필드 일괄 덮어쓰기
+          const srvTs = row.updated_at ? new Date(row.updated_at).getTime() : 0;
+          const locTs = loc.updatedAt || 0;
+          let itemChanged = false;
+          if(!loc.synced){ loc.synced=true; itemChanged=true; }
+          if(row.status && loc.status!==row.status){ loc.status=row.status; itemChanged=true; }
+          if(srvTs > locTs){
+            if(row.dispatch !== undefined && loc.dispatch!==row.dispatch){ loc.dispatch=row.dispatch||''; itemChanged=true; }
+            if(row.aj_equip !== undefined && loc.ajEquip!==row.aj_equip){ loc.ajEquip=row.aj_equip||''; itemChanged=true; }
+            if(row.messages){ try{ const m=JSON.parse(row.messages); if(Array.isArray(m)) loc.ajMsgs=m; itemChanged=true; }catch(_){} }
+            if(row.manager_location && loc.managerLocation!==row.manager_location){ loc.managerLocation=row.manager_location; itemChanged=true; }
+            if(srvTs>0) loc.updatedAt=srvTs;
+          }
+          if(itemChanged) changed=true;
+        }
       }
       if(changed) await saveTransit(local);
     }
@@ -399,8 +413,22 @@ async function _fetchFromSB(){
         const lid=row.record_id||String(row.id);
         const loc=localAsMap.get(lid);
         if(!loc){ localAs.unshift(_sbAsToLocal(row)); asChanged=true; }
-        else if(!loc.synced){ loc.synced=true; asChanged=true; }
-        else if(row.status&&loc.status!==row.status){ loc.status=row.status; asChanged=true; }
+        else {
+          const srvTs = row.updated_at ? new Date(row.updated_at).getTime() : 0;
+          const locTs = loc.updatedAt || 0;
+          let itemChanged=false;
+          if(!loc.synced){ loc.synced=true; itemChanged=true; }
+          if(row.status && loc.status!==row.status){ loc.status=row.status; itemChanged=true; }
+          if(srvTs > locTs || !loc.techName){
+            if(row.tech_name && loc.techName!==row.tech_name){ loc.techName=row.tech_name; itemChanged=true; }
+            if(row.resolved_at && !loc.resolvedAt){ loc.resolvedAt=new Date(row.resolved_at).getTime(); itemChanged=true; }
+            if(row.resolve_note && loc.resolvedNote!==row.resolve_note){ loc.resolvedNote=row.resolve_note; itemChanged=true; }
+            if(row.material_at && !loc.materialAt){ loc.materialAt=new Date(row.material_at).getTime(); itemChanged=true; }
+            if(row.photo_data && !loc.photoThumb){ loc.photoThumb=row.photo_data; itemChanged=true; }
+            if(srvTs>0) loc.updatedAt=srvTs;
+          }
+          if(itemChanged) asChanged=true;
+        }
       }
       if(asChanged){ changed=true; await saveAsReqs(localAs); }
     }
