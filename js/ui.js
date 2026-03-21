@@ -4392,30 +4392,6 @@ function renderAdmin(){
       `:''}
     </div>
 
-    <!-- 현장 위치 설정 (AJ 관리자 전용, 날씨 연동) -->
-    ${isAJ?`<div style="background:var(--bg2);border:1px solid var(--br);border-radius:12px;margin-bottom:14px;overflow:hidden">
-      <div onclick="(()=>{const b=document.getElementById('site-coords-body');const a=document.getElementById('site-coords-arrow');if(b){const o=b.style.display!=='none';b.style.display=o?'none':'block';a.style.transform=o?'':'rotate(180deg)';}})()" style="display:flex;align-items:center;gap:8px;padding:12px 14px;cursor:pointer">
-        <span style="font-size:13px;font-weight:800;flex:1">📍 현장 위치 설정 (날씨 연동)</span>
-        <span style="font-size:10px;padding:2px 8px;border-radius:6px;font-weight:700;${DB.g('site_lat','')?'background:rgba(96,165,250,.15);color:#60a5fa':'background:rgba(248,113,113,.1);color:#f87171'}">${DB.g('site_lat','')?'설정됨':'기본값'}</span>
-        <span id="site-coords-arrow" style="font-size:12px;color:var(--tx3);transition:transform .2s">▼</span>
-      </div>
-      <div id="site-coords-body" style="display:none;padding:0 14px 14px;border-top:1px solid var(--br)">
-        <div style="font-size:10px;color:var(--tx3);margin:10px 0 8px;line-height:1.6">현장 위·경도를 입력하면 가동 분석 탭에서 실시간 날씨를 연동합니다.<br>미입력 시 평택고덕 기본값(37.0505, 127.0752) 사용. <a href="https://map.kakao.com" target="_blank" style="color:#60a5fa">카카오맵</a>에서 좌표 확인 가능.</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
-          <div>
-            <div style="font-size:10px;color:var(--tx3);margin-bottom:4px">위도 (Latitude)</div>
-            <input type="number" id="site-lat-input" class="fg-input" step="0.0001" min="33" max="39"
-              value="${DB.g('site_lat','37.0505')}" placeholder="37.0505" style="margin:0;font-size:12px;font-family:monospace">
-          </div>
-          <div>
-            <div style="font-size:10px;color:var(--tx3);margin-bottom:4px">경도 (Longitude)</div>
-            <input type="number" id="site-lng-input" class="fg-input" step="0.0001" min="124" max="132"
-              value="${DB.g('site_lng','127.0752')}" placeholder="127.0752" style="margin:0;font-size:12px;font-family:monospace">
-          </div>
-        </div>
-        <button onclick="_saveSiteCoords()" style="width:100%;padding:7px;font-size:11px;font-weight:700;background:rgba(96,165,250,.15);border:1px solid rgba(96,165,250,.3);border-radius:7px;color:#60a5fa;cursor:pointer">저장</button>
-      </div>
-    </div>`:``}
 
     <!-- 카카오 오픈채팅 지원 -->
     <div style="margin-top:12px;padding:12px;background:rgba(254,229,0,.08);border:1px solid rgba(254,229,0,.25);border-radius:12px;display:flex;align-items:center;gap:12px">
@@ -4562,8 +4538,8 @@ function _renderEquipMasterSheet(sh) {
       <details style="margin-bottom:12px">
         <summary style="font-size:11px;font-weight:700;color:var(--tx3);cursor:pointer;padding:6px 8px;background:var(--bg2);border-radius:6px;user-select:none">📋 CSV 일괄 등록 (현장명,프로젝트명,업체명,장비제원,장비번호,반입일 형식)</summary>
         <div style="padding:8px 4px 4px">
-          <div style="font-size:10px;color:var(--tx3);margin-bottom:6px">한 줄에 하나씩: <code style="background:rgba(59,130,246,.1);padding:1px 5px;border-radius:3px">현장명,프로젝트명,업체명,장비제원,장비번호,반입일</code> 형식<br>예) 동탄현장,A구역,세방테크,10M,GK228,2026-03-01<br>동탄현장,B구역,도원건설,12M,GK229,2026-03-15</div>
-          <textarea id="eq-csv-input" rows="5" placeholder="동탄현장,A구역,세방테크,10M,GK228,2026-03-01&#10;동탄현장,B구역,도원건설,12M,GK229,2026-03-15" style="width:100%;padding:8px;font-size:12px;font-family:monospace;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx);resize:vertical;box-sizing:border-box"></textarea>
+          <div style="font-size:10px;color:var(--tx3);margin-bottom:6px">한 줄에 하나씩: <code style="background:rgba(59,130,246,.1);padding:1px 5px;border-radius:3px">현장명,프로젝트명,업체명,장비제원,장비번호,반입일</code> 형식<br>예) P4복합동,Ph2,AJ네트웍스,10M,GF123,2026-03-01</div>
+          <textarea id="eq-csv-input" rows="5" placeholder="P4복합동,Ph2,AJ네트웍스,10M,GF123,2026-03-01" style="width:100%;padding:8px;font-size:12px;font-family:monospace;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx);resize:vertical;box-sizing:border-box"></textarea>
           <button onclick="_equipMasterBulkAdd()" style="width:100%;margin-top:6px;padding:7px;font-size:12px;font-weight:700;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);border-radius:6px;color:#60a5fa;cursor:pointer">일괄 등록</button>
         </div>
       </details>
