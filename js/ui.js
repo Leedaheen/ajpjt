@@ -387,10 +387,10 @@ async function submitStart(){
     reason:'', ts:Date.now(), synced:false,
   };
   try {
-    spinner(true,'저장 중...');
-    // ① 서버 우선 저장
+    spinner(true,'사용 신청 저장 중...');
+    // ① 서버 우선 저장 (실패 시 throw)
     await pushToGS(entry);
-    // ② IDB 로컬 저장 (synced 상태 포함)
+    // ② IDB 로컬 저장 (synced=true 포함)
     await saveLog(entry);
     // 장비별 층수 데이터 수집 (새 층수로 덮어쓰기)
     if(equip && floors){ const _fm=DB.g('equip_floors',{}); _fm[equip]={floor:floors,detail:locationDetail}; DB.s('equip_floors',_fm); }
@@ -408,22 +408,23 @@ async function submitStart(){
         }
       }
     }
-    toast(entry.synced?'사용 신청 완료':'로컬 저장 (자동 재시도 예정)', entry.synced?'ok':'warn');
+    toast('사용 신청 완료 ✓', 'ok');
     updatePendingBanner(); updateLogBadge();
-    // ③ 이력 목록 즉시 갱신 (서버 저장 완료 후 직접 호출)
+    // ③ 이력 목록 즉시 갱신
     if(document.getElementById('log-body')){ clearTimeout(_logLoadTimer); _doRenderLog(); }
     document.getElementById('f-equip').value='';
     document.getElementById('f-meter-start').value='';
     document.getElementById('f-starttime').value=nowHM();
     const _fsel=document.getElementById('f-floor-select'); if(_fsel) _fsel.value='';
     const _fdet=document.getElementById('f-location-detail'); if(_fdet) _fdet.value='';
-    // 팀명은 세션 팀명으로 유지 (다음 신청에도 동일 팀이므로)
     document.querySelectorAll('#ops-project-chips .chip.on').forEach(c=>c.classList.remove('on'));
   } catch(e) {
-    // IDB 오류 등 예외 발생 시 — 로컬 저장 후 재시도 예약
-    try{ entry.synced=false; await saveLog(entry); }catch(_){}
+    // 서버 저장 실패 → 로컬 저장 후 재시도 예약
+    console.warn('[submitStart]', e.message);
+    entry.synced=false;
+    try{ await saveLog(entry); }catch(_){}
     scheduleRetrySync();
-    toast('로컬 저장됨 (자동 재시도 예정)','warn');
+    toast('로컬 저장됨 — 네트워크 복구 시 자동 재시도 (최대 5회)', 'warn', 3500);
   } finally {
     spinner(false); btn.classList.remove('loading'); btn.disabled=false;
   }
@@ -458,20 +459,22 @@ async function submitEnd(){
   entry.duration=dur; entry.reason=document.querySelector('#reason-chips .chip.on')?.textContent||'';
   entry.synced=false;
   try {
-    spinner(true,'종료 저장 중...');
-    await pushToGS(entry);         // ① 서버(Supabase) 우선 저장 → entry.synced=true
-    await saveLog(entry);          // ② IDB 저장 (synced 상태 포함)
-    toast(entry.synced?`사용 종료 완료 (${dur?fH(dur):'—'})`: '로컬 저장 (자동 재시도 예정)', entry.synced?'ok':'warn');
+    spinner(true,'사용 종료 저장 중...');
+    await pushToGS(entry);         // ① 서버(Supabase) 우선 저장 (실패 시 throw)
+    await saveLog(entry);          // ② IDB 저장 (synced=true 포함)
+    toast(`사용 종료 완료 ✓${dur?' ('+fH(dur)+')':''}`, 'ok');
     updatePendingBanner(); updateLogBadge();
-    // ③ 이력 목록 즉시 갱신 (종료 처리 후 → fetch → 목록갱신)
+    // ③ 이력 목록 즉시 갱신
     if(document.getElementById('log-body')){ clearTimeout(_logLoadTimer); _doRenderLog(); }
     _fetchFromSB().catch(()=>{});   // 다른 기기 변경사항 병행 동기화
     document.getElementById('f-meter-end').value='';
     populateOpenSessions();
   } catch(e) {
-    try{ entry.synced=false; await saveLog(entry); }catch(_){}
+    console.warn('[submitEnd]', e.message);
+    entry.synced=false;
+    try{ await saveLog(entry); }catch(_){}
     scheduleRetrySync();
-    toast('로컬 저장됨 (자동 재시도 예정)','warn');
+    toast('로컬 저장됨 — 네트워크 복구 시 자동 재시도 (최대 5회)', 'warn', 3500);
   } finally {
     spinner(false); btn.classList.remove('loading'); btn.disabled=false;
   }
@@ -498,22 +501,23 @@ async function submitIdle(){
     equip:eq, name:S.name, reason, note, status:'idle', ts:Date.now(), synced:false,
   }));
   try {
+    spinner(true,'미가동 등록 저장 중...');
     for(const e of entries){
-      await pushToGS(e);            // ① 서버 우선 저장
-      await saveLog(e);             // ② IDB 저장 (synced 상태 포함)
+      await pushToGS(e);            // ① 서버 우선 저장 (실패 시 throw)
+      await saveLog(e);             // ② IDB 저장 (synced=true 포함)
       _pushIdleLogToSB(e).catch(()=>{}); // idle_logs 테이블 별도 저장 (fire-and-forget)
     }
-    const allSynced = entries.every(e=>e.synced);
-    toast(allSynced?`미가동 등록 완료 (${equipList.length}건)`:`로컬 저장 (자동 재시도 예정)`, allSynced?'ok':'warn');
+    toast(`미가동 등록 완료 ✓ (${equipList.length}건)`, 'ok');
     document.getElementById('f-idle-equip').value='';
     document.getElementById('f-idle-note').value='';
     document.querySelectorAll('#idle-reason-chips .chip.on').forEach(c=>c.classList.remove('on'));
   } catch(e) {
-    for(const e2 of entries){ try{ e2.synced=false; await saveLog(e2); }catch(_){} }
+    console.warn('[submitIdle]', e.message);
+    for(const e2 of entries){ e2.synced=false; try{ await saveLog(e2); }catch(_){} }
     scheduleRetrySync();
-    toast('로컬 저장됨 (자동 재시도 예정)','warn');
+    toast('로컬 저장됨 — 네트워크 복구 시 자동 재시도 (최대 5회)', 'warn', 3500);
   } finally {
-    btn.classList.remove('loading'); btn.disabled=false;
+    spinner(false); btn.classList.remove('loading'); btn.disabled=false;
   }
 }
 
@@ -599,7 +603,7 @@ function setOpsTab(tab, el){
   document.getElementById('ops-ana-panel').style.display   = tab==='ana'  ?'block':'none';
   if(tab==='input') initInputForm();
   if(tab==='log'){   renderOpsLog(); _fetchFromSB().catch(()=>{}).then(()=>{ if(curOpsTab==='log') _doRenderLog(); }); }
-  if(tab==='ana')  { renderAnalysis(); setTimeout(runAI,300); }
+  if(tab==='ana')  { renderAnalysis(); }
 }
 
 function initOpsPanel(tab){
@@ -2946,7 +2950,7 @@ function _updateHandoverProjChips(){
     : placeholder;
 }
 
-function _submitHandover(date) {
+async function _submitHandover(date) {
   const siteId = S.siteId==='all'
     ? (document.getElementById('tr-site-sel')?.value || getSites()[0]?.id || '')
     : S.siteId;
@@ -2980,12 +2984,25 @@ function _submitHandover(date) {
     note, recorder, reporterPhone,
     specs: [], ajEquip: '', ts: Date.now(), synced: false, status: '예정',
   };
+
+  // 로컬 우선 저장
   const records = getTransit();
   records.unshift(rec);
   saveTransit(records);
   _applyHandoverToEquipMaster(rec).catch(()=>{});
-  _syncToSupabase().catch(e => console.warn('[submitHandover sync]', e));
-  toast('인수인계 등록 완료', 'ok');
+
+  // 서버 우선 저장 (spinner + try/catch)
+  spinner(true, '인수인계 등록 중...');
+  try {
+    await _directPushTransit(rec);
+    toast('인수인계 등록 완료 ✓', 'ok');
+  } catch(e) {
+    console.warn('[submitHandover]', e.message);
+    scheduleRetrySync();
+    toast('로컬 저장됨 — 네트워크 복구 시 자동 재시도 (최대 5회)', 'warn', 3500);
+  } finally {
+    spinner(false);
+  }
   closeSheet('sh-transit-form');
   renderTransit();
 }
@@ -3754,27 +3771,8 @@ function renderAnalysis(){
     document.getElementById('ana-content').innerHTML=`<div class="locked-page"><div class="lp-ico"></div><div class="lp-title">협력사관리자 이상 접근 가능</div><div class="lp-desc">자동 분석은 협력사관리자 또는<br>AJ관리자만 이용할 수 있습니다.</div></div>`;
     return;
   }
-  const aiQBtns = [
-    {t:'missing',   l:'⚠ 미입력 업체'},
-    {t:'weekly',    l:'📋 주간 리포트'},
-    {t:'top-equip', l:'🏆 많이 쓴 장비'},
-    {t:'as-heavy',  l:'🔧 AS 잦은 장비'},
-    {t:'location',  l:'📍 위치별 배포율'},
-    {t:'overload',  l:'⚡ 과부하 장비'},
-    {t:'shortage',  l:'🚨 장비 부족'},
-    {t:'pattern',   l:'👥 업체 패턴'},
-    {t:'inefficient',l:'💤 비효율 장비'},
-    {t:'transit',   l:'🚛 반입/반출'},
-  ].map(q=>`<button class="ai-qbtn" onclick="_askAI('${q.t}')">${q.l}</button>`).join('');
-
   document.getElementById('ana-content').innerHTML=`
     <div style="padding:14px 14px 0">
-    <!-- 분석 버튼 -->
-    <div class="ai-panel" style="margin-bottom:10px">
-      <div class="ai-hd"><div class="ai-tag">데이터 분석</div><div style="font-size:12px;font-weight:700;margin-left:2px">운영 분석 리포트</div></div>
-      <div style="display:flex;flex-wrap:wrap;gap:5px;margin:8px 0">${aiQBtns}</div>
-      <div id="ai-query-result"></div>
-    </div>
     <!-- 미사용 장비 -->
     <div id="unused-equip-panel"></div>
     <div class="usage-card">
@@ -3802,7 +3800,6 @@ function renderAnalysis(){
   renderRank();
   renderUsage();
   renderHeatmap();
-  runAI();
 }
 
 function renderRank(){

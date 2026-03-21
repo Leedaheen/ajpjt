@@ -60,9 +60,12 @@ async function sbReq(table, method='GET', data=null, query=''){
         await new Promise(r => setTimeout(r, 3000));
         return await _exec();
       }
-      // 네트워크 오류 시 지수 백오프 재시도 (GET만)
-      if(method === 'GET' && (e?.message?.includes('Failed to fetch') || e?.name === 'TypeError')){
-        for(const delay of _SB_RETRY_DELAYS){
+      // 네트워크 오류 시 지수 백오프 재시도
+      // GET: 3회 / POST·PATCH (upsert는 멱등): 2회 (3s, 10s)
+      const isNetErr = e?.message?.includes('Failed to fetch') || e?.message?.includes('REQUEST_TIMEOUT') || e?.name === 'TypeError';
+      if(isNetErr){
+        const delays = method === 'GET' ? _SB_RETRY_DELAYS : [3000, 10000];
+        for(const delay of delays){
           await new Promise(r => setTimeout(r, delay));
           try { return await _exec(); } catch(_) {}
         }
@@ -416,7 +419,7 @@ async function _directPushTransit(rec){
     updated_at:       now,
   };
   try{
-    await sbBatchUpsert('transit',[row]);
+    await sbBatchUpsert('transit',[row],'record_id');
     const arr=getTransit();
     const idx=arr.findIndex(r=>r.id===rec.id);
     if(idx>=0){ arr[idx].synced=true; arr[idx].updatedAt=Date.now(); await saveTransit(arr); }
@@ -460,7 +463,7 @@ async function _directPushAS(req){
     updated_at:    now,
   };
   try{
-    await sbBatchUpsert('as_requests',[row]);
+    await sbBatchUpsert('as_requests',[row],'record_id');
     const arr=getAsReqs();
     const idx=arr.findIndex(r=>r.id===req.id);
     if(idx>=0){ arr[idx].synced=true; arr[idx].updatedAt=Date.now(); saveAsReqs(arr); }
@@ -790,47 +793,36 @@ async function _syncToGS(){
 async function pushToGS(entry){
   const sbUrl = DB.g(K.SB_URL,'');
   if(sbUrl){
-    // ── 서버 직접 저장 (로컬 우선 아님) ──
-    try{
-      const siteMap=Object.fromEntries(getSites().map(s=>[s.id,s.name]));
-      const row={
-        record_id:        entry.id||'',
-        date:             entry.date||'',
-        site_id:          entry.siteId||'',
-        site_name:        siteMap[entry.siteId]||entry.siteId||'',
-        company:          entry.company||'',
-        floor:            entry.floor||'',
-        location_detail:  entry.locationDetail||'',
-        equip:            entry.equip||'',
-        recorder:         entry.name||entry.recorder||'',
-        team:             entry.team||'',
-        project:          entry.project||'',
-        status:           entry.status||'',
-        start_time:       entry.startTime||'',
-        end_time:         entry.endTime||'',
-        used_hours:       entry.duration||0,
-        meter_start:      String(entry.meterStart||''),
-        meter_end:        String(entry.meterEnd||''),
-        off_reason:       entry.reason||entry.offReason||'',
-        created_at:       entry.createdAt?new Date(entry.createdAt).toISOString():new Date(entry.ts||Date.now()).toISOString(),
-        updated_at:       new Date().toISOString(),
-      };
-      await sbBatchUpsert('logs',[row],'record_id');
-      entry.synced=true;
-    } catch(e){
-      console.warn('[pushToGS Supabase]',e);
-      entry.synced=false;
-      scheduleRetrySync();
-    }
+    // ── 서버 직접 저장 — 실패 시 throw (호출자가 catch 처리) ──
+    const siteMap=Object.fromEntries(getSites().map(s=>[s.id,s.name]));
+    const row={
+      record_id:        entry.id||'',
+      date:             entry.date||'',
+      site_id:          entry.siteId||'',
+      site_name:        siteMap[entry.siteId]||entry.siteId||'',
+      company:          entry.company||'',
+      floor:            entry.floor||'',
+      location_detail:  entry.locationDetail||'',
+      equip:            entry.equip||'',
+      recorder:         entry.name||entry.recorder||'',
+      team:             entry.team||'',
+      project:          entry.project||'',
+      status:           entry.status||'',
+      start_time:       entry.startTime||'',
+      end_time:         entry.endTime||'',
+      used_hours:       entry.duration||0,
+      meter_start:      String(entry.meterStart||''),
+      meter_end:        String(entry.meterEnd||''),
+      off_reason:       entry.reason||entry.offReason||'',
+      created_at:       entry.createdAt?new Date(entry.createdAt).toISOString():new Date(entry.ts||Date.now()).toISOString(),
+      updated_at:       new Date().toISOString(),
+    };
+    await sbBatchUpsert('logs',[row],'record_id'); // 실패 시 throw
+    entry.synced=true;
   } else {
-    // ── Google Sheets 폴백 ──
-    try{
-      await gsReq('addLogs',{logs:[entry]});
-      entry.synced=true;
-    } catch(_e){
-      entry.synced=false;
-      scheduleRetrySync();
-    }
+    // ── Google Sheets 폴백 — 실패 시 throw ──
+    await gsReq('addLogs',{logs:[entry]});
+    entry.synced=true;
   }
 }
 
