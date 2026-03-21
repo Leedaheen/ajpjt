@@ -292,9 +292,8 @@ async function submitEnd(){
   entry.synced=false;
   try {
     spinner(true,'종료 저장 중...');
-    await saveLog(entry);          // IDB 업데이트
-    await pushToGS(entry);
-    _syncToSupabase().catch(e => console.warn('[submitEnd sync]', e)); // 즉시 서버 동기화
+    await pushToGS(entry);         // ① 서버(Supabase) 우선 저장 → entry.synced=true
+    await saveLog(entry);          // ② IDB 저장 (synced 상태 포함)
     toast(entry.synced?`사용 종료 완료 (${dur?fH(dur):'—'})`: '로컬 저장 (미연동)', entry.synced?'ok':'warn');
     updatePendingBanner(); updateLogBadge();
     // 이력 목록 즉시 갱신
@@ -302,7 +301,8 @@ async function submitEnd(){
     document.getElementById('f-meter-end').value='';
     populateOpenSessions();
   } catch(e) {
-    toast('저장 중 오류가 발생했습니다','err');
+    try{ entry.synced=false; await saveLog(entry); }catch(_){}
+    toast('로컬 저장됨 (서버 연결 실패)','warn');
   } finally {
     spinner(false); btn.classList.remove('loading'); btn.disabled=false;
   }
@@ -778,6 +778,35 @@ let _asFilter  = 'all'; // all / 대기 / 자재수급중 / 처리완료
 let _asTypeFilter = 'all'; // all / 작동불량 / 충전불량 / 누유의심 / 파손 / 자재요청 / 오류코드 / 기타
 let _asLocFilter  = 'all'; // all / 모듈동 / 1F외곽 / 1F~9F / 기타
 
+function _attachASListSentinel(canFullAS){
+  const sentinel = document.getElementById('as-list-sentinel');
+  const list     = document.getElementById('as-card-list');
+  if(!sentinel || !list) return;
+  const doLoad = ()=>{
+    const all   = window._asAllCards || [];
+    const idx   = window._asCardIdx  || 0;
+    const chunk = all.slice(idx, idx+20);
+    if(!chunk.length){ sentinel.remove(); return; }
+    const tmp = document.createElement('div');
+    tmp.innerHTML = chunk.map(r=>_asCard(r, canFullAS)).join('');
+    while(tmp.firstChild) list.appendChild(tmp.firstChild);
+    window._asCardIdx = idx + chunk.length;
+    const remaining = all.length - window._asCardIdx;
+    if(remaining <= 0) sentinel.remove();
+    else sentinel.textContent = `▾ ${remaining}건 더 보기`;
+  };
+  if('IntersectionObserver' in window){
+    const io = new IntersectionObserver(entries=>{
+      if(entries[0].isIntersecting){ io.disconnect(); doLoad(); }
+    }, {root: document.getElementById('as-content'), threshold: 0.1});
+    io.observe(sentinel);
+  } else {
+    sentinel.style.color = 'var(--blue)';
+    sentinel.style.fontWeight = '700';
+    sentinel.onclick = doLoad;
+  }
+}
+
 function renderASPage(){
   const el = document.getElementById('as-content');
   if(!el) return;
@@ -888,9 +917,14 @@ function renderASPage(){
 
 
   <!-- 카드 목록 -->
-  ${reqs.length===0?'<div class="empty"><div class="empty-txt">해당하는 AS 요청 없음</div></div>':
-    reqs.map(r=>_asCard(r, canFullAS)).join('')}
+  ${reqs.length===0?'<div class="empty"><div class="empty-txt">해당하는 AS 요청 없음</div></div>':`
+  <div id="as-card-list">${reqs.slice(0,20).map(r=>_asCard(r, canFullAS)).join('')}</div>
+  ${reqs.length>20?`<div id="as-list-sentinel" style="height:20px;text-align:center;padding:8px;color:var(--tx3);font-size:11px;cursor:pointer">▾ ${reqs.length-20}건 더 보기</div>`:''}`}
   </div>`;
+  // AS 카드 지연 로딩 초기화
+  window._asAllCards = reqs;
+  window._asCardIdx  = Math.min(20, reqs.length);
+  _attachASListSentinel(canFullAS);
 }
 
 // ── AS 댓글 헬퍼 ──────────────────────────────────────────────
@@ -1197,6 +1231,41 @@ function trDiff(date){
   return Math.round((d - now) / 86400000);
 }
 
+function _attachTrSentinels(container){
+  function _bindSentinel(sentinelSel, listId, getAll, getIdx, setIdx){
+    const sentinel = container?.querySelector(sentinelSel);
+    const list     = container?.querySelector('#'+listId);
+    if(!sentinel || !list) return;
+    const doLoad = ()=>{
+      const all   = getAll();
+      const idx   = getIdx();
+      const chunk = all.slice(idx, idx+20);
+      if(!chunk.length){ sentinel.remove(); return; }
+      const tmp = document.createElement('div');
+      tmp.innerHTML = chunk.map(r=>_trCard(r, r.id, false, false)).join('');
+      while(tmp.firstChild) list.appendChild(tmp.firstChild);
+      setIdx(idx + chunk.length);
+      const remaining = all.length - getIdx();
+      if(remaining <= 0) sentinel.remove();
+      else sentinel.textContent = `▾ ${remaining}건 더 보기`;
+    };
+    if('IntersectionObserver' in window){
+      const io = new IntersectionObserver(entries=>{
+        if(entries[0].isIntersecting){ io.disconnect(); doLoad(); }
+      }, {root: document.getElementById('transit-content'), threshold: 0.1});
+      io.observe(sentinel);
+    } else {
+      sentinel.style.color = 'var(--blue)';
+      sentinel.style.fontWeight = '700';
+      sentinel.onclick = doLoad;
+    }
+  }
+  _bindSentinel('.tr-done-sentinel',   'tr-done-list',
+    ()=>window._trDoneAll||[],   ()=>window._trDoneIdx||0,   v=>{ window._trDoneIdx=v; });
+  _bindSentinel('.tr-cancel-sentinel', 'tr-cancel-list',
+    ()=>window._trCancelAll||[], ()=>window._trCancelIdx||0, v=>{ window._trCancelIdx=v; });
+}
+
 function renderTransit(){
   const el=document.getElementById('transit-content');
   if(!el) return;
@@ -1347,17 +1416,23 @@ function renderTransit(){
 
   <!-- 완료 (상태 기준 — 완료 버튼 누른 것) -->
   ${done.length>0?`<div class="shd" style="margin-top:10px"><span class="shd-title" style="color:#22c55e">완료 (${done.length}건)</span></div>
-  ${done.slice(0,50).map(r=>_trCard(r, r.id, false, false)).join('')}`:''}
+  <div id="tr-done-list">${done.slice(0,20).map(r=>_trCard(r, r.id, false, false)).join('')}</div>
+  ${done.length>20?`<div class="tr-done-sentinel" style="height:20px;text-align:center;padding:8px;color:var(--tx3);font-size:11px;cursor:pointer">▾ ${done.length-20}건 더 보기</div>`:''}`:''}
 
   <!-- 취소 -->
   ${cancelled.length>0?`<div class="shd" style="margin-top:8px"><span class="shd-title" style="color:var(--tx3)">취소 (${cancelled.length}건)</span></div>
-  <div style="opacity:.5">${cancelled.slice(0,20).map(r=>_trCard(r, r.id, false, false)).join('')}</div>`:''}
+  <div id="tr-cancel-list" style="opacity:.5">${cancelled.slice(0,20).map(r=>_trCard(r, r.id, false, false)).join('')}</div>
+  ${cancelled.length>20?`<div class="tr-cancel-sentinel" style="height:20px;text-align:center;padding:8px;color:var(--tx3);font-size:11px;cursor:pointer">▾ ${cancelled.length-20}건 더 보기</div>`:''}`:''}
   </div>`;
 
   // AJ 관리자 — 반입 예정 카드의 인라인 장비번호 자동완성 초기화
   if (isAJ) {
     active.filter(r => r.type === 'in').forEach(r => _initInlineEquipAC(r.id, r.siteId));
   }
+  // 완료/취소 섹션 지연 로딩 (IntersectionObserver)
+  window._trDoneAll   = done;      window._trDoneIdx   = Math.min(20, done.length);
+  window._trCancelAll = cancelled; window._trCancelIdx = Math.min(20, cancelled.length);
+  _attachTrSentinels(el);
 }
 
 function _filterTransit(){
@@ -3242,7 +3317,7 @@ function onLogSearch(){
 let _logFiltered=[];
 let _logChunkIdx=0;
 let _logLoadTimer=null;
-const LOG_CHUNK=30;
+const LOG_CHUNK=20;
 const MAX_LOG_DOM=60; // DOM에 유지할 최대 로그카드 수 (2 chunk)
 
 /* DOM 상단 노드 제거 — 스크롤 위치 유지하며 오래된 카드 제거
