@@ -99,7 +99,8 @@ function initInputForm(){
   const fet=document.getElementById('f-endtime');   if(fet) fet.value=nowHM();
   document.getElementById('g-ico').textContent=S.role==='tech'?'기술':S.role==='sub'?'담당':'AJ';
   document.getElementById('g-name').textContent=S.name;
-  document.getElementById('g-sub').textContent=`${S.company} · ${S.siteName}`;
+  const _teamSuffix=S.team?` (${S.team}팀)`:'';
+  document.getElementById('g-sub').textContent=`${S.company}${_teamSuffix} · ${S.siteName}`;
   document.getElementById('f-site-disp').textContent=S.siteName;
   document.getElementById('f-co-disp').textContent=S.company;
   // reset
@@ -113,6 +114,13 @@ function initInputForm(){
   _setRO('f-date',     !isAJ2);
   _setRO('f-starttime',!isAJ2);
   _setRO('f-endtime',  !isAJ2);
+  // 팀명 자동 입력 (tech: 세션 팀명으로 pre-fill 후 수정 가능, AJ: 직접 입력)
+  const _fTeamEl = document.getElementById('f-team');
+  if(_fTeamEl){
+    _fTeamEl.value = S.team || '';
+    _fTeamEl.readOnly = false; // 모든 역할 수정 가능
+    _fTeamEl.style.opacity = ''; _fTeamEl.style.pointerEvents = '';
+  }
   // 프로젝트 칩 채우기
   const _opsProjects = getSites().find(s=>s.id===S?.siteId)?.projects||[];
   const _opsProjEl = document.getElementById('ops-project-chips');
@@ -206,10 +214,11 @@ async function submitStart(){
   }
   const btn=document.getElementById('btn-start');
   btn.classList.add('loading'); btn.disabled=true;
+  const team = document.getElementById('f-team')?.value.trim() || S.team || '';
   const entry={
     id:`${S.siteId}-${date}-${S.company}-${equip}-${Date.now().toString(36)}`,
     siteId:S.siteId, date, company:S.company,
-    floor:floors, locationDetail, equip, name:S.name, project,
+    floor:floors, locationDetail, equip, name:S.name, project, team,
     meterStart:+document.getElementById('f-meter-start').value||null,
     meterEnd:null, duration:null,
     startTime:document.getElementById('f-starttime').value,
@@ -246,6 +255,7 @@ async function submitStart(){
     document.getElementById('f-starttime').value=nowHM();
     const _fsel=document.getElementById('f-floor-select'); if(_fsel) _fsel.value='';
     const _fdet=document.getElementById('f-location-detail'); if(_fdet) _fdet.value='';
+    // 팀명은 세션 팀명으로 유지 (다음 신청에도 동일 팀이므로)
     document.querySelectorAll('#ops-project-chips .chip.on').forEach(c=>c.classList.remove('on'));
   } catch(e) {
     toast('저장 중 오류가 발생했습니다','err');
@@ -454,22 +464,22 @@ function _getLogPanelHTML(){
       <div class="floor-fc" data-floor="8F" onclick="toggleFloorF('8F')">8F</div>
       <div class="floor-fc" data-floor="기타" onclick="toggleFloorF('기타')">기타</div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr auto;gap:6px;margin-bottom:6px;align-items:center">
+    <div style="display:grid;grid-template-columns:1fr 72px;gap:6px;margin-bottom:6px;align-items:stretch">
       <div style="display:flex;gap:4px;align-items:center;min-width:0">
-        <input type="date" class="fg-input" id="log-date-from" style="flex:1;padding:5px 6px;font-size:11px;min-width:0" onchange="renderLog()">
+        <input type="date" class="fg-input" id="log-date-from" style="flex:1;height:30px;padding:0 6px;font-size:11px;min-width:0;box-sizing:border-box" onchange="renderLog()">
         <span style="color:var(--tx3);font-size:11px;flex-shrink:0">~</span>
-        <input type="date" class="fg-input" id="log-date-to" style="flex:1;padding:5px 6px;font-size:11px;min-width:0" onchange="renderLog()">
+        <input type="date" class="fg-input" id="log-date-to" style="flex:1;height:30px;padding:0 6px;font-size:11px;min-width:0;box-sizing:border-box" onchange="renderLog()">
       </div>
-      <select id="log-status-sel" class="fg-select" style="padding:5px 8px;font-size:11px" onchange="setLFSel(this.value)">
+      <select id="log-status-sel" class="fg-select" style="height:30px;padding:0 4px;font-size:11px;box-sizing:border-box" onchange="setLFSel(this.value)">
         <option value="all">전체 상태</option>
         <option value="open">사용중</option>
         <option value="done">종료</option>
         <option value="today">오늘</option>
       </select>
     </div>
-    <div style="display:grid;grid-template-columns:85% 15%;gap:6px;align-items:stretch">
-      <input class="log-search" id="log-q" placeholder="업체·장비번호·사용자 검색..." oninput="onLogSearch()" style="margin-bottom:0">
-      <button class="btn-ghost" style="padding:0;font-size:10px;white-space:nowrap" onclick="clearAllFilters()">초기화</button>
+    <div style="display:grid;grid-template-columns:1fr 72px;gap:6px;align-items:stretch">
+      <input class="log-search" id="log-q" placeholder="업체·장비번호·사용자 검색..." oninput="onLogSearch()" style="height:30px;margin-bottom:0;box-sizing:border-box">
+      <button class="btn-ghost" style="height:30px;padding:0;font-size:10px;white-space:nowrap;box-sizing:border-box" onclick="clearAllFilters()">초기화</button>
     </div>
   </div>
   <div class="log-body" id="log-body"></div>`;
@@ -528,6 +538,7 @@ function _getInputFormHTML(){
       <label class="fg-lbl">장비번호 <span class="req">*</span></label>
       <input type="text" class="fg-input" id="f-equip" placeholder="예: GK228" style="text-transform:uppercase" autocomplete="off">
     </div>
+    <div class="fg"><label class="fg-lbl">팀명</label><input type="text" class="fg-input" id="f-team" placeholder="소속 팀명 (예: 전기팀)" maxlength="30"></div>
     <div class="fg"><label class="fg-lbl">신청 시작시간</label><input type="time" class="fg-input" id="f-starttime"></div>
     <div class="fg"><label class="fg-lbl">계기판 시작 시간 (h) <span class="req">*</span></label><input type="number" class="fg-input" id="f-meter-start" placeholder="예: 1234.5" step="0.1" min="0"></div>
   </div>
@@ -3149,22 +3160,29 @@ function _renderLogChunk(el){
       l.reason==='휴무'?'#1D4ED8':
       (l.reason==='작동불량'||l.reason==='AS대기')?'#DC2626':'#6b7280';
     const stLabel=l.status==='start'?'START':l.status==='end'?'FINISH':'미사용';
+    const teamTag = l.team ? ` <span style="font-size:9px;color:var(--tx3)">(${esc(l.team)}팀)</span>`
+      : (l.team===''||l.team==null) && l.status!=='off' ? '' : '';
+    // 상세위치 + 프로젝트 조합
+    const _locParts = [l.locationDetail||'', l.project||''].filter(Boolean);
+    const _locStr = _locParts.length ? _locParts.join(' · ') : '—';
     div.innerHTML=`<div class="lc-top">
-        <div class="lc-co">
-          <div class="lc-dot" style="background:${col}"></div>
-          <div class="lc-name">${l.company}</div>
-          <span style="font-size:9px;font-weight:800;margin-left:5px;padding:1px 5px;border-radius:4px;background:${stColor}22;color:${stColor}">${stLabel}</span>
-          <span style="font-size:8px;color:var(--tx3);margin-left:4px">${l.synced?'●':'○'}</span>
+        <div class="lc-co" style="flex:1;min-width:0">
+          <div class="lc-dot" style="background:${col};flex-shrink:0"></div>
+          <div class="lc-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(l.company)}${teamTag}</div>
+          <span style="font-size:9px;font-weight:800;margin-left:5px;padding:1px 5px;border-radius:4px;background:${stColor}22;color:${stColor};flex-shrink:0">${stLabel}</span>
+          <span style="font-size:8px;color:var(--tx3);margin-left:4px;flex-shrink:0">${l.synced?'●':'○'}</span>
         </div>
-        <div class="lc-time">${fmtDate(l.date)} ${fmtTS(l.ts)}</div>
+        <div class="lc-time" style="flex-shrink:0;white-space:nowrap">${l.date||''} ${fmtTS(l.ts)}</div>
       </div>
-      <div class="lc-grid">
-        <div class="lc-item">사용일: <span>${fmtDate(l.date)}</span></div>
-        <div class="lc-item">장비: <span>${l.equip||'—'}</span></div>
-        <div class="lc-item">층수: <span>${l.floor||'—'}</span></div>
-        <div class="lc-item">사용자: <span>${l.name||'—'}</span></div>
-        ${l.startTime?`<div class="lc-item">시작: <span>${l.startTime}</span></div>`:''}
-        ${l.endTime  ?`<div class="lc-item">종료: <span>${l.endTime}</span></div>`:''}
+      <div style="font-size:11px;color:var(--tx2);padding:4px 0 2px;line-height:1.6">
+        <span style="font-family:monospace;font-weight:700;color:var(--tx)">${esc(l.equip)||'—'}</span>
+        <span style="color:var(--tx3);margin:0 4px">/</span>
+        <span>${esc(l.floor)||'—'}</span>
+        <span style="color:var(--tx3);margin:0 4px">/</span>
+        <span style="color:var(--tx2)">${esc(_locStr)}</span>
+        <span style="color:var(--tx3);margin:0 4px">/</span>
+        <span>${esc(l.name)||'—'}</span>
+        ${l.startTime?`<span style="color:var(--tx3);margin:0 4px">·</span><span style="color:var(--tx3)">${l.startTime}${l.endTime?'~'+l.endTime:''}</span>`:''}
       </div>
       ${l.duration!=null?`<div class="lc-dur">사용시간: <b>${fH(l.duration)}</b>${l.meterStart?` · 계기 ${l.meterStart}h → ${l.meterEnd}h`:''}</div>`:''}
       ${l.reason?`<div class="lc-dur" style="color:${stColor};font-weight:600">${l.reason}</div>`:''}`;

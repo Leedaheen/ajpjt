@@ -175,6 +175,9 @@ function initLogin(){
     if(saved.siteId && document.getElementById('techSite')) document.getElementById('techSite').value=saved.siteId;
     if(saved.siteId) syncCoList('techSite');
     if(saved.company && document.getElementById('techCompany')) document.getElementById('techCompany').value=saved.company;
+    // 팀명 자동 복원
+    const _savedTeam = saved.team || DB.g('last_tech_team','');
+    if(_savedTeam && document.getElementById('techTeam')) document.getElementById('techTeam').value=_savedTeam;
   }
 }
 
@@ -1116,9 +1119,11 @@ async function doLogin(role){
     const co=document.getElementById('techCompany').value;
     const name=document.getElementById('techName').value.trim();
     const phone=document.getElementById('techPhone')?.value.trim()||'';
+    const team=document.getElementById('techTeam')?.value.trim()||'';
     if(!site||!co||!name||!phone){ toast('모든 항목을 입력해주세요','err'); return; }
     if(!privState.p1||!privState.p2){ toast('필수 동의 항목에 체크해주세요','err'); return; }
-    S={role:'tech',name,phone,company:co,siteId:site,siteName:getSites().find(s=>s.id===site)?.name||site,loginAt:Date.now()};
+    if(team) DB.s('last_tech_team', team); // 다음 로그인 시 자동 복원
+    S={role:'tech',name,phone,company:co,siteId:site,siteName:getSites().find(s=>s.id===site)?.name||site,team,loginAt:Date.now()};
     // 기술인 멤버 저장 (첫 로그인 시 서버에 즉시 등록)
     const _techMbrs=getMembers();
     const _alreadyTech=_techMbrs.some(m=>m.name===name&&m.phone===phone&&m.company===co&&m.siteId===site);
@@ -1126,7 +1131,7 @@ async function doLogin(role){
       const _newTech={id:'tech-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),
         name,company:co,siteId:site,siteName:getSites().find(s=>s.id===site)?.name||site,
         phone,title:'기술인',role:'tech',status:'approved',google_email:'',
-        joinedAt:Date.now(),synced:false};
+        team,joinedAt:Date.now(),synced:false};
       _techMbrs.push(_newTech);
       saveMembers(_techMbrs);
       // 즉시 Supabase 저장 (fire-and-forget)
@@ -1135,6 +1140,7 @@ async function doLogin(role){
         record_id:_newTech.id,name:_newTech.name,company:_newTech.company,
         site_id:_newTech.siteId,site_name:_sm[_newTech.siteId]||_newTech.siteId||'',
         phone:_newTech.phone,title:_newTech.title,role:'tech',status:'approved',google_email:'',
+        team:_newTech.team||'',
         joined_at:new Date(_newTech.joinedAt).toISOString()
       }],'?on_conflict=record_id').then(()=>{
         _newTech.synced=true; saveMembers(getMembers());
