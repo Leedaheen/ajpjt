@@ -398,11 +398,33 @@ async function _fetchFromSB(){
     const since=new Date(); since.setDate(since.getDate()-30);
     const sinceStr=since.toISOString();
     // select=* 대신 필요한 컬럼만 지정 → payload 30~50% 절감
-    const TR_COLS  = 'record_id,id,date,type,site_id,site_name,company,equip_specs,aj_equip,reporter_name,reporter_phone,manager_name,manager_phone,manager_location,note,status,messages,dispatch,plan_type,plan_name,created_at,updated_at';
-    const AS_COLS  = 'record_id,id,date,site_id,site_name,company,equip,location,fault_type,description,reporter_name,reporter_phone,status,tech_name,tech_phone,resolved_at,resolve_note,requested_at,material_at,comments,worker_name,worker_phone,photo_data,created_at,updated_at';
-    const [trRows,asRows]=await Promise.all([
-      sbReq('transit','GET',null,`?select=${TR_COLS}&created_at=gte.${sinceStr}${siteFilter}&order=created_at.desc&limit=200`),
-      sbReq('as_requests','GET',null,`?select=${AS_COLS}${siteFilter}&order=created_at.desc&limit=200`),
+    const TR_COLS = 'record_id,id,date,type,site_id,site_name,company,equip_specs,aj_equip,reporter_name,reporter_phone,manager_name,manager_phone,manager_location,note,status,messages,dispatch,created_at,updated_at';
+    const AS_COLS = 'record_id,id,date,site_id,site_name,company,equip,location,fault_type,description,reporter_name,reporter_phone,status,tech_name,tech_phone,resolved_at,resolve_note,requested_at,material_at,comments,worker_name,worker_phone,photo_data,created_at,updated_at';
+
+    // 컬럼 오류 시 select=* fallback 헬퍼
+    const _sbGetWithFallback = async (table, q, fallbackQ) => {
+      try {
+        return await sbReq(table, 'GET', null, q);
+      } catch(e) {
+        if(e?.message?.includes('column') || e?.message?.includes('PGRST')){
+          console.warn(`[_fetchFromSB] ${table} 컬럼 오류 — select=* fallback:`, e.message);
+          return sbReq(table, 'GET', null, fallbackQ);
+        }
+        throw e;
+      }
+    };
+
+    const [trRows, asRows] = await Promise.all([
+      _sbGetWithFallback(
+        'transit',
+        `?select=${TR_COLS}&created_at=gte.${sinceStr}${siteFilter}&order=created_at.desc&limit=200`,
+        `?select=*&created_at=gte.${sinceStr}${siteFilter}&order=created_at.desc&limit=200`
+      ),
+      _sbGetWithFallback(
+        'as_requests',
+        `?select=${AS_COLS}${siteFilter}&order=created_at.desc&limit=200`,
+        `?select=*${siteFilter}&order=created_at.desc&limit=200`
+      ),
     ]);
     let changed=false;
     if(Array.isArray(trRows)&&trRows.length){

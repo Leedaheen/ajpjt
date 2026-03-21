@@ -243,7 +243,7 @@ async function _syncToSupabase(){
         off_reason:  l.offReason||'',
         created_at:  l.createdAt ? new Date(l.createdAt).toISOString() : new Date(l.ts||Date.now()).toISOString(),
       }));
-      await sbBatchUpsert('logs', rows);
+      await sbBatchUpsert('logs', rows, 'record_id');
       await IDB.markSynced('logs', unsyncLogs.map(l=>l.id)).catch(()=>{});
       _cache.todayLogs = null;
     })(),
@@ -272,7 +272,7 @@ async function _syncToSupabase(){
         created_at:       t.createdAt ? new Date(t.createdAt).toISOString() : new Date().toISOString(),
         updated_at:       t.updatedAt ? new Date(t.updatedAt).toISOString() : new Date().toISOString(),
       }));
-      await sbBatchUpsert('transit', rows);
+      await sbBatchUpsert('transit', rows, 'record_id');
       await IDB.markSynced('transit', unsyncTr.map(t=>t.id)).catch(()=>{});
       _cache.transit = null; _cache.transitBySite = null;
     })(),
@@ -303,7 +303,7 @@ async function _syncToSupabase(){
         updated_at:    a.updatedAt  ? new Date(a.updatedAt).toISOString()  : new Date(a.createdAt||Date.now()).toISOString(),
         ...(a.photoThumb ? { photo_data: a.photoThumb } : {}),
       }));
-      await sbBatchUpsert('as_requests', rows);
+      await sbBatchUpsert('as_requests', rows, 'record_id');
       await IDB.markSynced('as_requests', unsyncAS.map(a=>a.id)).catch(()=>{});
       _cache.asReqs = null; _cache.asBySite = null;
     })(),
@@ -321,7 +321,7 @@ async function _syncToSupabase(){
         title:     m.title||'',
         joined_at: new Date(m.joinedAt||Date.now()).toISOString()
       }));
-      await sbBatchUpsert('members', rows);
+      await sbBatchUpsert('members', rows, 'record_id');
       await IDB.markSynced('members', unsyncM.map(m=>m.id)).catch(()=>{});
       _cache.members = null;
     })(),
@@ -354,7 +354,7 @@ async function _syncToSupabase(){
       created_at: new Date().toISOString()
     }));
     try {
-      await sbBatchUpsert('equipment', rows);
+      await sbBatchUpsert('equipment', rows, 'record_id');
       unsyncEq.forEach(e => e.synced = true);
       await saveEquipMaster(allEquip);
     } catch(err) {
@@ -415,7 +415,7 @@ async function _directPushTransit(rec){
     dispatch:         rec.dispatch||'',
     plan_type:        rec.planType||'',
     plan_name:        rec.planName||'',
-    created_at:       now,
+    created_at:       rec.createdAt ? new Date(rec.createdAt).toISOString() : now,
     updated_at:       now,
   };
   try{
@@ -459,7 +459,7 @@ async function _directPushAS(req){
     worker_phone:  req.workerPhone||'',
     // 썸네일(~5KB base64) 저장 — 컬럼 없으면 sbBatchUpsert가 자동 제거
     ...(req.photoThumb ? { photo_data: req.photoThumb } : {}),
-    created_at:    now,
+    created_at:    req.createdAt ? new Date(req.createdAt).toISOString() : now,
     updated_at:    now,
   };
   try{

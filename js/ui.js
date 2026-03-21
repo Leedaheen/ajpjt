@@ -1342,6 +1342,13 @@ function _asCard(r, canAct){
     }
   }
 
+  // 서버 미동기화 배너
+  const asSyncFailBanner = (!r.synced) ? `
+  <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;padding:5px 8px;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.25);border-radius:6px">
+    <span style="font-size:10px;color:#f87171;flex:1">⚠ 서버 미등록 — 네트워크 오류</span>
+    <button onclick="_retryASPush('${r.id}')" style="font-size:10px;font-weight:700;padding:3px 8px;background:rgba(248,113,113,.2);border:1px solid rgba(248,113,113,.4);border-radius:5px;color:#f87171;cursor:pointer">재등록</button>
+  </div>` : '';
+
   return `<div class="lcard" style="margin-bottom:10px">
     <!-- 헤더: 업체 + 상태 + 날짜 -->
     <div class="lc-top">
@@ -1389,6 +1396,7 @@ function _asCard(r, canAct){
     </div>
 
     <!-- 처리 정보 + 댓글 버블 -->
+    ${asSyncFailBanner}
     ${r.materialAt && r.status==='자재수급중'?`<div style="font-size:10px;color:#f59e0b;margin-bottom:4px">⏳ 자재수급중 전환: ${new Date(r.materialAt).toLocaleDateString('ko-KR',{month:'2-digit',day:'2-digit'})} ${new Date(r.materialAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})}</div>`:''}
     ${resolvedBlock}
     ${_asCommentBubbles(r)}
@@ -2202,6 +2210,13 @@ function _trCard(r, seqNo, canEdit, canMsg){
   const ajMsgHtml = threadBlock;
   const ajInputHtml = ''; // 댓글 방식으로 통합
 
+  // 서버 미동기화 배너
+  const syncFailBanner = (!r.synced) ? `
+  <div style="display:flex;align-items:center;gap:6px;margin-top:6px;padding:5px 8px;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.25);border-radius:6px">
+    <span style="font-size:10px;color:#f87171;flex:1">⚠ 서버 미등록 — 네트워크 오류</span>
+    <button onclick="_retryTransitPush('${r.id}')" style="font-size:10px;font-weight:700;padding:3px 8px;background:rgba(248,113,113,.2);border:1px solid rgba(248,113,113,.4);border-radius:5px;color:#f87171;cursor:pointer">재등록</button>
+  </div>` : '';
+
   // 완료 확인자
   const doneByHtml = isDone && r.doneBy ? `<div style="text-align:center;font-size:10px;color:var(--tx3);margin-top:4px">완료 확인: ${r.doneBy}</div>` : '';
 
@@ -2276,6 +2291,7 @@ function _trCard(r, seqNo, canEdit, canMsg){
         ${ajInputHtml}
         ${actionHtml}
         ${doneByHtml}
+        ${syncFailBanner}
         <div style="text-align:right;font-size:9px;color:var(--tx3);font-family:monospace;margin-top:4px">${seqNo?'No.'+seqNo:''}</div>
       </div>
     </div>
@@ -2338,6 +2354,7 @@ function openDispatchPopup(id){
       <div id="dispatch-rows">${initialRows}</div>
       <button onclick="_dispatchAddRow()" style="width:100%;padding:8px;margin-bottom:10px;background:rgba(255,255,255,.05);border:1px dashed var(--br);border-radius:8px;color:var(--tx2);font-size:12px;cursor:pointer">+ 차량 추가</button>
       <div style="display:flex;gap:8px;margin-top:6px">
+        ${list.length ? `<button onclick="_copyDispatchText('${id}')" style="flex:1;padding:10px;background:rgba(96,165,250,.12);color:#60a5fa;border:1px solid rgba(96,165,250,.3);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">📋 복사</button>` : ''}
         <button onclick="saveDispatch('${id}')" style="flex:1;padding:10px;background:#DE1F23;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">저장</button>
         <button onclick="document.getElementById('dispatch-popup').remove()" style="flex:1;padding:10px;background:var(--bg2);color:var(--tx2);border:1px solid var(--br);border-radius:8px;font-size:13px;cursor:pointer">닫기</button>
       </div>
@@ -2360,7 +2377,10 @@ function openDispatchPopup(id){
       </div>
       <div style="font-size:11px;color:var(--tx3);margin-bottom:14px">${r.company} · ${r.date}</div>
       ${viewHtml}
-      <button onclick="document.getElementById('dispatch-popup').remove()" style="width:100%;margin-top:8px;padding:10px;background:var(--bg2);color:var(--tx2);border:1px solid var(--br);border-radius:8px;font-size:13px;cursor:pointer">닫기</button>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        ${list.length ? `<button onclick="_copyDispatchText('${id}')" style="flex:1;padding:10px;background:rgba(96,165,250,.12);color:#60a5fa;border:1px solid rgba(96,165,250,.3);border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">📋 복사</button>` : ''}
+        <button onclick="document.getElementById('dispatch-popup').remove()" style="flex:1;padding:10px;background:var(--bg2);color:var(--tx2);border:1px solid var(--br);border-radius:8px;font-size:13px;cursor:pointer">닫기</button>
+      </div>
     </div>`;
   }
   pop.addEventListener('click', e=>{ if(e.target===pop) pop.remove(); });
@@ -2393,6 +2413,65 @@ async function saveDispatch(id){
   }
   toast(list.length ? `배차정보 ${list.length}대 저장됨` : '배차정보 삭제됨', 'ok');
   renderTransit();
+  if(list.length) openDispatchPopup(id); // 저장 후 확인/복사 팝업 재오픈
+}
+
+function _copyDispatchText(id){
+  const r = getTransit().find(x=>x.id===id);
+  if(!r) return;
+  const list = _parseDispatch(r.dispatch);
+  if(!list.length){ toast('배차정보가 없습니다','warn'); return; }
+  const lines = list.map((d,i)=>{
+    const parts = [`[${i+1}번 차량]`];
+    if(d.driver) parts.push(`기사: ${d.driver}`);
+    if(d.carNo)  parts.push(`차량번호: ${d.carNo}`);
+    if(d.phone)  parts.push(`연락처: ${d.phone}`);
+    return parts.join('\n');
+  });
+  const text = `[배차정보] ${r.company} (${r.date})\n\n${lines.join('\n\n')}`;
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(text).then(()=>toast('배차정보 복사됨 ✓','ok')).catch(()=>{
+      const t=document.createElement('textarea'); t.value=text;
+      document.body.appendChild(t); t.select(); document.execCommand('copy');
+      document.body.removeChild(t); toast('배차정보 복사됨 ✓','ok');
+    });
+  } else {
+    const t=document.createElement('textarea'); t.value=text;
+    document.body.appendChild(t); t.select(); document.execCommand('copy');
+    document.body.removeChild(t); toast('배차정보 복사됨 ✓','ok');
+  }
+}
+
+async function _retryTransitPush(id){
+  const recs = getTransit();
+  const rec = recs.find(r=>r.id===id);
+  if(!rec){ toast('레코드를 찾을 수 없습니다','err'); return; }
+  const btn = event?.target;
+  if(btn){ btn.textContent='재등록 중...'; btn.disabled=true; }
+  try {
+    await _directPushTransit(rec);
+    toast('서버 등록 완료 ✓','ok');
+    renderTransit();
+  } catch(e) {
+    toast('재등록 실패 — 네트워크를 확인하세요','err');
+    if(btn){ btn.textContent='재등록'; btn.disabled=false; }
+  }
+}
+
+async function _retryASPush(id){
+  const arr = getAsReqs();
+  const req = arr.find(r=>r.id===id);
+  if(!req){ toast('레코드를 찾을 수 없습니다','err'); return; }
+  const btn = event?.target;
+  if(btn){ btn.textContent='재등록 중...'; btn.disabled=true; }
+  try {
+    await _directPushAS(req);
+    toast('서버 등록 완료 ✓','ok');
+    renderASPage();
+  } catch(e) {
+    toast('재등록 실패 — 네트워크를 확인하세요','err');
+    if(btn){ btn.textContent='재등록'; btn.disabled=false; }
+  }
 }
 
 function shareTransitKakao(recId){
