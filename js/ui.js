@@ -7,147 +7,198 @@ function renderHome(){
 }
 
 async function _renderHomeAsync(){
+  const dash=document.getElementById('home-dash'); if(!dash) return;
   const siteId=S.siteId==='all'?null:S.siteId;
   const td=today();
 
-  // 오늘 로그
+  // ── 데이터 수집 ──
   let todayAll=await getTodayLogs();
   const todayLogs=siteId?todayAll.filter(l=>l.siteId===siteId):todayAll;
   const completedToday=todayLogs.filter(l=>l.status==='end');
-
-  // KPI 업데이트
   const rate=todayLogs.length>0?completedToday.length/todayLogs.length:null;
   const totalHrs=completedToday.reduce((s,l)=>s+(+l.duration||0),0);
-  document.getElementById('kpi-rate').textContent=rate!==null?fPct(rate):'—';
-  document.getElementById('kpi-hrs').textContent=totalHrs>0?fH(totalHrs):'—';
-  document.getElementById('kpi-on').textContent=completedToday.length;
-  document.getElementById('kpi-entries').textContent=todayLogs.length;
 
-  // 반입반출 데이터
-  const allTr=getTransit().filter(r=>siteId?r.siteId===siteId:true);
-  const pendingTr=allTr.filter(r=>r.date===td&&!['반입완료','반출완료','인계완료','취소'].includes(r.status));
-  const doneTrCount=allTr.filter(r=>['반입완료','반출완료','인계완료'].includes(r.status)).length;
-  const ddayTr=pendingTr.slice(0,4);
-
-  // AS 데이터
-  const allAS=getAsReqs().filter(r=>siteId?r.siteId===siteId:true);
-  const openAS=allAS.filter(r=>r.status!=='처리완료');
-  // AS 순번맵 (시간순)
-  const asSeqSorted=[...allAS].sort((a,b)=>(a.requestedAt||a.ts||0)-(b.requestedAt||b.ts||0));
-  const asSeqLocal=new Map(asSeqSorted.map((r,i)=>[r.id,i+1]));
-  const recentOpenAS=[...openAS].sort((a,b)=>(b.requestedAt||0)-(a.requestedAt||0)).slice(0,3);
+  const OUTDOOR_FLOORS=['모듈동','1F외곽'];
+  const isOut=l=>OUTDOOR_FLOORS.some(f=>(l.floor||'').includes(f)||(l.locationDetail||'').includes(f));
+  const todayOut=todayLogs.filter(isOut);
+  const todayIn=todayLogs.filter(l=>!isOut(l));
+  const outRate=todayOut.length>0?todayOut.filter(l=>l.status==='end').length/todayOut.length:null;
+  const inRate=todayIn.length>0?todayIn.filter(l=>l.status==='end').length/todayIn.length:null;
 
   // 업체별 현황
   const sites=siteId?[{id:siteId}]:getSites();
   const coRows=[];
-  for(const site of sites){
+  for(const site of sites)
     for(const co of getCos(site.id)){
       const cl=todayLogs.filter(l=>l.siteId===site.id&&l.company===co.name);
       if(!cl.length) continue;
-      const r=cl.filter(l=>l.status==='end').length/cl.length;
-      coRows.push({...co,rate:r,cnt:cl.length,siteId:site.id});
+      coRows.push({...co,rate:cl.filter(l=>l.status==='end').length/cl.length,cnt:cl.length});
     }
-  }
   coRows.sort((a,b)=>(b.rate||0)-(a.rate||0));
 
   // 미입력 업체
-  const allCosForSite=[];
-  for(const site of sites) for(const co of getCos(site.id)) allCosForSite.push({...co,siteId:site.id});
+  const allCos=[]; for(const s of sites) for(const co of getCos(s.id)) allCos.push({...co,siteId:s.id});
   const submittedCos=new Set(todayLogs.map(l=>l.company));
-  const missingCos=allCosForSite.filter(co=>!submittedCos.has(co.name));
+  const missingCos=allCos.filter(co=>!submittedCos.has(co.name));
 
-  // ── 인사이트 바 ──
-  const ibEl=document.getElementById('home-insight-bar');
-  if(ibEl){
-    const ins=[];
-    if(openAS.length>0) ins.push({color:'#f87171',bg:'rgba(248,113,113,.1)',ico:'🔧',text:`미처리 AS <b>${openAS.length}건</b>`,go:'pg-as'});
-    if(pendingTr.length>0) ins.push({color:'#60a5fa',bg:'rgba(96,165,250,.1)',ico:'🚛',text:`오늘 반입/반출 대기 <b>${pendingTr.length}건</b>`,go:'pg-transit'});
-    if(missingCos.length>0&&(S.role==='aj'||S.role==='sub')){
-      const names=missingCos.slice(0,3).map(c=>c.name).join(', ');
-      ins.push({color:'#fbbf24',bg:'rgba(251,191,36,.1)',ico:'⚠️',text:`미입력: <b>${names}${missingCos.length>3?' 외 '+(missingCos.length-3)+'건':''}</b>`,go:'pg-ops'});
+  // 반입반출
+  const allTr=getTransit().filter(r=>siteId?r.siteId===siteId:true);
+  const todayTr=allTr.filter(r=>r.date===td);
+  const tmrw=new Date(); tmrw.setDate(tmrw.getDate()+1);
+  const tmrwStr=tmrw.toISOString().split('T')[0];
+  const tmrwTr=allTr.filter(r=>r.date===tmrwStr);
+  const pendingToday=todayTr.filter(r=>!['반입완료','반출완료','인계완료','취소'].includes(r.status));
+  const doneToday=todayTr.filter(r=>['반입완료','반출완료','인계완료'].includes(r.status));
+  const pendingTmrw=tmrwTr.filter(r=>!['반입완료','반출완료','인계완료','취소'].includes(r.status));
+
+  // AS
+  const allAS=getAsReqs().filter(r=>siteId?r.siteId===siteId:true);
+  const openAS=allAS.filter(r=>r.status!=='처리완료');
+  const waitAS=openAS.filter(r=>r.status==='대기'||!r.status||r.status==='신청');
+  const supplyAS=openAS.filter(r=>r.status==='자재수급중');
+  const doneAS=allAS.filter(r=>r.status==='처리완료');
+  const doneRate=allAS.length>0?Math.round(doneAS.length/allAS.length*100):null;
+  const todayAS=allAS.filter(r=>{const d=r.requestedAt?new Date(r.requestedAt).toISOString().split('T')[0]:(r.date||''); return d===td;});
+
+  // ── 날씨 fetch (병렬) ──
+  let wx=null;
+  try{
+    const lat=DB.g('site_lat','37.0505'), lng=DB.g('site_lng','127.0752');
+    const wr=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=precipitation_sum,temperature_2m_max,wind_speed_10m_max,weathercode&timezone=Asia%2FSeoul&forecast_days=2`);
+    const wd=await wr.json();
+    if(wd.daily){
+      const idx=wd.daily.time.indexOf(td);
+      if(idx>=0) wx={rain:wd.daily.precipitation_sum[idx]||0,wind:wd.daily.wind_speed_10m_max[idx]||0,temp:wd.daily.temperature_2m_max[idx],code:wd.daily.weathercode[idx]||0};
     }
-    ibEl.innerHTML=ins.length
-      ?`<div style="padding:6px 14px 0">${ins.map(i=>`<div onclick="goTab('${i.go}')" style="display:flex;align-items:center;gap:8px;padding:8px 12px;margin-bottom:6px;background:${i.bg};border-radius:9px;cursor:pointer;border:1px solid ${i.color}22"><span style="font-size:14px">${i.ico}</span><span style="font-size:11px;color:var(--tx);line-height:1.4">${i.text}</span><span style="margin-left:auto;font-size:14px;color:${i.color}">›</span></div>`).join('')}</div>`
-      :'';
-  }
+  }catch(_){}
 
-  // ── 반입/반출 섹션 ──
-  const trEl=document.getElementById('home-transit-sec');
-  if(trEl){
-    const trPreview=ddayTr.map(r=>{
-      const isIn=r.type==='in'; const clr=isIn?'#60a5fa':'#fb923c';
-      return `<div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--br)">
-        <span style="font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:${isIn?'rgba(96,165,250,.15)':'rgba(251,146,60,.15)'};color:${clr};flex-shrink:0">${isIn?'반입':'반출'}</span>
-        <span style="font-size:11px;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.company||'—'}</span>
-        <span style="font-size:10px;font-family:monospace;color:#60a5fa;flex-shrink:0">${(r.equip||'').split(/[\s,]/)[0]||'—'}</span>
-        <span style="font-size:9px;color:#fbbf24;font-weight:700;flex-shrink:0">★D-DAY</span>
-      </div>`;
-    }).join('');
-    trEl.innerHTML=`<div style="background:var(--bg2);border:1px solid var(--br);border-radius:12px;margin-bottom:10px;overflow:hidden">
-      <div style="display:flex;align-items:center;padding:11px 14px;gap:6px;border-bottom:1px solid ${pendingTr.length||doneTrCount?'var(--br)':'transparent'}">
-        <span style="font-size:13px;font-weight:800">🚛 반입 / 반출</span>
-        ${pendingTr.length>0?`<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:8px;background:rgba(96,165,250,.15);color:#60a5fa">${pendingTr.length}건 대기</span>`:''}
-        ${doneTrCount>0?`<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:8px;background:rgba(34,197,94,.12);color:#22c55e">${doneTrCount}건 완료</span>`:''}
-        <button onclick="goTab('pg-transit')" style="margin-left:auto;font-size:11px;font-weight:700;padding:4px 10px;border-radius:8px;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.25);color:#60a5fa;cursor:pointer">내역 →</button>
-      </div>
-      ${ddayTr.length>0
-        ?`<div style="padding:2px 14px 8px">${trPreview}${pendingTr.length>4?`<div style="font-size:10px;color:var(--tx3);padding:5px 0 0;text-align:center">외 ${pendingTr.length-4}건 더</div>`:''}</div>`
-        :`<div style="padding:10px 14px;font-size:11px;color:var(--tx3)">오늘 예정 없음</div>`}
+  const wico=c=>c===0||c===1?'☀️':c<=3?'⛅':c<=67||c<=82?'🌧':c<=77?'❄️':'🌩';
+  const wxTag=wx?`<span style="font-size:10px;background:rgba(96,165,250,.12);color:#60a5fa;padding:2px 6px;border-radius:6px;font-weight:700">${wico(wx.code)} ${wx.temp!=null?wx.temp+'°C ':''}`+(wx.rain>0?wx.rain+'mm ':'')+(wx.wind>0?wx.wind+'m/s':'')+`</span>`:'';
+  const wxWarn=wx&&todayOut.length>0&&(wx.rain>5||wx.wind>14)?`<div style="font-size:10px;color:#fbbf24;margin-top:4px;padding:4px 8px;background:rgba(251,191,36,.1);border-radius:6px">⚠ ${wx.rain>5?'강수':'강풍'} — 실외(모듈동/1F외곽) 고소작업 주의</div>`:'';
+
+  const rateColor=r=>r===null?'var(--tx3)':r>=0.8?'#4ade80':r>=0.6?'#fbbf24':'#f87171';
+  const pctStr=r=>r===null?'—':Math.round(r*100)+'%';
+
+  // ── PANEL 1: 가동률 인사이트 ──
+  const p1coHtml=coRows.slice(0,3).map(co=>{
+    const col=rCol(co.rate);
+    return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0">
+      <div style="width:20px;height:20px;border-radius:50%;background:${co.color||'#3b82f6'}18;color:${co.color||'#3b82f6'};font-size:7px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">${(co.name||'').slice(0,2)}</div>
+      <span style="font-size:10px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx2)">${co.name}</span>
+      <span style="font-size:10px;font-weight:800;color:${col};flex-shrink:0">${fPct(co.rate)}</span>
+      <div style="width:40px;height:3px;background:var(--br);border-radius:2px;flex-shrink:0"><div style="height:3px;border-radius:2px;background:${col};width:${Math.round(co.rate*100)}%"></div></div>
     </div>`;
-  }
+  }).join('');
+  const missingBadge=missingCos.length>0?`<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:5px;background:rgba(251,191,36,.15);color:#fbbf24">미입력 ${missingCos.length}업체</span>`:'';
 
-  // ── 가동현황 섹션 ──
-  const opsEl=document.getElementById('home-ops-sec');
-  if(opsEl){
-    const coHtml=coRows.slice(0,5).map(co=>{
-      const col=rCol(co.rate);
-      return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0">
-        <div style="width:22px;height:22px;border-radius:50%;background:${co.color||'#3b82f6'}18;color:${co.color||'#3b82f6'};font-size:8px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">${(co.name||'').slice(0,2)}</div>
-        <div style="flex:1;min-width:0">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
-            <span style="font-size:11px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px">${co.name}</span>
-            <span style="font-size:11px;font-weight:800;color:${col}">${fPct(co.rate)}</span>
-          </div>
-          <div style="height:4px;background:var(--br);border-radius:2px"><div style="height:4px;border-radius:2px;background:${col};width:${Math.round(co.rate*100)}%;transition:width .4s"></div></div>
+  const inOutHtml=(inRate!==null||outRate!==null)?`<div style="display:flex;gap:5px;margin:4px 0">
+    ${inRate!==null?`<div style="flex:1;padding:4px 6px;background:rgba(96,165,250,.08);border-radius:6px;text-align:center"><div style="font-size:9px;color:var(--tx3)">실내</div><div style="font-size:13px;font-weight:800;color:${rateColor(inRate)}">${pctStr(inRate)}</div></div>`:''}
+    ${outRate!==null?`<div style="flex:1;padding:4px 6px;background:rgba(251,146,60,.08);border-radius:6px;text-align:center"><div style="font-size:9px;color:var(--tx3)">실외</div><div style="font-size:13px;font-weight:800;color:${rateColor(outRate)}">${pctStr(outRate)}</div></div>`:''}
+  </div>`:'';
+
+  const panel1=`<div style="background:var(--bg2);border:1px solid var(--br);border-radius:12px;overflow:hidden">
+    <div style="display:flex;align-items:center;gap:6px;padding:9px 12px;border-bottom:1px solid var(--br)">
+      <span style="font-size:12px;font-weight:800">⚡ 가동률</span>
+      <span style="font-size:16px;font-weight:900;color:${rateColor(rate)}">${pctStr(rate)}</span>
+      ${missingBadge}
+      ${wxTag}
+      <button onclick="goTab('pg-ops')" style="margin-left:auto;font-size:10px;font-weight:700;padding:3px 8px;border-radius:7px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.2);color:#22c55e;cursor:pointer;flex-shrink:0">가동현황 →</button>
+    </div>
+    <div style="padding:6px 12px 8px">
+      <div style="display:flex;gap:8px;margin-bottom:4px">
+        <div style="text-align:center"><div style="font-size:9px;color:var(--tx3)">장비가동</div><div style="font-size:12px;font-weight:800;color:var(--tx)">${completedToday.length}</div></div>
+        <div style="text-align:center"><div style="font-size:9px;color:var(--tx3)">누적시간</div><div style="font-size:12px;font-weight:800;color:var(--tx)">${totalHrs>0?fH(totalHrs):'—'}</div></div>
+        <div style="text-align:center"><div style="font-size:9px;color:var(--tx3)">입력건</div><div style="font-size:12px;font-weight:800;color:var(--tx)">${todayLogs.length}</div></div>
+        <div style="flex:1"></div>
+      </div>
+      ${inOutHtml}
+      ${wxWarn}
+      ${p1coHtml?`<div style="margin-top:4px">${p1coHtml}</div>`:''}
+      ${coRows.length>3?`<div style="font-size:10px;color:var(--tx3);text-align:center;margin-top:2px">외 ${coRows.length-3}개 업체</div>`:''}
+      ${!coRows.length&&!missingCos.length?`<div style="font-size:11px;color:var(--tx3)">오늘 입력 없음</div>`:''}
+    </div>
+  </div>`;
+
+  // ── PANEL 2: 반입/반출 ──
+  const trRow=r=>{
+    const isIn=r.type==='in'; const clr=isIn?'#60a5fa':'#fb923c';
+    const isDone=['반입완료','반출완료','인계완료'].includes(r.status);
+    return `<div style="display:flex;align-items:center;gap:5px;padding:3px 0;opacity:${isDone?'.5':'1'}">
+      <span style="font-size:8px;font-weight:800;padding:1px 4px;border-radius:3px;background:${isIn?'rgba(96,165,250,.15)':'rgba(251,146,60,.15)'};color:${clr};flex-shrink:0">${isIn?'반입':'반출'}</span>
+      <span style="font-size:10px;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.company||'—'}</span>
+      <span style="font-size:9px;font-family:monospace;color:var(--tx3);flex-shrink:0">${(r.equip||'').split(/[\s,]/)[0]||''}</span>
+      ${isDone?`<span style="font-size:8px;color:#22c55e;flex-shrink:0">✓</span>`:`<span style="font-size:8px;color:#fbbf24;font-weight:700;flex-shrink:0">D-DAY</span>`}
+    </div>`;
+  };
+  const trTodayHtml=[...doneToday,...pendingToday].slice(0,4).map(trRow).join('');
+  const trTmrwHtml=pendingTmrw.slice(0,2).map(r=>{
+    const isIn=r.type==='in'; const clr=isIn?'#60a5fa':'#fb923c';
+    return `<div style="display:flex;align-items:center;gap:5px;padding:2px 0">
+      <span style="font-size:8px;font-weight:800;padding:1px 4px;border-radius:3px;background:${isIn?'rgba(96,165,250,.1)':'rgba(251,146,60,.1)'};color:${clr};flex-shrink:0">${isIn?'반입':'반출'}</span>
+      <span style="font-size:10px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx2)">${r.company||'—'}</span>
+      <span style="font-size:8px;color:var(--tx3);flex-shrink:0">내일</span>
+    </div>`;
+  }).join('');
+
+  const panel2=`<div style="background:var(--bg2);border:1px solid var(--br);border-radius:12px;overflow:hidden">
+    <div style="display:flex;align-items:center;gap:6px;padding:9px 12px;border-bottom:1px solid var(--br)">
+      <span style="font-size:12px;font-weight:800">🚛 반입 / 반출</span>
+      ${pendingToday.length>0?`<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:5px;background:rgba(96,165,250,.15);color:#60a5fa">오늘 ${pendingToday.length}건 대기</span>`:''}
+      ${doneToday.length>0?`<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:5px;background:rgba(34,197,94,.12);color:#22c55e">${doneToday.length}건 완료</span>`:''}
+      <button onclick="goTab('pg-transit')" style="margin-left:auto;font-size:10px;font-weight:700;padding:3px 8px;border-radius:7px;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.25);color:#60a5fa;cursor:pointer;flex-shrink:0">내역 →</button>
+    </div>
+    <div style="padding:5px 12px 8px">
+      ${trTodayHtml||`<div style="font-size:10px;color:var(--tx3);padding:4px 0">오늘 예정 없음</div>`}
+      ${trTmrwHtml?`<div style="margin-top:5px;padding-top:5px;border-top:1px solid var(--br)"><div style="font-size:9px;color:var(--tx3);margin-bottom:2px">내일 예정</div>${trTmrwHtml}</div>`:''}
+      ${(pendingToday.length+doneToday.length)>4?`<div style="font-size:10px;color:var(--tx3);text-align:center;margin-top:2px">+ 외 ${pendingToday.length+doneToday.length-4}건</div>`:''}
+    </div>
+  </div>`;
+
+  // ── PANEL 3: AS 현황 ──
+  const asSeqSorted=[...allAS].sort((a,b)=>(a.requestedAt||a.ts||0)-(b.requestedAt||b.ts||0));
+  const asSeqLocal=new Map(asSeqSorted.map((r,i)=>[r.id,i+1]));
+  const recentOpen=[...openAS].sort((a,b)=>(b.requestedAt||0)-(a.requestedAt||0)).slice(0,3);
+  const asPreviewHtml=recentOpen.map(r=>{
+    const stCol=r.status==='자재수급중'?'#f59e0b':'#f87171';
+    return `<div style="display:flex;align-items:center;gap:5px;padding:3px 0;border-bottom:1px solid var(--br)">
+      <span style="font-size:8px;font-weight:800;padding:1px 4px;border-radius:3px;background:rgba(248,113,113,.1);color:${stCol};flex-shrink:0">${r.status||'대기'}</span>
+      <span style="font-size:10px;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.company||'—'}</span>
+      <span style="font-size:9px;color:var(--tx3);font-family:monospace;flex-shrink:0">#${asSeqLocal.get(r.id)||'?'}</span>
+    </div>`;
+  }).join('');
+
+  const panel3=`<div style="background:var(--bg2);border:1px solid var(--br);border-radius:12px;overflow:hidden">
+    <div style="display:flex;align-items:center;gap:6px;padding:9px 12px;border-bottom:1px solid var(--br)">
+      <span style="font-size:12px;font-weight:800">🔧 AS 현황</span>
+      ${openAS.length>0?`<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:5px;background:rgba(248,113,113,.12);color:#f87171">${openAS.length}건 미처리</span>`:''}
+      ${doneRate!==null?`<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:5px;background:rgba(34,197,94,.1);color:#22c55e">처리율 ${doneRate}%</span>`:''}
+      <button onclick="goTab('pg-as')" style="margin-left:auto;font-size:10px;font-weight:700;padding:3px 8px;border-radius:7px;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.2);color:#f87171;cursor:pointer;flex-shrink:0">AS →</button>
+    </div>
+    <div style="padding:5px 12px 8px">
+      <div style="display:flex;gap:6px;margin-bottom:5px">
+        <div style="flex:1;padding:5px 6px;background:rgba(248,113,113,.07);border-radius:7px;text-align:center">
+          <div style="font-size:9px;color:var(--tx3)">대기</div>
+          <div style="font-size:15px;font-weight:900;color:#f87171">${waitAS.length}</div>
         </div>
-      </div>`;
-    }).join('');
-    opsEl.innerHTML=`<div style="background:var(--bg2);border:1px solid var(--br);border-radius:12px;margin-bottom:10px;overflow:hidden">
-      <div style="display:flex;align-items:center;padding:11px 14px;gap:6px;border-bottom:1px solid ${coRows.length?'var(--br)':'transparent'}">
-        <span style="font-size:13px;font-weight:800">⚡ 가동현황</span>
-        ${rate!==null?`<span style="font-size:13px;font-weight:900;color:${rCol(rate)}">${fPct(rate)}</span>`:''}
-        ${missingCos.length>0?`<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:8px;background:rgba(251,191,36,.12);color:#fbbf24">미입력 ${missingCos.length}업체</span>`:''}
-        <button onclick="goTab('pg-ops')" style="margin-left:auto;font-size:11px;font-weight:700;padding:4px 10px;border-radius:8px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.2);color:#22c55e;cursor:pointer">입력 →</button>
+        <div style="flex:1;padding:5px 6px;background:rgba(245,158,11,.07);border-radius:7px;text-align:center">
+          <div style="font-size:9px;color:var(--tx3)">수급중</div>
+          <div style="font-size:15px;font-weight:900;color:#f59e0b">${supplyAS.length}</div>
+        </div>
+        <div style="flex:1;padding:5px 6px;background:rgba(34,197,94,.07);border-radius:7px;text-align:center">
+          <div style="font-size:9px;color:var(--tx3)">완료</div>
+          <div style="font-size:15px;font-weight:900;color:#4ade80">${doneAS.length}</div>
+        </div>
+        <div style="flex:1;padding:5px 6px;background:rgba(96,165,250,.07);border-radius:7px;text-align:center">
+          <div style="font-size:9px;color:var(--tx3)">금일신청</div>
+          <div style="font-size:15px;font-weight:900;color:#60a5fa">${todayAS.length}</div>
+        </div>
       </div>
-      ${coRows.length>0
-        ?`<div style="padding:6px 14px 10px">${coHtml}${coRows.length>5?`<div style="font-size:10px;color:var(--tx3);margin-top:4px;text-align:center">외 ${coRows.length-5}개 업체</div>`:''}</div>`
-        :`<div style="padding:10px 14px;font-size:11px;color:var(--tx3)">오늘 입력된 현황 없음</div>`}
-    </div>`;
-  }
+      ${asPreviewHtml||`<div style="font-size:10px;color:var(--tx3);padding:3px 0">미처리 AS 없음 ✓</div>`}
+      ${openAS.length>3?`<div style="font-size:10px;color:var(--tx3);text-align:center;margin-top:3px">외 ${openAS.length-3}건 더</div>`:''}
+    </div>
+  </div>`;
 
-  // ── AS 섹션 ──
-  const asEl=document.getElementById('home-as-sec');
-  if(asEl){
-    const asPreview=recentOpenAS.map(r=>{
-      const stCol=r.status==='자재수급중'?'#f59e0b':'#f87171';
-      return `<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--br)">
-        <span style="font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:rgba(248,113,113,.12);color:${stCol};flex-shrink:0">${r.status}</span>
-        <span style="font-size:11px;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.company||'—'}</span>
-        <span style="font-size:10px;color:var(--tx3);flex-shrink:0;font-family:monospace">#${asSeqLocal.get(r.id)||'?'}</span>
-      </div>`;
-    }).join('');
-    asEl.innerHTML=`<div style="background:var(--bg2);border:1px solid var(--br);border-radius:12px;margin-bottom:10px;overflow:hidden">
-      <div style="display:flex;align-items:center;padding:11px 14px;gap:6px;border-bottom:1px solid ${openAS.length?'var(--br)':'transparent'}">
-        <span style="font-size:13px;font-weight:800">🔧 AS 내역</span>
-        ${openAS.length>0?`<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:8px;background:rgba(248,113,113,.12);color:#f87171">${openAS.length}건 미처리</span>`:''}
-        ${allAS.length-openAS.length>0?`<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:8px;background:rgba(34,197,94,.1);color:#22c55e">${allAS.length-openAS.length}건 완료</span>`:''}
-        <button onclick="goTab('pg-as')" style="margin-left:auto;font-size:11px;font-weight:700;padding:4px 10px;border-radius:8px;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.2);color:#f87171;cursor:pointer">내역 →</button>
-      </div>
-      ${openAS.length>0
-        ?`<div style="padding:2px 14px 8px">${asPreview}${openAS.length>3?`<div style="font-size:10px;color:var(--tx3);padding:5px 0 0;text-align:center">외 ${openAS.length-3}건 더</div>`:''}</div>`
-        :`<div style="padding:10px 14px;font-size:11px;color:var(--tx3)">미처리 AS 없음 ✓</div>`}
-    </div>`;
-  }
+  dash.innerHTML=panel1+panel2+panel3;
 }
 
 
@@ -3676,14 +3727,14 @@ function renderAnalysis(){
 
   document.getElementById('ana-content').innerHTML=`
     <div style="padding:14px 14px 0">
-    <!-- 가동률 인사이트 + AI 분석 버튼 통합 -->
-    <div class="ai-panel">
-      <div class="ai-hd"><div class="ai-tag">자동 분석</div><div style="font-size:12px;font-weight:700;margin-left:2px">가동률 인사이트</div><span style="font-size:9px;background:rgba(96,165,250,.18);color:#60a5fa;padding:2px 7px;border-radius:10px;margin-left:auto;font-weight:700">Open-Meteo 날씨</span></div>
+    <!-- 분석 버튼 -->
+    <div class="ai-panel" style="margin-bottom:10px">
+      <div class="ai-hd"><div class="ai-tag">데이터 분석</div><div style="font-size:12px;font-weight:700;margin-left:2px">운영 분석 리포트</div></div>
       <div style="display:flex;flex-wrap:wrap;gap:5px;margin:8px 0">${aiQBtns}</div>
       <div id="ai-query-result"></div>
-      <div class="ai-text" id="ai-text"><div style="display:flex;align-items:center;gap:7px;color:var(--tx3);font-size:11px"><div style="width:14px;height:14px;border:2px solid var(--br);border-top-color:var(--purple);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0"></div>분석 중...</div></div>
-      <div class="ai-ft"><div class="ai-time" id="ai-time">—</div><div class="ai-re" onclick="runAI()">다시 분석</div></div>
     </div>
+    <!-- 미사용 장비 -->
+    <div id="unused-equip-panel"></div>
     <div class="usage-card">
       <div class="chart-label" style="margin-bottom:4px">장비 사용시간 집계</div>
       <div class="usage-grid" id="usage-grid"></div>
@@ -3709,6 +3760,7 @@ function renderAnalysis(){
   renderRank();
   renderUsage();
   renderHeatmap();
+  runAI();
 }
 
 function renderRank(){
@@ -3964,14 +4016,9 @@ async function _askAI(type){
 }
 
 async function runAI(){
-  const el=document.getElementById('ai-text'); if(!el) return;
-  el.innerHTML=`<div style="display:flex;align-items:center;gap:7px;color:var(--tx3);font-size:11px"><div style="width:14px;height:14px;border:2px solid var(--br);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0"></div>날씨 데이터 연동 중...</div>`;
-
-  const siteId  = S.siteId==='all'?null:S.siteId;
-  const allLogs = getLogs().filter(l=>siteId?l.siteId===siteId:true);
-  const tl      = allLogs.filter(l=>l.date===today());
-  const tr      = tl.length>0?(tl.filter(l=>l.status==='end').length/tl.length*100).toFixed(0):'N/A';
-  const hrs     = allLogs.filter(l=>l.status==='end').reduce((s,l)=>s+(+l.duration||0),0);
+  const el=document.getElementById('unused-equip-panel'); if(!el) return;
+  const siteId=S.siteId==='all'?null:S.siteId;
+  const allLogs=getLogs().filter(l=>siteId?l.siteId===siteId:true);
 
   // ── 최근 1개월 내 1주일 미사용 장비 ──
   const now7=new Date();
@@ -3992,116 +4039,17 @@ async function runAI(){
   }
   unused7.sort((a,b)=>a.lastDate.localeCompare(b.lastDate));
 
-  const unusedHTML=unused7.length>0
-    ?`<div style="margin-top:10px;padding:10px 12px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:8px">
-        <div style="font-size:11px;font-weight:800;color:#f87171;margin-bottom:6px">최근 1개월 내 1주일 미사용 장비 (${unused7.length}대)</div>
-        ${unused7.slice(0,10).map(u=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--br)">
+  el.innerHTML=unused7.length>0
+    ?`<div style="margin-bottom:12px;padding:10px 12px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:8px">
+        <div style="font-size:11px;font-weight:800;color:#f87171;margin-bottom:6px">⚠ 최근 1개월 내 1주일 미사용 장비 (${unused7.length}대)</div>
+        ${unused7.slice(0,15).map(u=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--br)">
           <span style="font-size:11px;font-weight:700;color:var(--tx);font-family:'JetBrains Mono',monospace">${u.equip}</span>
           <span style="font-size:10px;color:var(--tx2)">${u.company}</span>
           <span style="font-size:10px;color:var(--tx3)">마지막 ${u.lastDate.slice(5)}</span>
         </div>`).join('')}
-        ${unused7.length>10?`<div style="font-size:10px;color:var(--tx3);margin-top:4px;text-align:right">외 ${unused7.length-10}대 더</div>`:''}
+        ${unused7.length>15?`<div style="font-size:10px;color:var(--tx3);margin-top:4px;text-align:right">외 ${unused7.length-15}대 더</div>`:''}
       </div>`
-    :`<div style="margin-top:8px;font-size:11px;color:var(--green,#4ade80)">최근 1개월 내 1주일 이상 미사용 장비 없음</div>`;
-
-  // ── Open-Meteo 날씨 데이터 ──
-  const lat=DB.g('site_lat','37.0505');
-  const lng=DB.g('site_lng','127.0752');
-  // 실외 위치: 모듈동, 1F외곽만 실외 (나머지 실내)
-  const OUTDOOR_FLOORS=['모듈동','1F외곽'];
-  const isOutdoorLog=l=>OUTDOOR_FLOORS.some(f=>(l.floor||'').includes(f)||(l.locationDetail||'').includes(f));
-  const outdoorLogs=allLogs.filter(isOutdoorLog);
-  const indoorLogs=allLogs.filter(l=>!isOutdoorLog(l));
-  const todayOutdoor=tl.filter(isOutdoorLog);
-  const todayIndoor=tl.filter(l=>!isOutdoorLog(l));
-  let insightLines=[];
-  let weatherHTML='';
-
-  try{
-    const wr=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=precipitation_sum,temperature_2m_max,temperature_2m_min,wind_speed_10m_max,weathercode&timezone=Asia%2FSeoul&past_days=7&forecast_days=1`);
-    const wd=await wr.json();
-    if(wd.daily){
-      const dates=wd.daily.time;
-      const rain=wd.daily.precipitation_sum;
-      const tmax=wd.daily.temperature_2m_max;
-      const wind=wd.daily.wind_speed_10m_max;
-      const wcode=wd.daily.weathercode;
-
-      // 오늘 날씨
-      const todayIdx=dates.indexOf(today());
-      const todayRain=todayIdx>=0?rain[todayIdx]:0;
-      const todayWind=todayIdx>=0?wind[todayIdx]:0;
-      const todayTemp=todayIdx>=0?tmax[todayIdx]:null;
-
-      // 최근 7일 통계 (과거 7일만)
-      const past=rain.slice(0,7);
-      const rainDays7=past.filter(r=>r>1).length;
-      const windDays7=wind.slice(0,7).filter(w=>w>10).length;
-      const avgTemp=tmax.length?(tmax.reduce((s,t)=>s+(t||0),0)/tmax.length).toFixed(1):null;
-
-      // 인사이트 생성
-      const rateNum=tr!=='N/A'?+tr:null;
-      if(rateNum!==null){
-        const ok=rateNum>=70;
-        const reason=todayRain>1?'우천':todayWind>10?'강풍':'';
-        insightLines.push(`<span class="ai-bul">• 오늘 가동률 <b>${tr}%</b> — 목표(70%) ${ok?'달성 ✓':'미달'+(reason&&outdoorLogs.length>0?' (실외 '+reason+' 영향)':'')}</span>`);
-      }
-      // 실내/실외 구분 인사이트
-      if(outdoorLogs.length>0||indoorLogs.length>0){
-        const outRate=todayOutdoor.length>0?(todayOutdoor.filter(l=>l.status==='end').length/todayOutdoor.length*100).toFixed(0):null;
-        const inRate=todayIndoor.length>0?(todayIndoor.filter(l=>l.status==='end').length/todayIndoor.length*100).toFixed(0):null;
-        if(outRate!==null||inRate!==null){
-          const parts=[];
-          if(inRate!==null) parts.push(`실내 <b>${inRate}%</b>`);
-          if(outRate!==null) parts.push(`실외(모듈동/1F외곽) <b>${outRate}%</b>`);
-          insightLines.push(`<span class="ai-bul">• ${parts.join(' · ')}</span>`);
-        }
-      }
-      if(outdoorLogs.length>0){
-        if(todayRain>5)      insightLines.push(`<span class="ai-bul">• <b>오늘 강수 ${todayRain}mm</b> — 실외(모듈동/1F외곽) 고소작업 중단 주의 ⚠</span>`);
-        else if(todayRain>1) insightLines.push(`<span class="ai-bul">• 오늘 소우 ${todayRain}mm — 실외 작업 조건 주의</span>`);
-        if(todayWind>14)     insightLines.push(`<span class="ai-bul">• <b>오늘 강풍 ${todayWind}m/s</b> — 실외 고소작업 위험. 작업 중지 검토 ⚠</span>`);
-        else if(todayWind>10)insightLines.push(`<span class="ai-bul">• 오늘 바람 ${todayWind}m/s — 실외 고소작업 시 주의</span>`);
-      } else {
-        // 실외 작업 없음 → 날씨는 참고용
-        if(todayRain>5||todayWind>14) insightLines.push(`<span class="ai-bul" style="color:var(--tx3);font-size:10px">• 오늘 우천/강풍 — 현장 실외 작업 없음</span>`);
-      }
-      if(rainDays7>=3)     insightLines.push(`<span class="ai-bul">• 최근 7일 중 <b>${rainDays7}일 우천</b> — 날씨 영향 구간</span>`);
-      insightLines.push(`<span class="ai-bul" style="color:var(--tx3);font-size:10px">• 누적 가동 <b>${hrs.toFixed(1)}h</b>${todayTemp!==null?' | 오늘 최고 '+todayTemp+'°C':''} | 최근 7일 평균 ${avgTemp||'-'}°C</span>`);
-
-      // 날씨 미니 카드
-      const iconOf=code=>{
-        if(code===0||code===1) return '☀️';
-        if(code<=3) return '⛅';
-        if(code<=67||code<=82) return '🌧';
-        if(code<=77) return '❄️';
-        return '🌩';
-      };
-      weatherHTML=`<div style="margin-top:10px;padding:8px 10px;background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.2);border-radius:8px">
-        <div style="font-size:10px;font-weight:800;color:#60a5fa;margin-bottom:6px">🌤 최근 8일 날씨 (Open-Meteo)</div>
-        <div style="display:flex;gap:3px;overflow-x:auto;padding-bottom:2px">
-          ${dates.map((d,i)=>{
-            const r=rain[i]||0; const w=wind[i]||0; const t=tmax[i]??'—';
-            const ico=iconOf(wcode[i]||0);
-            const isToday=d===today();
-            return `<div style="flex-shrink:0;width:38px;text-align:center;padding:4px 2px;background:${isToday?'rgba(96,165,250,.15)':'var(--bg3)'};border-radius:5px;${isToday?'border:1px solid rgba(96,165,250,.4)':''}">
-              <div style="font-size:13px">${ico}</div>
-              <div style="font-size:8px;color:${isToday?'#60a5fa':'var(--tx3)'};font-weight:${isToday?'700':'400'}">${d.slice(5)}</div>
-              <div style="font-size:9px;color:var(--tx2)">${t}°</div>
-              ${r>0?`<div style="font-size:8px;color:#60a5fa">${r}mm</div>`:''}
-            </div>`;
-          }).join('')}
-        </div>
-      </div>`;
-    }
-  }catch(_e){
-    insightLines.push(`<span class="ai-bul"><b>오늘 ${tr}%</b> — 목표70% ${tr!=='N/A'&&+tr>=70?'달성 ✓':'미달'}</span>`);
-    insightLines.push(`<span class="ai-bul"><b>누적 ${hrs.toFixed(1)}h</b> 가동 기록됨</span>`);
-    insightLines.push(`<span class="ai-bul" style="color:var(--tx3);font-size:10px">* 날씨 데이터 연동 실패 — 로컬 분석</span>`);
-  }
-
-  el.innerHTML=insightLines.join('')+weatherHTML+unusedHTML;
-  const te=document.getElementById('ai-time'); if(te) te.textContent=new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})+' 완료';
+    :`<div style="margin-bottom:12px;padding:8px 12px;background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.2);border-radius:8px;font-size:11px;color:#4ade80">✓ 최근 1개월 내 1주일 이상 미사용 장비 없음</div>`;
 }
 
 /* ═══════════════════════════════════════════
