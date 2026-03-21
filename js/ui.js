@@ -1006,7 +1006,7 @@ function _addASComment(id){
     }).catch(()=>{});
   } else {
     pushSBNotif({
-      target_role: 'aj',
+      target_aj_type: '정비기사',
       type: 'as_comment',
       title: `💬 AS 댓글 [${r.equip||''}]`,
       body: `${S?.name||''}(${S?.company||''}) — ${text.slice(0,50)}`,
@@ -1028,6 +1028,18 @@ function _setAsFilter(f, el){
   renderASPage();
 }
 
+function _fmtAsDate(ts){
+  if(!ts) return '';
+  const d=new Date(ts);
+  const yy=String(d.getFullYear()).slice(2);
+  const mm=String(d.getMonth()+1).padStart(2,'0');
+  const dd=String(d.getDate()).padStart(2,'0');
+  const h=d.getHours();
+  const ampm=h<12?'오전':'오후';
+  const hh=String(h%12||12).padStart(2,'0');
+  const min=String(d.getMinutes()).padStart(2,'0');
+  return `${yy}-${mm}-${dd} ${ampm} ${hh}:${min}`;
+}
 function _asCard(r, canAct){
   const idx = getAsReqs().findIndex(x=>x.id===r.id);
   const isAJ = S?.role==='aj';
@@ -1070,7 +1082,10 @@ function _asCard(r, canAct){
         <span style="padding:1px 6px;border-radius:4px;background:rgba(248,113,113,.12);color:#f87171;font-size:9px;font-weight:700;margin-left:4px">${esc(r.type||r.faultType||'기타')}</span>
         ${r.status==='처리완료'&&r.techName?`<span style="font-size:9px;color:#4ade80;margin-left:4px;font-weight:700">· ${esc(r.techName)}</span>`:''}
       </div>
-      <div class="lc-time">${r.requestedAt?new Date(r.requestedAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}):''}</div>
+      <div class="lc-time" style="text-align:right">
+        <div>${_fmtAsDate(r.requestedAt)}</div>
+        <div style="font-size:9px;color:var(--tx3);margin-top:1px;font-family:monospace">#${r.id?r.id.slice(-6):''}</div>
+      </div>
     </div>
 
     <!-- 장비번호·위치 -->
@@ -1974,6 +1989,7 @@ function _trCard(r, _unused, canEdit, canMsg){
         ${ajInputHtml}
         ${actionHtml}
         ${doneByHtml}
+        <div style="text-align:right;font-size:9px;color:var(--tx3);font-family:monospace;margin-top:4px">#${r.id?r.id.slice(-6):''}</div>
       </div>
     </div>
   </div>`;
@@ -2082,6 +2098,12 @@ async function saveDispatch(id){
   document.getElementById('dispatch-popup')?.remove();
   // 즉시 서버 연동
   _directPushTransit(rec).catch(e => { console.warn('[saveDispatch push]', e); scheduleRetrySync(); });
+  // 알림: 배차정보 저장 시 AJ관리자 + 신청인
+  if(list.length){
+    const _dpBody = `${rec.date} · ${list.length}대`;
+    pushSBNotif({target_aj_type:'관리자', type:'dispatch_saved', title:`🚛 배차정보: ${rec.company}`, body:_dpBody, ref_id:rec.id, site_id:rec.siteId}).catch(()=>{});
+    if(rec.submitterMemberId) pushSBNotif({target_user_id:rec.submitterMemberId, type:'dispatch_saved', title:`🚛 배차정보: ${rec.company}`, body:_dpBody, ref_id:rec.id, site_id:rec.siteId}).catch(()=>{});
+  }
   toast(list.length ? `배차정보 ${list.length}대 저장됨` : '배차정보 삭제됨', 'ok');
   renderTransit();
 }
@@ -2315,6 +2337,11 @@ async function _saveAllSpecEquip(recordId) {
 
   // ── 즉시 서버 연동 (다른 이용자가 바로 확인 가능) ──────────
   _directPushTransit(rec).catch(e => { console.warn('[_saveAllSpecEquip push]', e); scheduleRetrySync(); });
+  // 알림: 장비번호 저장 시 AJ관리자 + 신청인
+  if(rec.ajEquip){
+    pushSBNotif({target_aj_type:'관리자', type:'equip_saved', title:`🏷 장비번호: ${rec.company}`, body:rec.ajEquip, ref_id:rec.id, site_id:rec.siteId}).catch(()=>{});
+    if(rec.submitterMemberId) pushSBNotif({target_user_id:rec.submitterMemberId, type:'equip_saved', title:`🏷 장비번호: ${rec.company}`, body:rec.ajEquip, ref_id:rec.id, site_id:rec.siteId}).catch(()=>{});
+  }
 
   // ── 반입완료 상태라면 장비 마스터 즉시 등록 ─────────────────
   if (rec.type === 'in' && rec.status === '반입완료' && hasAny) {
@@ -2477,6 +2504,10 @@ async function completeTransit(id) {
   await saveTransit(recs);
   // 단건 즉시 서버 업서트 — 다른 이용자가 완료 상태 바로 확인 가능
   _directPushTransit(rec).catch(e => { console.warn('[completeTransit push]', e); scheduleRetrySync(); });
+  // 알림: AJ관리자 + 신청인
+  const _trVerbBody = `${rec.date} · ${(rec.specs||[]).map(s=>s.spec+'×'+s.qty).join(', ')}`;
+  pushSBNotif({target_aj_type:'관리자', type:'transit_done', title:`📦 ${verb}: ${rec.company}`, body:_trVerbBody, ref_id:rec.id, site_id:rec.siteId}).catch(()=>{});
+  if(rec.submitterMemberId) pushSBNotif({target_user_id:rec.submitterMemberId, type:'transit_done', title:`📦 ${verb}: ${rec.company}`, body:_trVerbBody, ref_id:rec.id, site_id:rec.siteId}).catch(()=>{});
 
   // 장비 마스터 업데이트
   if (rec.type === 'in') {
@@ -2936,7 +2967,11 @@ async function cancelTransit(id){
   if(!rec){ toast('레코드를 찾을 수 없습니다','err'); return; }
   rec.status='취소'; rec.synced=false;
   await saveTransit(recs);
-  _syncToSupabase().catch(e=>console.warn('[cancelTransit sync]',e));
+  _directPushTransit(rec).catch(e => { console.warn('[cancelTransit push]', e); scheduleRetrySync(); });
+  // 알림: AJ관리자 + 신청인
+  const _cnBody = `${rec.date} · ${rec.type==='in'?'반입':'반출'}`;
+  pushSBNotif({target_aj_type:'관리자', type:'transit_cancel', title:`❌ 취소: ${rec.company}`, body:_cnBody, ref_id:rec.id, site_id:rec.siteId}).catch(()=>{});
+  if(rec.submitterMemberId) pushSBNotif({target_user_id:rec.submitterMemberId, type:'transit_cancel', title:`❌ 취소: ${rec.company}`, body:_cnBody, ref_id:rec.id, site_id:rec.siteId}).catch(()=>{});
   toast('취소 처리되었습니다','warn'); renderTransit();
 }
 
@@ -3107,6 +3142,7 @@ function submitTransit(){
     planData:  typeVal === 'in' && _pendingTrPlan ? _pendingTrPlan.data  : '',
     planType:  typeVal === 'in' && _pendingTrPlan ? _pendingTrPlan.type  : '',
     planName:  typeVal === 'in' && _pendingTrPlan ? _pendingTrPlan.name  : '',
+    submitterMemberId: S?.memberId || '',
     ts: Date.now(), synced: false, status: '예정',
   };
 
@@ -3130,6 +3166,7 @@ function submitTransit(){
   }
 
   addNotif({icon:'📦', title:`반입/반출 신청: ${company}`, desc:`${typeChip.textContent} · ${date}`});
+  pushSBNotif({target_aj_type:'관리자', type:'transit_new', title:`📦 ${typeChip.textContent} 신청: ${company}`, body:`${date} · ${specs.map(s=>s.spec+'×'+s.qty).join(', ')}`, ref_id:rec.id, site_id:rec.siteId}).catch(()=>{});
   toast(typeChip.textContent + ' 신청이 등록되었습니다', 'ok');
   _directPushTransit(rec).catch(e => { console.warn('[submitTransit push]', e); scheduleRetrySync(); });
   if(typeVal === 'in') _clearTrPlan();
@@ -3245,7 +3282,7 @@ async function submitAS(){
 
   const reqs = getAsReqs(); reqs.unshift(req); saveAsReqs(reqs);
   addNotif({icon:'🔧', title:`AS신청: ${equip}`, desc:`${company} — ${desc.slice(0,30)}`});
-  pushSBNotif({target_role:'aj', type:'as_new', title:`🔧 AS신청: ${equip}`, body:`${company} — ${desc.slice(0,60)}`, ref_id:req.id, site_id:req.siteId}).catch(()=>{});
+  pushSBNotif({target_aj_type:'정비기사', type:'as_new', title:`🔧 AS신청: ${equip}`, body:`${company} — ${desc.slice(0,60)}`, ref_id:req.id, site_id:req.siteId}).catch(()=>{});
   toast('AS 신청이 등록되었습니다','ok');
   _directPushAS(req).catch(e => { console.warn('[submitAS push]', e); scheduleRetrySync(); });
   updateASBadge();

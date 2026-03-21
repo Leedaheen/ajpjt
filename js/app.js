@@ -549,7 +549,7 @@ async function doGoogleProfileSubmit(){
     // 가입 신청 완료 메시지
     addNotif({icon:'',title:`신규 관리자 가입신청: ${co}`,
       desc:`${co} ${name}님이 가입을 신청했습니다. 승인이 필요합니다.`});
-    pushSBNotif({target_role:'aj', type:'signup_request', title:`신규 가입신청: ${co}`, body:`${co} ${name}님이 가입을 신청했습니다. 승인이 필요합니다.`, ref_id:record.id}).catch(()=>{});
+    pushSBNotif({target_aj_type:'관리자', type:'signup_request', title:`신규 가입신청: ${co}`, body:`${co} ${name}님이 가입을 신청했습니다. 승인이 필요합니다.`, ref_id:record.id}).catch(()=>{});
     toast('가입 신청 완료! AJ관리자 승인 후 로그인 가능합니다.','ok',4000);
   }
 }
@@ -1301,7 +1301,7 @@ async function doLogin(role){
         const _all=getMembers(); _all.push(_newMbr); saveMembers(_all);
         addNotif({icon:'',title:`신규 관리자 가입신청: ${co}`,
           desc:`${co} ${name}님이 가입을 신청했습니다. 승인이 필요합니다.`});
-        pushSBNotif({target_role:'aj', type:'signup_request', title:`신규 가입신청: ${co}`, body:`${co} ${name}님이 가입을 신청했습니다. 승인이 필요합니다.`, ref_id:_newMbr.id}).catch(()=>{});
+        pushSBNotif({target_aj_type:'관리자', type:'signup_request', title:`신규 가입신청: ${co}`, body:`${co} ${name}님이 가입을 신청했습니다. 승인이 필요합니다.`, ref_id:_newMbr.id}).catch(()=>{});
         toast('가입 신청 완료! AJ관리자 승인 후 로그인 가능합니다 ✓','ok',4000);
       } catch(e){
         const _em=e?.message||'';
