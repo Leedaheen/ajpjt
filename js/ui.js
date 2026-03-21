@@ -200,23 +200,26 @@ async function _renderHomeAsync(){
 
   // ── PANEL 0: 홈 운영 분석 ──
   const homeAnaQBtns = [
-    {t:'missing',   l:'⚠ 미입력 업체'},
-    {t:'weekly',    l:'📋 주간 리포트'},
-    {t:'top-equip', l:'🏆 많이 쓴 장비'},
-    {t:'as-heavy',  l:'🔧 AS 장비'},
-    {t:'pattern',   l:'👥 업체 패턴'},
-    {t:'transit',   l:'🚛 반입/반출'},
-  ].map(q=>`<button onclick="_askAIHome('${q.t}')" style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.2);color:#60a5fa;cursor:pointer;font-weight:700;white-space:nowrap">${q.l}</button>`).join('');
+    {t:'missing',    l:'⚠ 입력 미완료 업체'},
+    {t:'weekly',     l:'📋 주간 운영 리포트'},
+    {t:'top-equip',  l:'🏆 이달 많이 쓴 장비'},
+    {t:'as-heavy',   l:'🔧 AS 잦은 장비'},
+    {t:'location',   l:'📍 위치별 배포율'},
+    {t:'overload',   l:'⚡ 과부하 장비'},
+    {t:'shortage',   l:'🚨 장비 부족 분석'},
+    {t:'pattern',    l:'👥 고객사 패턴'},
+    {t:'inefficient',l:'💤 비효율 장비'},
+    {t:'transit',    l:'🚛 반입/반출 데이터'},
+  ].map(q=>`<button class="ai-qbtn" onclick="_askAIHome('${q.t}')">${q.l}</button>`).join('');
 
-  const panel0=`<div style="background:var(--bg2);border:1px solid var(--br);border-radius:12px;overflow:hidden">
-    <div style="display:flex;align-items:center;gap:6px;padding:9px 12px;border-bottom:1px solid var(--br)">
-      <span style="font-size:12px;font-weight:800">📊 운영 분석</span>
+  const panel0=`<div class="ai-panel" style="margin-bottom:0">
+    <div class="ai-hd">
+      <div class="ai-tag">데이터 분석</div>
+      <div style="font-size:12px;font-weight:700;margin-left:2px">운영 분석 리포트</div>
       <button onclick="goTab('pg-ops');setTimeout(()=>setOpsTab('ana',document.getElementById('opst-ana')),150)" style="margin-left:auto;font-size:10px;font-weight:700;padding:3px 8px;border-radius:7px;background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.2);color:#60a5fa;cursor:pointer;flex-shrink:0">분석탭 →</button>
     </div>
-    <div style="padding:6px 12px 4px">
-      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:7px">${homeAnaQBtns}</div>
-      <div id="home-analysis-result"></div>
-    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:5px;margin:0 0 8px">${homeAnaQBtns}</div>
+    <div id="home-analysis-result"></div>
   </div>`;
 
   dash.innerHTML=panel0+panel1+panel2+panel3;
@@ -3231,9 +3234,8 @@ function deleteTransitMsg(id, idx){
   if(msgs.length < 3) editTransitMsg(id);
 }
 
-function submitTransit(){
+async function submitTransit(){
   if(!S) return;
-  if(!navigator.onLine) toast('오프라인 상태입니다. 로컬에만 저장되며 온라인 복귀 시 자동 동기화됩니다','warn',4000);
   const date = document.getElementById('tr-date').value || today();
   const typeChip = document.querySelector('#tr-type-chips .chip.on');
   if(!typeChip){ toast('구분을 선택하세요','err'); return; }
@@ -3353,12 +3355,20 @@ function submitTransit(){
 
   addNotif({icon:'📦', title:`반입/반출 신청: ${company}`, desc:`${typeChip.textContent} · ${date}`});
   pushSBNotif({target_aj_type:'관리자', type:'transit_new', title:`📦 ${typeChip.textContent} 신청: ${company}`, body:`${date} · ${specs.map(s=>s.spec+'×'+s.qty).join(', ')}`, ref_id:rec.id, site_id:rec.siteId}).catch(()=>{});
-  toast(typeChip.textContent + ' 신청이 등록되었습니다', 'ok');
-  _directPushTransit(rec).catch(e => { console.warn('[submitTransit push]', e); scheduleRetrySync(); });
+  spinner(true, `${typeChip.textContent} 신청 등록 중...`);
+  try {
+    await _directPushTransit(rec);
+    toast(typeChip.textContent + ' 신청이 등록되었습니다 ✓', 'ok');
+  } catch(e) {
+    console.warn('[submitTransit push]', e);
+    scheduleRetrySync();
+    toast('로컬 저장됨 — 네트워크 복구 시 자동 재시도 (최대 5회)', 'warn', 3500);
+  } finally {
+    spinner(false);
+  }
   if(typeVal === 'in') _clearTrPlan();
   closeSheet('sh-transit-form');
   renderTransit();
-  _fetchFromSB().catch(()=>{}).then(()=>renderTransit());
 }
 function openASSheet(){
   const siteDisp = document.getElementById('as-site-disp');
@@ -3470,12 +3480,20 @@ async function submitAS(){
   const reqs = getAsReqs(); reqs.unshift(req); saveAsReqs(reqs);
   addNotif({icon:'🔧', title:`AS신청: ${equip}`, desc:`${company} — ${desc.slice(0,30)}`});
   pushSBNotif({target_aj_type:'정비기사', type:'as_new', title:`🔧 AS신청: ${equip}`, body:`${company} — ${desc.slice(0,60)}`, ref_id:req.id, site_id:req.siteId}).catch(()=>{});
-  toast('AS 신청이 등록되었습니다','ok');
-  _directPushAS(req).catch(e => { console.warn('[submitAS push]', e); scheduleRetrySync(); });
+  spinner(true, 'AS 신청 등록 중...');
+  try {
+    await _directPushAS(req);
+    toast('AS 신청이 등록되었습니다 ✓', 'ok');
+  } catch(e) {
+    console.warn('[submitAS push]', e);
+    scheduleRetrySync();
+    toast('로컬 저장됨 — 네트워크 복구 시 자동 재시도 (최대 5회)', 'warn', 3500);
+  } finally {
+    spinner(false);
+  }
   updateASBadge();
   closeSheet('sh-as');
   if(curPg==='pg-as') renderASPage();
-  _fetchFromSB().catch(()=>{}).then(()=>{ if(curPg==='pg-as'){ renderASPage(); updateASBadge(); } });
 }
 
 /* ═══════════════════════════════════════════

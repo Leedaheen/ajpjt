@@ -424,6 +424,7 @@ async function _directPushTransit(rec){
     _syncPillOk();
   }catch(e){
     console.warn('[직접업로드] transit 실패 (로컬 저장됨):', e.message);
+    throw e; // 호출자(submitTransit)가 로컬 저장 + 재시도 처리
   }
 }
 async function _directPushAS(req){
@@ -467,6 +468,7 @@ async function _directPushAS(req){
     _syncPillOk();
   }catch(e){
     console.warn('[직접업로드] as_requests 실패 (로컬 저장됨):', e.message);
+    throw e; // 호출자(submitAS)가 로컬 저장 + 재시도 처리
   }
 }
 
@@ -917,8 +919,12 @@ function scheduleRetrySync(){
     _setRetryStatus(`동기화 중 (${_retrySyncCount}/${_RETRY_DELAYS.length})…`,'sync');
     try{
       await syncNow();
-      const unsync = await IDB.getUnsynced('logs').catch(()=>[]);
-      if(!unsync.length){
+      const [unsyncL, unsyncT, unsyncA] = await Promise.all([
+        IDB.getUnsynced('logs').catch(()=>[]),
+        IDB.getUnsynced('transit').catch(()=>[]),
+        IDB.getUnsynced('as_requests').catch(()=>[]),
+      ]);
+      if(!unsyncL.length && !unsyncT.length && !unsyncA.length){
         _retrySyncCount = 0;
         _setRetryStatus('동기화 완료','ok');
         setTimeout(()=>{ try{ toast('서버 재동기화 완료 ✓','ok'); }catch(_e){} },0);

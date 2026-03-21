@@ -518,51 +518,6 @@ async function _fetchFromSB(){
   }catch(e){ console.warn('[_fetchFromSB]',e); return false; }
 }
 
-// ── Supabase Realtime WebSocket — 다른 기기 변경사항 즉시 수신 ─
-let _rtWs=null, _rtHbTimer=null, _rtFetchTimer=null, _rtRef=0;
-function _initRealtime(){
-  const sbUrl=DB.g(K.SB_URL,''); const sbKey=DB.g(K.SB_KEY,'');
-  if(!sbUrl||!sbKey||!S) return;
-  if(_rtWs){ try{_rtWs.close();}catch(_){} _rtWs=null; }
-  clearInterval(_rtHbTimer);
-  const wsUrl=sbUrl.replace(/^https/,'wss')+'/realtime/v1/websocket?vsn=1.0.0&apikey='+sbKey;
-  try{
-    _rtWs=new WebSocket(wsUrl);
-    _rtWs.onopen=()=>{
-      console.log('[RT] 연결됨');
-      const join=(table)=>_rtWs.send(JSON.stringify({
-        topic:`realtime:public:${table}`, event:'phx_join',
-        payload:{config:{postgres_changes:[{event:'*',schema:'public',table}]}},
-        ref:String(++_rtRef)
-      }));
-      join('transit'); join('as_requests');
-      _rtHbTimer=setInterval(()=>{
-        if(_rtWs&&_rtWs.readyState===1)
-          _rtWs.send(JSON.stringify({topic:'phoenix',event:'heartbeat',payload:{},ref:String(++_rtRef)}));
-      },30000);
-    };
-    _rtWs.onmessage=(ev)=>{
-      try{
-        const msg=JSON.parse(ev.data);
-        if(msg.event==='postgres_changes'||(msg.payload?.data?.type)){
-          if(!_rtFetchTimer){
-            _rtFetchTimer=setTimeout(()=>{
-              _rtFetchTimer=null;
-              _fetchFromSB().catch(()=>{});
-            },1500);
-          }
-        }
-      }catch(_){}
-    };
-    _rtWs.onerror=()=>console.warn('[RT] 오류');
-    _rtWs.onclose=()=>{
-      console.log('[RT] 연결 끊김 — 15초 후 재연결');
-      clearInterval(_rtHbTimer); _rtWs=null;
-      if(S) setTimeout(_initRealtime,15000);
-    };
-  }catch(e){ console.warn('[RT] 초기화 실패:',e.message); }
-}
-
 // ── localStorage 용량 모니터링 ─────────────────────────────
 function _checkStorageHealth(){
   const kb = DB.sizeKB();
