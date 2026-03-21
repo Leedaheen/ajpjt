@@ -213,6 +213,7 @@ input,select,button,textarea{font-family:inherit;}
 @keyframes spin    {to{transform:rotate(360deg)}}
 @keyframes fadeUp  {from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
 @keyframes slideIn {from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:translateX(0)}}
+@keyframes slideUp {from{opacity:0;transform:translateY(100%)}to{opacity:1;transform:translateY(0)}}
 @keyframes pulse   {0%,100%{opacity:1}50%{opacity:.45}}
 @keyframes shake   {0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
 @keyframes glow    {0%,100%{box-shadow:0 0 8px rgba(59,139,255,.3)}50%{box-shadow:0 0 20px rgba(59,139,255,.6)}}
@@ -2392,8 +2393,8 @@ create index if not exists idx_aj_status on aj_members(status);</pre>
 
     <!-- 비고 -->
     <div class="fg">
-      <label class="fg-lbl">비고</label>
-      <textarea class="fg-input" id="tr-note" placeholder="기타 특이사항" rows="2" style="resize:none"></textarea>
+      <label class="fg-lbl">비고 <span style="font-size:10px;color:var(--tx3);font-weight:400">[반입/반출 사유 기입]</span></label>
+      <textarea class="fg-input" id="tr-note" placeholder="반입/반출 사유 및 기타 특이사항" rows="2" style="resize:none"></textarea>
     </div>
     <!-- 반입신청서 첨부 (반입 전용 · 반입 선택 시 표시) -->
     <div class="fg" id="tr-plan-section" style="display:none">

@@ -1452,6 +1452,8 @@ function enterApp(){
       if(el){ el.value = _qrEquip.toUpperCase(); el.focus(); }
     }, 600);
   }
+  // PWA 설치 배너 (2초 후 표시 — 로그인 직후 UX 방해 최소화)
+  setTimeout(_showPwaInstallBanner, 2000);
 }
 
 /* ── Pull-to-Refresh ─────────────────────────────────────── */
@@ -1530,6 +1532,73 @@ if('serviceWorker' in navigator && !_swSkip){
       })
       .catch(e => console.warn('[SW] 등록 실패:', e));
   });
+}
+
+/* ── PWA 설치 프롬프트 ──────────────────────────────────── */
+let _pwaInstallEvent = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  _pwaInstallEvent = e;
+});
+
+function _showPwaInstallBanner() {
+  // 이미 설치된 경우 스킵 (standalone 모드)
+  if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) return;
+  // 7일 이내에 이미 표시한 경우 스킵
+  const _lastShown = parseInt(localStorage.getItem('_pwa_prompt_ts') || '0');
+  if (Date.now() - _lastShown < 7 * 24 * 3600 * 1000) return;
+  localStorage.setItem('_pwa_prompt_ts', String(Date.now()));
+
+  const _isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const _isAndroid = /android/i.test(navigator.userAgent);
+
+  const popup = document.createElement('div');
+  popup.id = 'pwa-install-popup';
+  popup.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:10000;padding:16px 16px 20px;background:rgba(10,18,35,.97);border-top:1px solid rgba(59,130,246,.35);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);animation:slideUp .3s ease';
+
+  const _closeBtn = `<button onclick="document.getElementById('pwa-install-popup')?.remove()" style="position:absolute;top:10px;right:14px;background:none;border:none;color:rgba(255,255,255,.4);font-size:20px;cursor:pointer;line-height:1">×</button>`;
+
+  if (_isIOS) {
+    popup.innerHTML = _closeBtn + `
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+        <div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#DE1F23,#9f1214);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">🏗</div>
+        <div>
+          <div style="font-size:14px;font-weight:800;color:#fff;margin-bottom:2px">앱으로 설치하기</div>
+          <div style="font-size:11px;color:rgba(255,255,255,.55)">홈 화면에 추가하면 알림 수신 · 빠른 실행이 가능합니다</div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:rgba(255,255,255,.6);background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.2);border-radius:8px;padding:8px 12px;line-height:1.8">
+        <b style="color:#60a5fa">Safari</b> 하단 공유 버튼 <b style="color:#60a5fa">⬆</b> 탭 →
+        <b style="color:#60a5fa">"홈 화면에 추가"</b> 선택
+      </div>`;
+  } else {
+    popup.innerHTML = _closeBtn + `
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+        <div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#DE1F23,#9f1214);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">🏗</div>
+        <div>
+          <div style="font-size:14px;font-weight:800;color:#fff;margin-bottom:2px">앱으로 설치하기</div>
+          <div style="font-size:11px;color:rgba(255,255,255,.55)">홈 화면에 추가하면 알림 수신 · 오프라인 사용이 가능합니다</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button onclick="document.getElementById('pwa-install-popup')?.remove()" style="flex:1;padding:10px;font-size:12px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:rgba(255,255,255,.6);cursor:pointer">나중에</button>
+        <button id="pwa-install-btn" style="flex:2;padding:10px;font-size:13px;font-weight:700;background:linear-gradient(135deg,#DE1F23,#9f1214);border:none;border-radius:8px;color:#fff;cursor:pointer">📲 설치하기</button>
+      </div>`;
+    setTimeout(() => {
+      const btn = document.getElementById('pwa-install-btn');
+      if (!btn) return;
+      btn.addEventListener('click', async () => {
+        if (_pwaInstallEvent) {
+          _pwaInstallEvent.prompt();
+          const { outcome } = await _pwaInstallEvent.userChoice;
+          if (outcome === 'accepted') { toast('앱 설치 완료! 홈 화면에서 실행하세요 🎉', 'ok', 4000); }
+          _pwaInstallEvent = null;
+        }
+        document.getElementById('pwa-install-popup')?.remove();
+      });
+    }, 100);
+  }
+  document.body.appendChild(popup);
 }
 
 

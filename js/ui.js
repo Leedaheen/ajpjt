@@ -4103,6 +4103,7 @@ function openEquipMasterSheet() {
 }
 
 function _renderEquipMasterSheet(sh) {
+  const isAJ     = S?.role === 'aj';
   const siteId   = S?.siteId === 'all' ? null : S?.siteId;
   const allEquip = getEquipMaster();
   const active   = allEquip.filter(e => e.status === 'active' && (!siteId || e.siteId === siteId));
@@ -4128,13 +4129,21 @@ function _renderEquipMasterSheet(sh) {
         const _projEl = _eProjs.length
           ? `<select style="font-size:9px;padding:2px 5px;max-width:72px;border-radius:4px;border:1px solid var(--br);background:var(--bg2);color:${e.project?'#14b8a6':'var(--tx3)'}" onchange="_equipSetProject('${e.id}',this.value)"><option value="">구분없음</option>${_eProjs.map(p=>`<option value="${p}"${e.project===p?' selected':''}>${p}</option>`).join('')}</select>`
           : (e.project?`<span style="font-size:9px;padding:2px 5px;background:rgba(20,184,166,.1);border-radius:4px;color:#14b8a6">${e.project}</span>`:'');
+        const _pendingBadge = e.pendingApproval
+          ? `<span style="font-size:9px;padding:1px 5px;border-radius:4px;background:rgba(245,158,11,.15);color:#f59e0b;border:1px solid rgba(245,158,11,.3);margin-left:4px">⏳승인대기</span>`
+          : '';
+        const _approveBtn = (e.pendingApproval && isAJ)
+          ? `<button onclick="_approveEquipEntry('${e.id}')" style="font-size:9px;padding:2px 8px;border-radius:4px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);color:#4ade80;cursor:pointer">✅승인</button>`
+          : '';
         return `<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid var(--br)">
           <div style="flex:1;min-width:0">
             <span style="font-family:monospace;font-weight:700;font-size:12px;color:#60a5fa">${e.equipNo}</span>
             ${e.spec?`<span style="font-size:10px;color:var(--tx3);margin-left:5px">${e.spec}${e.model?' ('+e.model+')':''}</span>`:''}
+            ${_pendingBadge}
           </div>
           ${_projEl}
           <span style="font-size:10px;color:var(--tx3)">${e.inDate||''}</span>
+          ${_approveBtn}
           <button onclick="_equipMasterOut('${e.id}')" style="font-size:9px;padding:2px 8px;border-radius:4px;background:rgba(251,146,60,.12);border:1px solid rgba(251,146,60,.3);color:#fb923c;cursor:pointer">반출처리</button>
           <button onclick="_equipMasterDel('${e.id}')" style="font-size:9px;padding:2px 8px;border-radius:4px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.2);color:#f87171;cursor:pointer">삭제</button>
         </div>`;
@@ -4143,7 +4152,7 @@ function _renderEquipMasterSheet(sh) {
 
   sh.innerHTML = `<div class="sheet">
     <div class="sh-handle"></div>
-    <div class="sh-title">🏗 반입 장비 마스터 (${active.length}대)</div>
+    <div class="sh-title">🏗 가동 장비 내역 (${active.length}대)</div>
     <div style="padding:4px 4px 0;display:flex;gap:6px;margin-bottom:8px">
       <button onclick="_equipSyncFromSB()" style="flex:1;padding:6px 10px;font-size:11px;font-weight:700;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:7px;color:#4ade80;cursor:pointer">☁️ Supabase에서 불러오기</button>
       <button onclick="_equipSyncToSB()" style="flex:1;padding:6px 10px;font-size:11px;font-weight:700;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.25);border-radius:7px;color:#60a5fa;cursor:pointer">⬆️ Supabase에 저장</button>
@@ -4152,46 +4161,56 @@ function _renderEquipMasterSheet(sh) {
 
       <!-- 일괄 CSV 등록 -->
       <details style="margin-bottom:12px">
-        <summary style="font-size:11px;font-weight:700;color:var(--tx3);cursor:pointer;padding:6px 8px;background:var(--bg2);border-radius:6px;user-select:none">📋 CSV 일괄 등록 (업체명,장비제원,장비번호,반입일 형식)</summary>
+        <summary style="font-size:11px;font-weight:700;color:var(--tx3);cursor:pointer;padding:6px 8px;background:var(--bg2);border-radius:6px;user-select:none">📋 CSV 일괄 등록 (현장명,프로젝트명,업체명,장비제원,장비번호,반입일 형식)</summary>
         <div style="padding:8px 4px 4px">
-          <div style="font-size:10px;color:var(--tx3);margin-bottom:6px">한 줄에 하나씩: <code style="background:rgba(59,130,246,.1);padding:1px 5px;border-radius:3px">업체명,장비제원,장비번호,반입일[,프로젝트]</code> 형식<br>예) 세방테크,10M,GK228,2026-03-01<br>세방테크,12M,GK229,2026-03-01<br>도원,10M,T0015,2026-03-15,A구역</div>
-          <textarea id="eq-csv-input" rows="5" placeholder="세방테크,10M,GK228,2026-03-01&#10;세방테크,12M,GK229,2026-03-01&#10;도원,10M,T0015,2026-03-15" style="width:100%;padding:8px;font-size:12px;font-family:monospace;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx);resize:vertical;box-sizing:border-box"></textarea>
+          <div style="font-size:10px;color:var(--tx3);margin-bottom:6px">한 줄에 하나씩: <code style="background:rgba(59,130,246,.1);padding:1px 5px;border-radius:3px">현장명,프로젝트명,업체명,장비제원,장비번호,반입일</code> 형식<br>예) 동탄현장,A구역,세방테크,10M,GK228,2026-03-01<br>동탄현장,B구역,도원건설,12M,GK229,2026-03-15</div>
+          <textarea id="eq-csv-input" rows="5" placeholder="동탄현장,A구역,세방테크,10M,GK228,2026-03-01&#10;동탄현장,B구역,도원건설,12M,GK229,2026-03-15" style="width:100%;padding:8px;font-size:12px;font-family:monospace;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx);resize:vertical;box-sizing:border-box"></textarea>
           <button onclick="_equipMasterBulkAdd()" style="width:100%;margin-top:6px;padding:7px;font-size:12px;font-weight:700;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);border-radius:6px;color:#60a5fa;cursor:pointer">일괄 등록</button>
         </div>
       </details>
 
-      <!-- 수동 장비 등록 (반입) -->
-      <div style="background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.15);border-radius:10px;padding:10px;margin-bottom:10px">
-        <div style="font-size:11px;font-weight:700;margin-bottom:8px;color:var(--blue)">➕ 반입 등록</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
-          <input type="text" id="eq-add-no" placeholder="장비번호 * (예: GK228)" style="text-transform:uppercase;padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)">
-          <input type="text" id="eq-add-co" placeholder="업체명 *" style="padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)">
+      <!-- 반입 등록 (아코디언) -->
+      <details style="margin-bottom:10px">
+        <summary style="font-size:11px;font-weight:700;color:var(--blue);cursor:pointer;padding:8px 10px;background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.15);border-radius:10px;user-select:none;list-style:none;display:flex;align-items:center;justify-content:space-between">
+          <span>➕ 반입 등록${!isAJ?' <span style="font-size:9px;color:#f59e0b;font-weight:400">(AJ관리자 승인 후 반영)</span>':''}</span>
+          <span style="font-size:10px;color:var(--tx3)">▼</span>
+        </summary>
+        <div style="background:rgba(59,130,246,.04);border:1px solid rgba(59,130,246,.12);border-top:none;border-radius:0 0 10px 10px;padding:10px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+            <input type="text" id="eq-add-no" placeholder="장비번호 * (예: GK228)" style="text-transform:uppercase;padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)">
+            <input type="text" id="eq-add-co" placeholder="업체명 *" value="${esc(S?.company||'')}" style="padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+            <select id="eq-add-spec" style="padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)">
+              <option value="">장비제원 선택 *</option>
+              ${TR_SPECS.map(s=>`<option value="${s}">${s}</option>`).join('')}
+            </select>
+            <input type="date" id="eq-add-indate" value="${today()}" style="padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)">
+          </div>
+          ${S?.siteId === 'all' ? `<select id="eq-add-site" style="width:100%;margin-bottom:6px;padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)">
+            ${sites.map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}
+          </select>` : `<input type="hidden" id="eq-add-site" value="${siteId||''}">`}
+          ${siteProjects.length ? `<select id="eq-add-proj" style="width:100%;margin-bottom:6px;padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)"><option value="">프로젝트 구분 (선택)</option>${siteProjects.map(p=>`<option value="${p}">${p}</option>`).join('')}</select>` : `<input type="hidden" id="eq-add-proj" value="">`}
+          <button id="eq-add-btn" onclick="_equipMasterAdd()" style="width:100%;padding:8px;font-size:12px;font-weight:700;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);border-radius:6px;color:#60a5fa;cursor:pointer">${isAJ?'반입 등록':'반입 등록 요청'}</button>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
-          <select id="eq-add-spec" style="padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)">
-            <option value="">장비제원 선택 *</option>
-            ${TR_SPECS.map(s=>`<option value="${s}">${s}</option>`).join('')}
-          </select>
-          <input type="date" id="eq-add-indate" value="${today()}" style="padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)">
-        </div>
-        ${S?.siteId === 'all' ? `<select id="eq-add-site" style="width:100%;margin-bottom:6px;padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)">
-          ${sites.map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}
-        </select>` : `<input type="hidden" id="eq-add-site" value="${siteId||''}">`}
-        ${siteProjects.length ? `<select id="eq-add-proj" style="width:100%;margin-bottom:6px;padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)"><option value="">프로젝트 구분 (선택)</option>${siteProjects.map(p=>`<option value="${p}">${p}</option>`).join('')}</select>` : `<input type="hidden" id="eq-add-proj" value="">`}
-        <button id="eq-add-btn" onclick="_equipMasterAdd()" style="width:100%;padding:8px;font-size:12px;font-weight:700;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);border-radius:6px;color:#60a5fa;cursor:pointer">반입 등록</button>
-      </div>
+      </details>
 
-      <!-- 반출 처리 폼 -->
-      <div style="background:rgba(251,146,60,.06);border:1px solid rgba(251,146,60,.15);border-radius:10px;padding:10px;margin-bottom:12px">
-        <div style="font-size:11px;font-weight:700;margin-bottom:8px;color:#fb923c">➖ 반출 처리</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
-          <input type="text" id="eq-out-no" placeholder="장비번호 검색 *" autocomplete="off"
-            style="text-transform:uppercase;padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)">
-          <input type="date" id="eq-out-date" value="${today()}"
-            style="padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)">
+      <!-- 반출 처리 (아코디언) -->
+      <details style="margin-bottom:12px">
+        <summary style="font-size:11px;font-weight:700;color:#fb923c;cursor:pointer;padding:8px 10px;background:rgba(251,146,60,.06);border:1px solid rgba(251,146,60,.15);border-radius:10px;user-select:none;list-style:none;display:flex;align-items:center;justify-content:space-between">
+          <span>➖ 반출 처리${!isAJ?' <span style="font-size:9px;color:#f59e0b;font-weight:400">(AJ관리자 승인 후 반영)</span>':''}</span>
+          <span style="font-size:10px;color:var(--tx3)">▼</span>
+        </summary>
+        <div style="background:rgba(251,146,60,.04);border:1px solid rgba(251,146,60,.12);border-top:none;border-radius:0 0 10px 10px;padding:10px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+            <input type="text" id="eq-out-no" placeholder="장비번호 검색 *" autocomplete="off"
+              style="text-transform:uppercase;padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)">
+            <input type="date" id="eq-out-date" value="${today()}"
+              style="padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)">
+          </div>
+          <button id="eq-out-btn" onclick="_equipMasterOutByNo()" style="width:100%;padding:8px;font-size:12px;font-weight:700;background:rgba(251,146,60,.15);border:1px solid rgba(251,146,60,.3);border-radius:6px;color:#fb923c;cursor:pointer">${isAJ?'반출 처리':'반출 요청'}</button>
         </div>
-        <button id="eq-out-btn" onclick="_equipMasterOutByNo()" style="width:100%;padding:8px;font-size:12px;font-weight:700;background:rgba(251,146,60,.15);border:1px solid rgba(251,146,60,.3);border-radius:6px;color:#fb923c;cursor:pointer">반출 처리</button>
-      </div>
+      </details>
 
       <!-- 현재 반입 장비 목록 -->
       <div style="font-size:11px;font-weight:800;margin-bottom:6px">현재 반입 중 (${active.length}대)</div>
@@ -4257,20 +4276,30 @@ async function _equipMasterBulkAdd() {
   let added = 0, duped = 0, errs = 0;
   for (const line of lines) {
     const parts = line.split(/,|\t/).map(p => p.trim());
-    // 새 형식: 업체명,장비제원,장비번호,반입일[,프로젝트]
-    // 구형식 (업체명,장비번호) 하위 호환 지원
-    let company, spec, equipNo, inDate, project;
-    if (parts.length >= 3 && parts[2] && !/^\d{4}-/.test(parts[1])) {
-      // 새 형식 (3열 이상이고 2번째 열이 날짜가 아님 → 제원)
+    // 신규 형식: 현장명,프로젝트명,업체명,장비제원,장비번호,반입일
+    // 구형식1: 업체명,장비제원,장비번호,반입일[,프로젝트]
+    // 구형식2: 업체명,장비번호
+    let company, spec, equipNo, inDate, project, effectiveSiteId, effectiveSiteName;
+    if (parts.length >= 5 && !/^\d{4}-/.test(parts[3]) && /^\d{4}-/.test(parts[5]||'x')) {
+      // 신규 형식: 현장명,프로젝트명,업체명,장비제원,장비번호,반입일
+      const _csvSite = getSites().find(s=>s.name===parts[0]||s.id===parts[0]);
+      effectiveSiteId   = _csvSite?.id   || siteId;
+      effectiveSiteName = _csvSite?.name || siteName;
+      project = parts[1]; company = parts[2]; spec = parts[3];
+      equipNo = (parts[4]||'').toUpperCase(); inDate = parts[5] || today();
+    } else if (parts.length >= 3 && parts[2] && !/^\d{4}-/.test(parts[1])) {
+      // 구형식1: 업체명,장비제원,장비번호[,반입일,프로젝트]
       company = parts[0]; spec = parts[1]; equipNo = (parts[2]||'').toUpperCase();
       inDate  = parts[3] || today(); project = parts[4] || '';
+      effectiveSiteId = siteId; effectiveSiteName = siteName;
     } else {
-      // 구형식: 업체명,장비번호
+      // 구형식2: 업체명,장비번호
       company = parts[0]; spec = ''; equipNo = (parts[1]||'').toUpperCase();
       inDate  = today(); project = '';
+      effectiveSiteId = siteId; effectiveSiteName = siteName;
     }
     if (!company || !equipNo) { errs++; continue; }
-    const exists = arr.find(e => e.equipNo === equipNo && e.siteId === siteId);
+    const exists = arr.find(e => e.equipNo === equipNo && e.siteId === effectiveSiteId);
     if (exists) {
       if (exists.status !== 'active') {
         exists.status = 'active'; exists.inDate = inDate; exists.outDate = null;
@@ -4280,7 +4309,7 @@ async function _equipMasterBulkAdd() {
     } else {
       arr.push({
         id: 'eq-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,5),
-        equipNo, siteId, siteName, company, spec, project,
+        equipNo, siteId: effectiveSiteId, siteName: effectiveSiteName, company, spec, project,
         specs: [], transitId: null, status: 'active', inDate, outDate: null, synced: false,
       });
       added++;
@@ -4319,15 +4348,23 @@ async function _equipMasterAdd() {
       return;
     }
   } else {
+    const _needsApproval = S?.role !== 'aj';
     arr.push({
       id: 'eq-' + Date.now().toString(36),
       equipNo: no, siteId: si,
       siteName: getSites().find(s=>s.id===si)?.name || si,
       company: co, spec: spec, project: proj, specs: [], transitId: null,
       status: 'active', inDate: inDate, outDate: null, synced: false,
+      pendingApproval: _needsApproval,
+      submitterMemberId: S?.memberId || '',
     });
     await saveEquipMaster(arr);
-    toast(`${no} 반입 등록 완료`, 'ok');
+    if (_needsApproval) {
+      pushSBNotif({target_aj_type:'관리자', type:'equip_add_request', title:`⏳ 반입 승인요청: ${no}`, body:`${co} · ${spec} · ${inDate}`, ref_id:no, site_id:si}).catch(()=>{});
+      toast(`${no} 반입 등록 요청됨 (AJ관리자 승인 대기)`, 'warn');
+    } else {
+      toast(`${no} 반입 등록 완료`, 'ok');
+    }
   }
   // 저장완료 버튼 상태 표시 후 1.2초 뒤 재렌더
   const btn = document.getElementById('eq-add-btn');
@@ -4357,11 +4394,22 @@ async function _equipMasterOut(id) {
   const arr = getEquipMaster();
   const e = arr.find(x => x.id === id);
   if (!e) return;
-  e.status  = 'out';
-  e.outDate = today();
-  e.synced  = false;
-  await saveEquipMaster(arr);
-  toast(`${e.equipNo} 반출 처리됨`, 'ok');
+  const _needsApproval = S?.role !== 'aj';
+  if (_needsApproval) {
+    e.pendingApproval = true;
+    e.pendingOut = true;
+    e.submitterMemberId = S?.memberId || '';
+    e.synced = false;
+    await saveEquipMaster(arr);
+    pushSBNotif({target_aj_type:'관리자', type:'equip_out_request', title:`⏳ 반출 승인요청: ${e.equipNo}`, body:`${e.company} · ${e.spec||''}`, ref_id:e.id, site_id:e.siteId}).catch(()=>{});
+    toast(`${e.equipNo} 반출 요청됨 (AJ관리자 승인 대기)`, 'warn');
+  } else {
+    e.status  = 'out';
+    e.outDate = today();
+    e.synced  = false;
+    await saveEquipMaster(arr);
+    toast(`${e.equipNo} 반출 처리됨`, 'ok');
+  }
   const sh = document.getElementById('sh-equip-master');
   if (sh) _renderEquipMasterSheet(sh);
 }
@@ -4375,11 +4423,22 @@ async function _equipMasterOutByNo() {
   const arr = getEquipMaster();
   const e = arr.find(x => x.equipNo === no && x.status === 'active' && (!siteId || x.siteId === siteId));
   if (!e) { toast(`${no}: 반입 중인 장비를 찾을 수 없습니다`, 'warn'); return; }
-  e.status  = 'out';
-  e.outDate = outDate;
-  e.synced  = false;
-  await saveEquipMaster(arr);
-  toast(`${no} 반출 처리됨 (${outDate})`, 'ok');
+  const _needsApproval = S?.role !== 'aj';
+  if (_needsApproval) {
+    e.pendingApproval = true;
+    e.pendingOut = true;
+    e.submitterMemberId = S?.memberId || '';
+    e.synced = false;
+    await saveEquipMaster(arr);
+    pushSBNotif({target_aj_type:'관리자', type:'equip_out_request', title:`⏳ 반출 승인요청: ${no}`, body:`${e.company} · ${e.spec||''} · ${outDate}`, ref_id:e.id, site_id:e.siteId}).catch(()=>{});
+    toast(`${no} 반출 요청됨 (AJ관리자 승인 대기)`, 'warn');
+  } else {
+    e.status  = 'out';
+    e.outDate = outDate;
+    e.synced  = false;
+    await saveEquipMaster(arr);
+    toast(`${no} 반출 처리됨 (${outDate})`, 'ok');
+  }
   const inp = document.getElementById('eq-out-no'); if (inp) inp.value = '';
   const sh = document.getElementById('sh-equip-master');
   if (sh) _renderEquipMasterSheet(sh);
@@ -4404,6 +4463,32 @@ async function _equipMasterDel(id) {
   arr = arr.filter(e => e.id !== id);
   await saveEquipMaster(arr);
   toast('삭제됨', 'ok');
+  const sh = document.getElementById('sh-equip-master');
+  if (sh) _renderEquipMasterSheet(sh);
+}
+
+// 반입/반출 승인요청 처리 (AJ관리자 전용)
+async function _approveEquipEntry(id) {
+  if (S?.role !== 'aj') { toast('AJ관리자 권한 필요', 'err'); return; }
+  const arr = getEquipMaster();
+  const e = arr.find(x => x.id === id);
+  if (!e) return;
+  if (e.pendingOut) {
+    // 반출 요청 승인
+    e.status  = 'out';
+    e.outDate = e.outDate || today();
+  }
+  e.pendingApproval = false;
+  e.pendingOut = false;
+  e.synced = false;
+  await saveEquipMaster(arr);
+  // 요청자에게 승인 알림
+  if (e.submitterMemberId) {
+    pushSBNotif({target_user_id:e.submitterMemberId, type:'equip_approved',
+      title:`✅ ${e.pendingOut?'반출':'반입'} 승인: ${e.equipNo}`,
+      body:`${e.company} · ${e.spec||''}`, ref_id:e.id, site_id:e.siteId}).catch(()=>{});
+  }
+  toast(`${e.equipNo} 승인 완료`, 'ok');
   const sh = document.getElementById('sh-equip-master');
   if (sh) _renderEquipMasterSheet(sh);
 }
