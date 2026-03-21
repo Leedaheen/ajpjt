@@ -97,9 +97,15 @@ async function sbBatchUpsert(table, rows, conflictCol=''){
         break;
       } catch(e) {
         // 컬럼 불일치 에러 시 해당 컬럼 제거 후 재시도 (여러 컬럼 불일치 대응)
-        if(e.message && e.message.includes('column') && e.message.includes('does not exist')){
+        // PGRST204 "Could not find" 또는 42703 "does not exist" 모두 처리
+        const _isColErr = e.message && (
+          (e.message.includes('column') && e.message.includes('does not exist')) ||
+          (e.message.includes('PGRST204')) ||
+          (e.message.includes('Could not find') && e.message.includes('column'))
+        );
+        if(_isColErr){
           console.warn('[SB] 컬럼 불일치 재시도:', e.message);
-          const m = e.message.match(/column "([^"]+)"/);
+          const m = e.message.match(/'([^']+)' column/) || e.message.match(/column "([^"]+)"/);
           if(m){
             const badCol = m[1];
             batch = batch.map(r => { const c={...r}; delete c[badCol]; return c; });
@@ -413,8 +419,8 @@ async function _directPushTransit(rec){
     status:           rec.status||'예정',
     messages:         JSON.stringify(rec.ajMsgs||[]),
     dispatch:         rec.dispatch||'',
-    plan_type:        rec.planType||'',
-    plan_name:        rec.planName||'',
+    // plan_type / plan_name: transit 테이블에 미존재 → 전송 제외
+
     created_at:       rec.createdAt ? new Date(rec.createdAt).toISOString() : now,
     updated_at:       now,
   };
