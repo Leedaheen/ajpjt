@@ -28,6 +28,20 @@ const gCoCol = (sid,name)=>{ const c=getCos(sid).find(x=>x.name===name); return 
 const fmtDate= s=>{ if(!s)return''; const d=new Date(s); return `${d.getMonth()+1}/${d.getDate()}`; };
 const fmtTS  = ts=>{ const d=new Date(ts); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; };
 
+/* ── XSS 방어: 사용자 입력값 HTML 이스케이프 ────────────────
+   innerHTML 템플릿에 사용자 데이터 삽입 전 반드시 esc() 적용.
+   예) `<div>${esc(r.desc)}</div>`
+──────────────────────────────────────────────────────────── */
+function esc(s){
+  if(s===null||s===undefined) return '';
+  return String(s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
+
 let _tt; function toast(msg,type='',ms=2600){
   const el=document.getElementById('toast');
   clearTimeout(_tt);
@@ -1343,8 +1357,10 @@ function _updateOfflineBadge(){
   el.classList.toggle('on', offline);
   // 오프라인→온라인 복귀 시 자동 동기화 시도
 }
-window.addEventListener('online', ()=>{ _updateOfflineBadge(); queueSync(); });
-window.addEventListener('offline', ()=>{ _updateOfflineBadge(); const el=document.getElementById('sdot'); const txt=document.getElementById('stxt'); if(el){el.className='sdot err'; if(txt) txt.textContent='오프라인';} });
+function _onOnline(){ _updateOfflineBadge(); queueSync(); }
+function _onOffline(){ _updateOfflineBadge(); const el=document.getElementById('sdot'); const txt=document.getElementById('stxt'); if(el){el.className='sdot err'; if(txt) txt.textContent='오프라인';} }
+window.addEventListener('online',  _onOnline);
+window.addEventListener('offline', _onOffline);
 
 /* ── Service Worker 등록 (PWA) ──────────────────────────── */
 // claudeusercontent.com / 로컬 미리보기에서는 SW 등록 생략
@@ -1372,6 +1388,8 @@ function doLogout(){
   _appIntervals.forEach(id => clearInterval(id));
   _appIntervals = [];
   document.removeEventListener('visibilitychange', _onVisibilityChange);
+  window.removeEventListener('online',  _onOnline);
+  window.removeEventListener('offline', _onOffline);
   if(typeof _cleanupRealtime==='function') _cleanupRealtime();
   // 재시도 타이머 정리 (api.js 전역 참조)
   if(typeof _retrySyncTimer !== 'undefined' && _retrySyncTimer){

@@ -904,10 +904,10 @@ function _asCommentBubbles(r){
       <div style="width:26px;height:26px;border-radius:50%;background:${avBg};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:900;color:white;flex-shrink:0">${avLabel}</div>
       <div style="flex:1;min-width:0">
         <div style="display:flex;align-items:baseline;gap:5px;margin-bottom:2px">
-          <span style="font-size:11px;font-weight:800;color:${namCol}">${c.author||'AJ'}</span>
+          <span style="font-size:11px;font-weight:800;color:${namCol}">${esc(c.author||'AJ')}</span>
           ${fmtTs?`<span style="font-size:9px;color:var(--tx3)">${fmtTs}</span>`:''}
         </div>
-        <div style="font-size:11px;color:var(--tx);line-height:1.5;background:${msgBg};padding:5px 8px;border-radius:0 8px 8px 8px;border:1px solid ${msgBdr}">${c.text}</div>
+        <div style="font-size:11px;color:var(--tx);line-height:1.5;background:${msgBg};padding:5px 8px;border-radius:0 8px 8px 8px;border:1px solid ${msgBdr}">${esc(c.text)}</div>
       </div>
     </div>`;
   }).join('');
@@ -964,7 +964,7 @@ function _asCard(r, canAct){
   let resolvedBlock = '';
   if(r.techName || r.resolvedAt || r.status==='처리완료'){
     const parts = [];
-    if(r.techName) parts.push(`담당기사: <b style="color:#fff">${r.techName}</b>`);
+    if(r.techName) parts.push(`담당기사: <b style="color:#fff">${esc(r.techName)}</b>`);
     if(r.resolvedAt){
       const rDate = new Date(r.resolvedAt);
       const rStr = rDate.toLocaleDateString('ko-KR',{month:'2-digit',day:'2-digit'})
@@ -989,10 +989,10 @@ function _asCard(r, canAct){
     <div class="lc-top">
       <div class="lc-co">
         <div class="lc-dot" style="background:${stCol}"></div>
-        <div class="lc-name" style="font-weight:800">${r.company||'—'}</div>
-        <span style="font-size:9px;font-weight:800;padding:2px 7px;border-radius:10px;margin-left:4px;color:${stCol};background:${stBg}">${r.status}</span>
-        <span style="padding:1px 6px;border-radius:4px;background:rgba(248,113,113,.12);color:#f87171;font-size:9px;font-weight:700;margin-left:4px">${r.type||r.faultType||'기타'}</span>
-        ${r.status==='처리완료'&&r.techName?`<span style="font-size:9px;color:#4ade80;margin-left:4px;font-weight:700">· ${r.techName}</span>`:''}
+        <div class="lc-name" style="font-weight:800">${esc(r.company||'—')}</div>
+        <span style="font-size:9px;font-weight:800;padding:2px 7px;border-radius:10px;margin-left:4px;color:${stCol};background:${stBg}">${esc(r.status)}</span>
+        <span style="padding:1px 6px;border-radius:4px;background:rgba(248,113,113,.12);color:#f87171;font-size:9px;font-weight:700;margin-left:4px">${esc(r.type||r.faultType||'기타')}</span>
+        ${r.status==='처리완료'&&r.techName?`<span style="font-size:9px;color:#4ade80;margin-left:4px;font-weight:700">· ${esc(r.techName)}</span>`:''}
       </div>
       <div class="lc-time">${r.date}${r.requestedAt?` <span style="font-size:9px;color:var(--tx3)">${new Date(r.requestedAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})}</span>`:''}</div>
     </div>
@@ -1000,13 +1000,13 @@ function _asCard(r, canAct){
     <!-- 장비번호·위치·신청인·통화하기·날짜시간 한 줄 -->
     <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin:4px 0 5px;font-size:11px">
       <span style="font-family:monospace;font-weight:800;color:#60a5fa">${r.equip||'—'}</span>
-      ${r.location?`<span style="color:var(--tx3)">·</span><span style="color:var(--tx2);font-size:10px">${r.location}</span>`:''}
-      ${(r.reporterName||r.reporter)?`<span style="color:var(--tx3)">·</span><b style="color:var(--tx2)">${r.reporterName||r.reporter}</b>`:''}
+      ${r.location?`<span style="color:var(--tx3)">·</span><span style="color:var(--tx2);font-size:10px">${esc(r.location)}</span>`:''}
+      ${(r.reporterName||r.reporter)?`<span style="color:var(--tx3)">·</span><b style="color:var(--tx2)">${esc(r.reporterName||r.reporter)}</b>`:''}
       ${r.reporterPhone?`<span style="color:var(--tx3)">·</span><a href="tel:${r.reporterPhone}" style="color:#60a5fa;text-decoration:none;font-weight:700">통화하기</a>`:''}
     </div>
     <!-- 접수내용 + 사진 썸네일 -->
     <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:6px">
-      <div style="flex:1;font-size:11px;color:var(--tx);line-height:1.4;padding:4px 6px;background:var(--bg2);border-radius:4px;border-left:2px solid var(--br)">${r.desc||'—'}</div>
+      <div style="flex:1;font-size:11px;color:var(--tx);line-height:1.4;padding:4px 6px;background:var(--bg2);border-radius:4px;border-left:2px solid var(--br)">${esc(r.desc||'—')}</div>
       ${r.photoThumb ? `<div onclick="_showPhotoPopup('${r.id}')" style="flex-shrink:0;cursor:pointer;position:relative" title="사진 보기">
         <img src="${r.photoThumb}" style="width:52px;height:52px;object-fit:cover;border-radius:6px;border:1.5px solid rgba(96,165,250,.4);display:block">
         <div style="position:absolute;bottom:2px;right:2px;background:rgba(0,0,0,.55);border-radius:3px;padding:1px 3px;font-size:8px;color:#fff">🔍</div>
