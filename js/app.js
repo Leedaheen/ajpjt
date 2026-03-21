@@ -1673,9 +1673,9 @@ function goTab(pgId){
   document.getElementById(pgId)?.classList.add('on');
   document.getElementById(PG_NT[pgId])?.classList.add('on');
   if(pgId==='pg-home')    renderHome();
-  if(pgId==='pg-ops')     initOpsPanel(curOpsTab);
-  if(pgId==='pg-transit'){ renderTransit(); if(Date.now()-_lastFetchTs>5000) _fetchFromSB().catch(()=>{}); }
-  if(pgId==='pg-as'){      renderASPage();  if(Date.now()-_lastFetchTs>5000) _fetchFromSB().catch(()=>{}); }
+  if(pgId==='pg-ops'){     initOpsPanel(curOpsTab); _fetchFromSB().catch(()=>{}); }
+  if(pgId==='pg-transit'){ renderTransit(); _fetchFromSB().catch(()=>{}); }
+  if(pgId==='pg-as'){      renderASPage();  _fetchFromSB().catch(()=>{}); }
   if(pgId==='pg-admin')   renderAdmin();
 }
 
