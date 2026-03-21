@@ -1361,30 +1361,88 @@ function _openTransitSchedule(){
     if(!r.date) return;
     if(!byDate[r.date]) byDate[r.date]={in:0,out:0,handover:0,cancel:0};
     if(r.status==='취소'){byDate[r.date].cancel++;return;}
-    if(r.type==='in')          byDate[r.date].in++;
-    else if(r.type==='out')    byDate[r.date].out++;
+    if(r.type==='in')            byDate[r.date].in++;
+    else if(r.type==='out')      byDate[r.date].out++;
     else if(r.type==='handover') byDate[r.date].handover++;
   });
-  const dates=Object.keys(byDate).sort();
-  let ov=document.getElementById('tr-sched-ov');
-  if(!ov){ov=document.createElement('div');ov.id='tr-sched-ov';ov.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.65);z-index:9999;display:flex;align-items:flex-end;justify-content:center';ov.onclick=function(e){if(e.target===this)this.remove();};document.body.appendChild(ov);}
-  ov.innerHTML=`<div style="background:var(--bg1);border-radius:16px 16px 0 0;width:100%;max-width:480px;max-height:70vh;overflow-y:auto;padding:16px 14px 24px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-      <div style="font-size:15px;font-weight:800">📅 스케쥴표</div>
+  const d=new Date();
+  window._schedCalState={year:d.getFullYear(),month:d.getMonth(),byDate};
+  _renderSchedCalendar();
+}
+
+function _renderSchedCalendar(){
+  const {year,month,byDate}=window._schedCalState;
+  const MON=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  const firstDay=new Date(year,month,1).getDay();
+  const daysInMonth=new Date(year,month+1,0).getDate();
+  const todayStr=today();
+
+  // 요일 헤더
+  let cellHtml=['일','월','화','수','목','금','토'].map((lbl,i)=>
+    `<div style="text-align:center;font-size:9px;font-weight:700;padding:4px 0;color:${i===0?'#f87171':i===6?'#93c5fd':'var(--tx3)'}">${lbl}</div>`
+  ).join('');
+
+  // 빈 칸
+  for(let i=0;i<firstDay;i++) cellHtml+='<div></div>';
+
+  // 날짜 칸
+  for(let d=1;d<=daysInMonth;d++){
+    const mm=String(month+1).padStart(2,'0');
+    const dd=String(d).padStart(2,'0');
+    const ds=`${year}-${mm}-${dd}`;
+    const v=byDate[ds]||{in:0,out:0,handover:0,cancel:0};
+    const hasData=v.in||v.out||v.handover||v.cancel;
+    const isToday=ds===todayStr;
+    const dow=(firstDay+d-1)%7;
+    const dateCol=isToday?'#fff':dow===0?'#f87171':dow===6?'#93c5fd':'var(--tx)';
+    const dateBg=isToday?'background:var(--blue);border-radius:50%;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;':'';
+    const badges=[
+      v.in      ?`<span style="color:var(--blue);font-size:8px;font-weight:900;line-height:1.3">↓${v.in}</span>`:'',
+      v.out     ?`<span style="color:var(--orange);font-size:8px;font-weight:900;line-height:1.3">↑${v.out}</span>`:'',
+      v.handover?`<span style="color:#14b8a6;font-size:8px;font-weight:900;line-height:1.3">⇄${v.handover}</span>`:'',
+      v.cancel  ?`<span style="color:var(--tx3);font-size:7px;font-weight:700;line-height:1.3">✕${v.cancel}</span>`:'',
+    ].filter(Boolean).join('');
+    cellHtml+=`<div style="text-align:center;padding:3px 1px;min-height:52px;border-radius:8px;${hasData?'background:rgba(255,255,255,.04);':''}" >
+      <div style="font-size:12px;font-weight:${isToday||hasData?700:400};color:${dateCol};${dateBg}">${d}</div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:0;margin-top:2px">${badges}</div>
+    </div>`;
+  }
+
+  document.getElementById('tr-sched-ov')?.remove();
+  const ov=document.createElement('div');
+  ov.id='tr-sched-ov';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9999;display:flex;align-items:center;justify-content:center;padding:14px;box-sizing:border-box';
+  ov.onclick=e=>{if(e.target===ov)ov.remove();};
+  ov.innerHTML=`<div style="background:var(--bg1);border-radius:16px;width:100%;max-width:420px;padding:16px 12px;box-shadow:0 8px 48px rgba(0,0,0,.7)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <span style="font-size:14px;font-weight:800">📅 스케쥴표</span>
       <button onclick="document.getElementById('tr-sched-ov').remove()" style="background:none;border:none;font-size:20px;color:var(--tx3);cursor:pointer;line-height:1">×</button>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:4px;font-size:10px;font-weight:700;color:var(--tx3);padding-bottom:6px;border-bottom:1px solid var(--br);margin-bottom:6px;text-align:center">
-      <span style="text-align:left">날짜</span><span style="color:var(--blue)">반입</span><span style="color:var(--orange)">반출</span><span style="color:#14b8a6">인수인계</span><span>취소</span>
+    <div style="display:flex;gap:12px;margin-bottom:10px">
+      <span style="font-size:10px;color:var(--blue);font-weight:700">↓ 반입</span>
+      <span style="font-size:10px;color:var(--orange);font-weight:700">↑ 반출</span>
+      <span style="font-size:10px;color:#14b8a6;font-weight:700">⇄ 인수인계</span>
+      <span style="font-size:10px;color:var(--tx3);font-weight:700">✕ 취소</span>
     </div>
-    ${dates.length===0?'<div style="text-align:center;color:var(--tx3);padding:20px;font-size:12px">데이터 없음</div>':
-      dates.map(d=>{const v=byDate[d];return`<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:4px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.05);align-items:center;text-align:center">
-        <span style="font-size:11px;font-weight:700;color:var(--tx);text-align:left;white-space:nowrap">${d}</span>
-        <span style="font-size:12px;font-weight:900;color:${v.in?'var(--blue)':'var(--tx3)'}">${v.in||'—'}</span>
-        <span style="font-size:12px;font-weight:900;color:${v.out?'var(--orange)':'var(--tx3)'}">${v.out||'—'}</span>
-        <span style="font-size:12px;font-weight:900;color:${v.handover?'#14b8a6':'var(--tx3)'}">${v.handover||'—'}</span>
-        <span style="font-size:12px;font-weight:900;color:${v.cancel?'var(--tx2)':'var(--tx3)'}">${v.cancel||'—'}</span>
-      </div>`;}).join('')}
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <button onclick="_schedNavMonth(-1)" style="font-size:22px;background:none;border:none;color:var(--tx2);cursor:pointer;padding:2px 8px;border-radius:8px">‹</button>
+      <span style="font-size:13px;font-weight:700">${year}년 ${MON[month]}</span>
+      <button onclick="_schedNavMonth(1)"  style="font-size:22px;background:none;border:none;color:var(--tx2);cursor:pointer;padding:2px 8px;border-radius:8px">›</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px">${cellHtml}</div>
   </div>`;
+  document.body.appendChild(ov);
+}
+
+function _schedNavMonth(delta){
+  if(!window._schedCalState) return;
+  let {year,month}=window._schedCalState;
+  month+=delta;
+  if(month>11){month=0;year++;}
+  if(month<0) {month=11;year--;}
+  window._schedCalState.year=year;
+  window._schedCalState.month=month;
+  _renderSchedCalendar();
 }
 
 // ── KPI 달력 팝업 ─────────────────────────────────────────────
