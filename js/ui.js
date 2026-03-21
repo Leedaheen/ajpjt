@@ -278,10 +278,12 @@ async function submitEnd(){
     if(idx>=0) entry=logs[idx];
   }
   if(!entry){ toast('세션을 찾을 수 없습니다','err'); return; }
+  const meterEndVal = document.getElementById('f-meter-end').value.trim();
+  if(!meterEndVal){ toast('계기판 종료 시간을 입력하세요','err'); document.getElementById('f-meter-end')?.focus(); return; }
   const btn=document.getElementById('btn-end');
   btn.classList.add('loading'); btn.disabled=true;
   const endTime=document.getElementById('f-endtime').value;
-  const meterEnd=+document.getElementById('f-meter-end').value||null;
+  const meterEnd=+meterEndVal||null;
   let dur=null;
   if(meterEnd&&entry.meterStart) dur=+(meterEnd-entry.meterStart).toFixed(2);
   else if(entry.startTime&&endTime){
@@ -550,7 +552,7 @@ function _getInputFormHTML(){
     </div>
     <div class="fg"><label class="fg-lbl">팀명</label><input type="text" class="fg-input" id="f-team" placeholder="소속 팀명 (예: 홍길동팀)" maxlength="30"></div>
     <div class="fg"><label class="fg-lbl">신청 시작시간</label><input type="time" class="fg-input" id="f-starttime"></div>
-    <div class="fg"><label class="fg-lbl">계기판 시작 시간 (h)</label><input type="number" class="fg-input" id="f-meter-start" placeholder="예: 1234.5" step="0.1" min="0"></div>
+    <div class="fg"><label class="fg-lbl">계기판 시작 시간 (h) <span class="req">*</span></label><input type="number" class="fg-input" id="f-meter-start" placeholder="예: 1234.5" step="0.1" min="0"></div>
   </div>
   <div id="end-fields" style="display:none">
     <div class="fg">
@@ -558,7 +560,7 @@ function _getInputFormHTML(){
       <div class="site-select-wrap"><select class="fg-select" id="f-open-session"><option value="">선택하세요</option></select></div>
     </div>
     <div class="fg"><label class="fg-lbl">사용 종료시간</label><input type="time" class="fg-input" id="f-endtime"></div>
-    <div class="fg"><label class="fg-lbl">계기판 종료 시간 (h)</label><input type="number" class="fg-input" id="f-meter-end" placeholder="예: 1238.0" step="0.1" min="0"></div>
+    <div class="fg"><label class="fg-lbl">계기판 종료 시간 (h) <span class="req">*</span></label><input type="number" class="fg-input" id="f-meter-end" placeholder="예: 1238.0" step="0.1" min="0"></div>
     </div>
   </div>
   <div id="idle-fields" style="display:none">
