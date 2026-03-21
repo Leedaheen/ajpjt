@@ -198,7 +198,30 @@ async function _renderHomeAsync(){
     </div>
   </div>`;
 
-  dash.innerHTML=panel1+panel2+panel3;
+  // ── PANEL 0: 홈 운영 분석 ──
+  const homeAnaQBtns = [
+    {t:'missing',   l:'⚠ 미입력 업체'},
+    {t:'weekly',    l:'📋 주간 리포트'},
+    {t:'top-equip', l:'🏆 많이 쓴 장비'},
+    {t:'as-heavy',  l:'🔧 AS 장비'},
+    {t:'pattern',   l:'👥 업체 패턴'},
+    {t:'transit',   l:'🚛 반입/반출'},
+  ].map(q=>`<button onclick="_askAIHome('${q.t}')" style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.2);color:#60a5fa;cursor:pointer;font-weight:700;white-space:nowrap">${q.l}</button>`).join('');
+
+  const panel0=`<div style="background:var(--bg2);border:1px solid var(--br);border-radius:12px;overflow:hidden">
+    <div style="display:flex;align-items:center;gap:6px;padding:9px 12px;border-bottom:1px solid var(--br)">
+      <span style="font-size:12px;font-weight:800">📊 운영 분석</span>
+      <button onclick="goTab('pg-ops');setTimeout(()=>setOpsTab('ana',document.getElementById('opst-ana')),150)" style="margin-left:auto;font-size:10px;font-weight:700;padding:3px 8px;border-radius:7px;background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.2);color:#60a5fa;cursor:pointer;flex-shrink:0">분석탭 →</button>
+    </div>
+    <div style="padding:6px 12px 4px">
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:7px">${homeAnaQBtns}</div>
+      <div id="home-analysis-result"></div>
+    </div>
+  </div>`;
+
+  dash.innerHTML=panel0+panel1+panel2+panel3;
+  // 기본 분석: 미입력 업체
+  _askAIHome('missing');
 }
 
 
@@ -3714,15 +3737,16 @@ function renderAnalysis(){
     return;
   }
   const aiQBtns = [
-    {t:'weekly',    l:'📋 주간 운영 리포트'},
-    {t:'top-equip', l:'🏆 이달 많이 쓴 장비'},
+    {t:'missing',   l:'⚠ 미입력 업체'},
+    {t:'weekly',    l:'📋 주간 리포트'},
+    {t:'top-equip', l:'🏆 많이 쓴 장비'},
     {t:'as-heavy',  l:'🔧 AS 잦은 장비'},
     {t:'location',  l:'📍 위치별 배포율'},
     {t:'overload',  l:'⚡ 과부하 장비'},
-    {t:'shortage',  l:'🚨 장비 부족 분석'},
-    {t:'pattern',   l:'👥 고객사 패턴'},
+    {t:'shortage',  l:'🚨 장비 부족'},
+    {t:'pattern',   l:'👥 업체 패턴'},
     {t:'inefficient',l:'💤 비효율 장비'},
-    {t:'transit',   l:'🚛 반입/반출 데이터'},
+    {t:'transit',   l:'🚛 반입/반출'},
   ].map(q=>`<button class="ai-qbtn" onclick="_askAI('${q.t}')">${q.l}</button>`).join('');
 
   document.getElementById('ana-content').innerHTML=`
@@ -3869,10 +3893,12 @@ async function _renderHeatmapAsync(){
 }
 
 /* ── 데이터 기반 분석 (Open-Meteo 날씨 연동) ────────────────── */
-async function _askAI(type){
-  const el = document.getElementById('ai-query-result');
+function _askAIHome(type){ _askAI(type,'home-analysis-result'); }
+
+async function _askAI(type, targetId='ai-query-result'){
+  const el = document.getElementById(targetId);
   if(!el) return;
-  el.innerHTML = `<div class="ai-qres" style="display:flex;align-items:center;gap:8px"><div style="width:13px;height:13px;border:2px solid var(--br);border-top-color:#60a5fa;border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0"></div><span style="font-size:11px;color:var(--tx3)">데이터 분석 중...</span></div>`;
+  el.innerHTML = `<div class="ai-qres" style="display:flex;align-items:center;gap:8px"><div style="width:13px;height:13px;border:2px solid var(--br);border-top-color:#60a5fa;border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0"></div><span style="font-size:11px;color:var(--tx3)">분석 중...</span></div>`;
 
   const siteId  = S?.siteId==='all' ? null : S?.siteId;
   const site    = S?.siteName || '현장';
@@ -4002,17 +4028,36 @@ async function _askAI(type){
     lines.push(`🚛 <b>${site}</b> 반입/반출 현황`);
     lines.push(`• 반입 <b>${trIn.length}건</b> (완료 ${trIn.filter(r=>r.status==='반입완료').length}건)`);
     lines.push(`• 반출 <b>${trOut.length}건</b> (완료 ${trOut.filter(r=>r.status==='반출완료').length}건)`);
-    // 업체별 반입 TOP3
     const trCoMap={};
     allTr.forEach(r=>{if(!r.company)return;if(!trCoMap[r.company])trCoMap[r.company]={in:0,out:0};if(r.type==='in')trCoMap[r.company].in++;else trCoMap[r.company].out++;});
     Object.entries(trCoMap).sort((a,b)=>(b[1].in+b[1].out)-(a[1].in+a[1].out)).slice(0,3)
       .forEach(([co,v])=>lines.push(`• ${co}: 반입 ${v.in}건 / 반출 ${v.out}건`));
+  } else if(type==='missing'){
+    // ── 오늘 입력 미완료 업체 ──
+    const tdStr = today();
+    const todayLogs2 = allLogs.filter(l=>l.date===tdStr);
+    const submitted = new Set(todayLogs2.map(l=>l.company));
+    const sites2 = siteId ? [{id:siteId}] : getSites();
+    const missingList = [];
+    for(const s of sites2)
+      for(const co of getCos(s.id))
+        if(!submitted.has(co.name)) missingList.push({name:co.name, phone:co.phone||'', siteId:s.id});
+    lines.push(`⚠ <b>${site}</b> 금일 입력 미완료 업체`);
+    if(missingList.length){
+      missingList.forEach(co=>{
+        const ph=co.phone?` <span style="color:var(--tx3);font-size:10px">${co.phone}</span>`:'';
+        lines.push(`• <b>${co.name}</b>${ph}`);
+      });
+      lines.push(`<span style="color:var(--tx3);font-size:10px">• ${missingList.length}개 업체 미입력 (${tdStr})</span>`);
+    } else {
+      lines.push(`✅ 모든 업체 입력 완료 (${tdStr})`);
+    }
   } else {
     lines.push(`• 분석 타입을 인식할 수 없습니다`);
   }
 
   const html = lines.map(l=>`<div style="font-size:11px;line-height:1.7;padding:1px 0">${l}</div>`).join('');
-  el.innerHTML = `<div class="ai-qres"><div style="font-size:10px;font-weight:700;color:#60a5fa;margin-bottom:7px">📊 데이터 분석 결과</div>${html}</div>`;
+  el.innerHTML = `<div class="ai-qres"><div style="font-size:10px;font-weight:700;color:#60a5fa;margin-bottom:7px">📊 분석 결과</div>${html}</div>`;
 }
 
 async function runAI(){
