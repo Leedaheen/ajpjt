@@ -1431,6 +1431,8 @@ function enterApp(){
   setTimeout(_initScrollTopBtn, 400);
   // Supabase Realtime 구독 — 다른 기기 변경사항 즉시 수신
   if(typeof _initRealtime==='function') setTimeout(_initRealtime, 1200);
+  // Pull-to-refresh 초기화 (중복 방지)
+  if(!window._ptrInitDone){ window._ptrInitDone=true; _initPullToRefresh(); }
   // QR 스캔 URL 파라미터 처리 (?equip=GJ265 → 가동현황 탭 + 장비번호 자동입력)
   const _qp = new URLSearchParams(location.search);
   const _qrEquip = _qp.get('equip');
@@ -1441,6 +1443,52 @@ function enterApp(){
       if(el){ el.value = _qrEquip.toUpperCase(); el.focus(); }
     }, 600);
   }
+}
+
+/* ── Pull-to-Refresh ─────────────────────────────────────── */
+function _initPullToRefresh(){
+  const THRESHOLD=65;
+  let _y0=0,_pulling=false,_triggered=false;
+  let _ptr=document.getElementById('ptr-bar');
+  if(!_ptr){
+    _ptr=document.createElement('div');
+    _ptr.id='ptr-bar';
+    _ptr.style.cssText='position:fixed;top:0;left:0;right:0;z-index:5000;height:46px;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--bg1);border-bottom:1px solid var(--br);font-size:12px;font-weight:700;color:var(--blue);pointer-events:none;transform:translateY(-46px);transition:none;box-shadow:0 2px 12px rgba(0,0,0,.3)';
+    document.body.appendChild(_ptr);
+  }
+  function _getScrollTop(){
+    if(curPg==='pg-as') return document.getElementById('as-content')?.scrollTop||0;
+    if(curPg==='pg-ops') return document.getElementById('ops-log-panel')?.scrollTop||0;
+    return document.getElementById(curPg)?.scrollTop||0;
+  }
+  function _onSheet(el){ return !!el?.closest?.('.soverlay.on,.soverlay[style*="display: block"]'); }
+  document.addEventListener('touchstart',e=>{
+    if(_onSheet(e.target)||_getScrollTop()>4) return;
+    _y0=e.touches[0].clientY; _pulling=true; _triggered=false;
+    _ptr.style.transition='none';
+  },{passive:true});
+  document.addEventListener('touchmove',e=>{
+    if(!_pulling) return;
+    const dy=e.touches[0].clientY-_y0;
+    if(dy<=0){_pulling=false;_ptr.style.transition='transform .2s ease';_ptr.style.transform='translateY(-46px)';return;}
+    const t=Math.min(dy*0.45,46);
+    _ptr.style.transform=`translateY(${t-46}px)`;
+    if(dy>=THRESHOLD&&!_triggered){
+      _triggered=true;
+      _ptr.innerHTML='<span style="font-size:18px;animation:_ptrSpin .7s linear infinite;display:inline-block">↻</span> 놓으면 새로고침';
+    } else if(!_triggered){
+      _ptr.innerHTML='<span style="font-size:16px">↓</span> 당겨서 새로고침';
+    }
+  },{passive:true});
+  document.addEventListener('touchend',async()=>{
+    if(!_pulling) return; _pulling=false;
+    if(!_triggered){_ptr.style.transition='transform .2s ease';_ptr.style.transform='translateY(-46px)';return;}
+    _ptr.style.transition='transform .15s ease'; _ptr.style.transform='translateY(0)';
+    _ptr.innerHTML='<span style="font-size:18px;animation:_ptrSpin .7s linear infinite;display:inline-block">↻</span> 동기화 중...';
+    try{ await _fetchFromSB(); toast('최신 데이터로 업데이트됨','ok'); }catch(e){ toast('동기화 실패. 네트워크를 확인하세요','err'); }
+    setTimeout(()=>{_ptr.style.transition='transform .3s ease';_ptr.style.transform='translateY(-46px)';},600);
+    _triggered=false;
+  },{passive:true});
 }
 
 /* ── 네트워크 오프라인 감지 ──────────────────────────────── */

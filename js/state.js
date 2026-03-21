@@ -337,6 +337,8 @@ function _sbTransitToLocal(row){
   };
 }
 function _sbAsToLocal(row){
+  let _comments=[];
+  if(row.comments){ try{ const p=JSON.parse(row.comments); if(Array.isArray(p)) _comments=p; }catch(_){} }
   return {
     id:           row.record_id||String(row.id),
     date:         row.date,
@@ -351,12 +353,17 @@ function _sbAsToLocal(row){
     reporterName: row.reporter_name,
     reporterPhone:row.reporter_phone,
     status:       row.status||'대기',
-    techName:     row.tech_name,
-    techPhone:    row.tech_phone,
+    techName:     row.tech_name||'',
+    techPhone:    row.tech_phone||'',
     resolvedAt:   row.resolved_at?new Date(row.resolved_at).getTime():null,
-    resolveNote:  row.resolve_note,
+    resolvedNote: row.resolve_note||'',
     requestedAt:  row.requested_at?new Date(row.requested_at).getTime():null,
     materialAt:   row.material_at?new Date(row.material_at).getTime():null,
+    comments:     _comments,
+    workerName:   row.worker_name||'',
+    workerPhone:  row.worker_phone||'',
+    photoThumb:   row.photo_data||null,
+    updatedAt:    row.updated_at?new Date(row.updated_at).getTime():Date.now(),
     synced:       true,
     createdAt:    row.created_at?new Date(row.created_at).getTime():Date.now(),
     ts:           row.created_at?new Date(row.created_at).getTime():Date.now(),
@@ -373,7 +380,7 @@ async function _fetchFromSB(){
     const sinceStr=since.toISOString();
     // select=* 대신 필요한 컬럼만 지정 → payload 30~50% 절감
     const TR_COLS  = 'record_id,id,date,type,site_id,site_name,company,equip_specs,aj_equip,reporter_name,reporter_phone,manager_name,manager_phone,manager_location,note,status,messages,dispatch,plan_type,plan_name,created_at,updated_at';
-    const AS_COLS  = 'record_id,id,date,site_id,site_name,company,equip,location,fault_type,description,reporter_name,reporter_phone,status,tech_name,tech_phone,resolved_at,resolve_note,requested_at,material_at,photo_data,created_at,updated_at';
+    const AS_COLS  = 'record_id,id,date,site_id,site_name,company,equip,location,fault_type,description,reporter_name,reporter_phone,status,tech_name,tech_phone,resolved_at,resolve_note,requested_at,material_at,comments,worker_name,worker_phone,photo_data,created_at,updated_at';
     const [trRows,asRows]=await Promise.all([
       sbReq('transit','GET',null,`?select=${TR_COLS}&created_at=gte.${sinceStr}${siteFilter}&order=created_at.desc&limit=200`),
       sbReq('as_requests','GET',null,`?select=${AS_COLS}${siteFilter}&order=created_at.desc&limit=200`),
@@ -387,19 +394,30 @@ async function _fetchFromSB(){
         const loc=localMap.get(lid);
         if(!loc){ local.unshift(_sbTransitToLocal(row)); changed=true; }
         else {
-          // 서버 updatedAt이 더 최신이면 핵심 필드 일괄 덮어쓰기
+          // ── 서버 우선(Server-First) 머지 ──────────────────────
           const srvTs = row.updated_at ? new Date(row.updated_at).getTime() : 0;
-          const locTs = loc.updatedAt || 0;
+          const locTs = loc.updatedAt || loc.ts || 0;
           let itemChanged = false;
-          if(!loc.synced){ loc.synced=true; itemChanged=true; }
+          // status: 항상 서버 우선
           if(row.status && loc.status!==row.status){ loc.status=row.status; itemChanged=true; }
-          if(srvTs > locTs){
-            if(row.dispatch !== undefined && loc.dispatch!==row.dispatch){ loc.dispatch=row.dispatch||''; itemChanged=true; }
-            if(row.aj_equip !== undefined && loc.ajEquip!==row.aj_equip){ loc.ajEquip=row.aj_equip||''; itemChanged=true; }
-            if(row.messages){ try{ const m=JSON.parse(row.messages); if(Array.isArray(m)) loc.ajMsgs=m; itemChanged=true; }catch(_){} }
-            if(row.manager_location && loc.managerLocation!==row.manager_location){ loc.managerLocation=row.manager_location; itemChanged=true; }
-            if(srvTs>0) loc.updatedAt=srvTs;
+          // dispatch, ajEquip, managerLocation: 서버 우선
+          if(row.dispatch !== undefined && loc.dispatch!==row.dispatch){ loc.dispatch=row.dispatch||''; itemChanged=true; }
+          if(row.aj_equip !== undefined && loc.ajEquip!==row.aj_equip){ loc.ajEquip=row.aj_equip||''; itemChanged=true; }
+          if(row.manager_location !== undefined && loc.managerLocation!==row.manager_location){ loc.managerLocation=row.manager_location||''; itemChanged=true; }
+          // messages(댓글): 서버가 더 많거나 서버가 최신이면 덮어쓰기
+          if(row.messages){
+            try{
+              const srvMsgs=JSON.parse(row.messages);
+              if(Array.isArray(srvMsgs)){
+                const locMsgs=loc.ajMsgs||[];
+                if(srvMsgs.length>locMsgs.length||(srvMsgs.length===locMsgs.length&&srvTs>=locTs)){
+                  loc.ajMsgs=srvMsgs; itemChanged=true;
+                }
+              }
+            }catch(_){}
           }
+          if(srvTs>0&&srvTs>locTs) loc.updatedAt=srvTs;
+          if(!loc.synced){ loc.synced=true; itemChanged=true; }
           if(itemChanged) changed=true;
         }
       }
@@ -414,19 +432,37 @@ async function _fetchFromSB(){
         const loc=localAsMap.get(lid);
         if(!loc){ localAs.unshift(_sbAsToLocal(row)); asChanged=true; }
         else {
+          // ── 서버 우선(Server-First) 머지 ──────────────────────
           const srvTs = row.updated_at ? new Date(row.updated_at).getTime() : 0;
-          const locTs = loc.updatedAt || 0;
+          const locTs = loc.updatedAt || loc.ts || 0;
           let itemChanged=false;
-          if(!loc.synced){ loc.synced=true; itemChanged=true; }
+          // status: 항상 서버 우선
           if(row.status && loc.status!==row.status){ loc.status=row.status; itemChanged=true; }
-          if(srvTs > locTs || !loc.techName){
-            if(row.tech_name && loc.techName!==row.tech_name){ loc.techName=row.tech_name; itemChanged=true; }
-            if(row.resolved_at && !loc.resolvedAt){ loc.resolvedAt=new Date(row.resolved_at).getTime(); itemChanged=true; }
-            if(row.resolve_note && loc.resolvedNote!==row.resolve_note){ loc.resolvedNote=row.resolve_note; itemChanged=true; }
-            if(row.material_at && !loc.materialAt){ loc.materialAt=new Date(row.material_at).getTime(); itemChanged=true; }
-            if(row.photo_data && !loc.photoThumb){ loc.photoThumb=row.photo_data; itemChanged=true; }
-            if(srvTs>0) loc.updatedAt=srvTs;
+          // techName, techPhone: 서버 우선
+          if(row.tech_name !== undefined && loc.techName!==row.tech_name){ loc.techName=row.tech_name||''; itemChanged=true; }
+          if(row.tech_phone !== undefined && loc.techPhone!==row.tech_phone){ loc.techPhone=row.tech_phone||''; itemChanged=true; }
+          // resolvedAt, resolvedNote, materialAt: 서버 우선
+          if(row.resolved_at){ const t=new Date(row.resolved_at).getTime(); if(loc.resolvedAt!==t){ loc.resolvedAt=t; itemChanged=true; } }
+          if(row.resolve_note !== undefined && loc.resolvedNote!==row.resolve_note){ loc.resolvedNote=row.resolve_note||''; itemChanged=true; }
+          if(row.material_at){ const t=new Date(row.material_at).getTime(); if(loc.materialAt!==t){ loc.materialAt=t; itemChanged=true; } }
+          // comments: 서버가 더 많거나 서버가 최신이면 덮어쓰기
+          if(row.comments){
+            try{
+              const srvC=JSON.parse(row.comments);
+              if(Array.isArray(srvC)){
+                const locC=loc.comments||[];
+                if(srvC.length>locC.length||(srvC.length===locC.length&&srvTs>=locTs)){
+                  loc.comments=srvC; itemChanged=true;
+                }
+              }
+            }catch(_){}
           }
+          // workerName, workerPhone: 서버 우선
+          if(row.worker_name !== undefined && loc.workerName!==row.worker_name){ loc.workerName=row.worker_name||''; itemChanged=true; }
+          if(row.worker_phone !== undefined && loc.workerPhone!==row.worker_phone){ loc.workerPhone=row.worker_phone||''; itemChanged=true; }
+          if(row.photo_data && !loc.photoThumb){ loc.photoThumb=row.photo_data; itemChanged=true; }
+          if(srvTs>0&&srvTs>locTs) loc.updatedAt=srvTs;
+          if(!loc.synced){ loc.synced=true; itemChanged=true; }
           if(itemChanged) asChanged=true;
         }
       }
