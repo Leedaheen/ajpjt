@@ -1016,6 +1016,7 @@ function _addASComment(id){
   }
   renderASPage();
   toast('댓글 등록됨','ok');
+  _fetchFromSB().catch(()=>{}).then(()=>renderASPage());
 }
 
 function _setAsTypeFilter(f, el){
@@ -1201,6 +1202,7 @@ function updateASStatus(id, status){
   updateASBadge();
   renderASPage();
   toast(status==='처리완료'?'처리 완료로 변경됨':'자재수급중으로 변경됨','ok');
+  _fetchFromSB().catch(()=>{}).then(()=>{ renderASPage(); updateASBadge(); });
 }
 
 function resolveAS(idx){
@@ -2543,6 +2545,7 @@ async function completeTransit(id) {
   }
 
   renderTransit();
+  _fetchFromSB().catch(()=>{}).then(()=>renderTransit());
 }
 
 
@@ -3184,6 +3187,7 @@ function submitTransit(){
   if(typeVal === 'in') _clearTrPlan();
   closeSheet('sh-transit-form');
   renderTransit();
+  _fetchFromSB().catch(()=>{}).then(()=>renderTransit());
 }
 function openASSheet(){
   const siteDisp = document.getElementById('as-site-disp');
@@ -3300,6 +3304,7 @@ async function submitAS(){
   updateASBadge();
   closeSheet('sh-as');
   if(curPg==='pg-as') renderASPage();
+  _fetchFromSB().catch(()=>{}).then(()=>{ if(curPg==='pg-as'){ renderASPage(); updateASBadge(); } });
 }
 
 /* ═══════════════════════════════════════════

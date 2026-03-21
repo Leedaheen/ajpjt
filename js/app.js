@@ -1755,16 +1755,8 @@ function goTab(pgId){
   document.getElementById(PG_NT[pgId])?.classList.add('on');
   if(pgId==='pg-home')    renderHome();
   if(pgId==='pg-ops'){     initOpsPanel(curOpsTab); _fetchFromSB().catch(()=>{}); }
-  if(pgId==='pg-transit'){
-    const _tel=document.getElementById('transit-content');
-    if(_tel) _tel.innerHTML=`<div style="display:flex;justify-content:center;align-items:center;padding:48px;gap:8px"><span style="font-size:12px;color:var(--tx3)">서버에서 불러오는 중…</span></div>`;
-    _fetchFromSB().catch(()=>{}).finally(()=>renderTransit());
-  }
-  if(pgId==='pg-as'){
-    const _ael=document.getElementById('as-content');
-    if(_ael) _ael.innerHTML=`<div style="display:flex;justify-content:center;align-items:center;padding:48px;gap:8px"><span style="font-size:12px;color:var(--tx3)">서버에서 불러오는 중…</span></div>`;
-    _fetchFromSB().catch(()=>{}).finally(()=>renderASPage());
-  }
+  if(pgId==='pg-transit'){ renderTransit(); _fetchFromSB().catch(()=>{}).then(()=>renderTransit()); }
+  if(pgId==='pg-as'){      renderASPage();  _fetchFromSB().catch(()=>{}).then(()=>{ renderASPage(); updateASBadge(); }); }
   if(pgId==='pg-admin')   renderAdmin();
 }
 
