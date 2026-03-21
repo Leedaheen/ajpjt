@@ -1166,7 +1166,7 @@ textarea.fg-input{height:72px;line-height:1.5;}
       </div>
       <div class="lg">
         <label class="lg-label">팀명 <span style="font-size:10px;color:var(--tx3)">(선택)</span></label>
-        <input type="text" class="lg-input" id="techTeam" placeholder="소속 팀명 (예: 전기팀)" maxlength="30">
+        <input type="text" class="lg-input" id="techTeam" placeholder="소속 팀명 (예: 홍길동팀)" maxlength="30">
       </div>
 
       <!-- Privacy (collapsible) -->
@@ -1190,14 +1190,14 @@ textarea.fg-input{height:72px;line-height:1.5;}
             <div class="priv-ck on" id="p2">✓</div>
             <div class="priv-item-r">
               <div class="priv-name">제3자 제공 동의<span class="priv-tag-req">(필수)</span></div>
-              <div class="priv-desc">입력 데이터는 Google Sheets(Google LLC)에 저장됩니다.</div>
+              <div class="priv-desc">입력 데이터는 데이터 서버 및 AJ Networks 데이터베이스에 저장됩니다.</div>
             </div>
           </div>
           <div class="priv-item" onclick="togglePriv('p3')">
             <div class="priv-ck" id="p3"></div>
             <div class="priv-item-r">
               <div class="priv-name">통계 활용 동의<span class="priv-tag-opt">(선택)</span></div>
-              <div class="priv-desc">익명 가동률 통계를 현장 효율 분석에 활용합니다.</div>
+              <div class="priv-desc">가동률 통계를 현장 효율 분석에 활용합니다.</div>
             </div>
           </div>
           <div style="display:flex;justify-content:flex-end;margin-top:6px">
@@ -1225,7 +1225,7 @@ textarea.fg-input{height:72px;line-height:1.5;}
       <div class="google-or" id="gsi-sub-or">또는 직접 가입</div>
 
       <div class="role-notice sub">
-        <div class="rn-txt">가입 후 <b>AJ관리자의 승인</b>이 필요합니다. 승인 완료 시 <b>자동 분석, 데이터 내보내기, 소속 장비 수정</b> 기능을 이용할 수 있습니다.</div>
+        <div class="rn-txt">가입 후 <b>AJ관리자의 승인</b>이 필요합니다. </div>
       </div>
       <div class="lg">
         <label class="lg-label">현장 선택 <span class="req">*</span></label>
@@ -1253,7 +1253,10 @@ textarea.fg-input{height:72px;line-height:1.5;}
       </div>
       <div class="lg" id="subPw2Wrap">
         <label class="lg-label">비밀번호 확인 <span class="req">*</span></label>
-        <input type="password" class="lg-input" id="subPw2" placeholder="신규 가입 시 재입력" onkeydown="if(event.key==='Enter')doLogin('sub')">
+        <input type="password" class="lg-input" id="subPw2" placeholder="비밀번호 확인 재입력" onkeydown="if(event.key==='Enter')doLogin('sub')">
+      </div>
+      <div class="lg">
+        <label class="lg-label">비밀번호는 암호화처리 됩니다. </label>
       </div>
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--tx2);padding:6px 0;margin-bottom:4px">
         <input type="checkbox" id="chk-auto-login-sub" checked style="width:16px;height:16px;accent-color:var(--teal);cursor:pointer;flex-shrink:0">
@@ -1265,7 +1268,7 @@ textarea.fg-input{height:72px;line-height:1.5;}
     <!-- ── AJ 관리자 폼 ── -->
     <div id="form-aj" style="display:none">
       <div class="role-notice aj">
-        <div class="rn-txt">AJ관리자 계정으로 로그인합니다. 현장 추가, 업체 관리, 초대코드 설정 등 <b>모든 기능</b>을 이용할 수 있습니다.</div>
+        <div class="rn-txt">AJ관리자 계정으로 로그인합니다.</div>
       </div>
       <!-- 탭 -->
       <div style="display:flex;gap:4px;margin-bottom:12px">
