@@ -1,6 +1,17 @@
 /* ═══════════════════════════════════════════
-   HOME
+   HOME — 아코디언 상태 (re-render 후에도 유지)
 ═══════════════════════════════════════════ */
+const _homeAcc = { analysis: false, transit: false, as: false };
+function _toggleHomeAcc(key){
+  _homeAcc[key] = !_homeAcc[key];
+  const body = document.getElementById('home-acc-body-'+key);
+  const btn  = document.getElementById('home-acc-btn-'+key);
+  if(!body) return;
+  body.style.display = _homeAcc[key] ? 'block' : 'none';
+  if(btn) btn.innerHTML = _homeAcc[key]
+    ? '▲ 접기'
+    : `▼ 더보기 <span style="opacity:.7">(+${btn.dataset.extra}건)</span>`;
+}
 function renderHome(){
   if(!S) return;
   _renderHomeAsync().catch(e=>console.warn('[renderHome]',e));
@@ -162,17 +173,31 @@ async function _renderHomeAsync(){
   </div>`;
 
   // ── PANEL 2: 반입/반출 ──
+  const _trQty = r => (r.specs||[]).length
+    ? (r.specs||[]).reduce((s,sp)=>s+(+sp.qty||1),0)
+    : (r.ajEquip ? r.ajEquip.split(/[,\s]+/).filter(Boolean).length : 1);
+  const _trEquipStr = r => {
+    const nos = [];
+    (r.specs||[]).forEach(sp=>(sp.equipNos||[]).forEach(n=>nos.push(n)));
+    if(!nos.length && r.ajEquip) r.ajEquip.split(/[,\s]+/).filter(Boolean).forEach(n=>nos.push(n));
+    if(!nos.length) return (r.equip||'—').slice(0,14);
+    return nos.length>2 ? nos.slice(0,2).join(' ')+'…' : nos.join(' ');
+  };
   const trRow=r=>{
-    const isIn=r.type==='in'; const clr=isIn?'#60a5fa':'#fb923c';
+    const isIn=r.type==='in', isHo=r.type==='handover';
+    const clr=isIn?'#60a5fa':isHo?'#a78bfa':'#fb923c';
+    const bg =isIn?'rgba(96,165,250,.15)':isHo?'rgba(167,139,250,.15)':'rgba(251,146,60,.15)';
+    const lbl=isIn?'반입':isHo?'인수인계':'반출';
     const isDone=['반입완료','반출완료','인계완료'].includes(r.status);
-    return `<div style="display:flex;align-items:center;gap:5px;padding:3px 0;opacity:${isDone?'.5':'1'}">
-      <span style="font-size:8px;font-weight:800;padding:1px 4px;border-radius:3px;background:${isIn?'rgba(96,165,250,.15)':'rgba(251,146,60,.15)'};color:${clr};flex-shrink:0">${isIn?'반입':'반출'}</span>
+    const qty=_trQty(r); const eqStr=_trEquipStr(r);
+    return `<div style="display:flex;align-items:center;gap:5px;padding:4px 0;opacity:${isDone?'.55':'1'}">
+      <span style="font-size:8px;font-weight:800;padding:1px 4px;border-radius:3px;background:${bg};color:${clr};flex-shrink:0">${lbl}</span>
       <span style="font-size:10px;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.company||'—'}</span>
-      <span style="font-size:9px;font-family:monospace;color:var(--tx3);flex-shrink:0">${(r.equip||'').split(/[\s,]/)[0]||''}</span>
+      <span style="font-size:9px;color:var(--tx3);flex-shrink:0;white-space:nowrap">총 ${qty}대</span>
+      <span style="font-size:9px;font-family:monospace;color:var(--tx3);flex-shrink:0;max-width:72px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${eqStr}</span>
       ${isDone?`<span style="font-size:8px;color:#22c55e;flex-shrink:0">✓</span>`:`<span style="font-size:8px;color:#fbbf24;font-weight:700;flex-shrink:0">D-DAY</span>`}
     </div>`;
   };
-  const trTodayHtml=[...doneToday,...pendingToday].slice(0,4).map(trRow).join('');
   const trTmrwHtml=pendingTmrw.slice(0,2).map(r=>{
     const isIn=r.type==='in'; const clr=isIn?'#60a5fa':'#fb923c';
     return `<div style="display:flex;align-items:center;gap:5px;padding:2px 0">
@@ -181,6 +206,16 @@ async function _renderHomeAsync(){
       <span style="font-size:8px;color:var(--tx3);flex-shrink:0">내일</span>
     </div>`;
   }).join('');
+  const trAll=[...doneToday,...pendingToday];
+  const TR_FOLD=3;
+  const trVisHtml=trAll.slice(0,TR_FOLD).map(trRow).join('');
+  const trHidHtml=trAll.length>TR_FOLD?trAll.slice(TR_FOLD).map(trRow).join(''):'';
+  const trExtra=trAll.length-TR_FOLD;
+  const trAccBtn=trHidHtml?`<button id="home-acc-btn-transit" data-extra="${trExtra}"
+    onclick="_toggleHomeAcc('transit')"
+    style="width:100%;margin-top:4px;padding:3px 0;font-size:10px;font-weight:700;color:var(--tx3);background:none;border:none;border-top:1px solid var(--br);cursor:pointer;text-align:center">
+    ${_homeAcc.transit?'▲ 접기':`▼ 더보기 <span style="opacity:.7">(+${trExtra}건)</span>`}
+  </button>`:'';
 
   const panel2=`<div style="background:var(--bg2);border:1px solid var(--br);border-radius:12px;overflow:hidden">
     <div style="display:flex;align-items:center;gap:6px;padding:9px 12px;border-bottom:1px solid var(--br)">
@@ -189,25 +224,39 @@ async function _renderHomeAsync(){
       ${doneToday.length>0?`<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:5px;background:rgba(34,197,94,.12);color:#22c55e">${doneToday.length}건 완료</span>`:''}
       <button onclick="goTab('pg-transit')" style="margin-left:auto;font-size:10px;font-weight:700;padding:3px 8px;border-radius:7px;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.25);color:#60a5fa;cursor:pointer;flex-shrink:0">내역 →</button>
     </div>
-    <div style="padding:5px 12px 8px">
-      ${trTodayHtml||`<div style="font-size:10px;color:var(--tx3);padding:4px 0">오늘 예정 없음</div>`}
+    <div style="padding:5px 12px 6px">
+      ${trVisHtml||`<div style="font-size:10px;color:var(--tx3);padding:4px 0">오늘 예정 없음</div>`}
+      ${trHidHtml?`<div id="home-acc-body-transit" style="display:${_homeAcc.transit?'block':'none'}">${trHidHtml}</div>`:''}
+      ${trAccBtn}
       ${trTmrwHtml?`<div style="margin-top:5px;padding-top:5px;border-top:1px solid var(--br)"><div style="font-size:9px;color:var(--tx3);margin-bottom:2px">내일 예정</div>${trTmrwHtml}</div>`:''}
-      ${(pendingToday.length+doneToday.length)>4?`<div style="font-size:10px;color:var(--tx3);text-align:center;margin-top:2px">+ 외 ${pendingToday.length+doneToday.length-4}건</div>`:''}
     </div>
   </div>`;
 
   // ── PANEL 3: AS 현황 ──
-  const asSeqSorted=[...allAS].sort((a,b)=>(a.requestedAt||a.ts||0)-(b.requestedAt||b.ts||0));
-  const asSeqLocal=new Map(asSeqSorted.map((r,i)=>[r.id,i+1]));
-  const recentOpen=[...openAS].sort((a,b)=>(b.requestedAt||0)-(a.requestedAt||0)).slice(0,3);
-  const asPreviewHtml=recentOpen.map(r=>{
-    const stCol=r.status==='자재수급중'?'#f59e0b':'#f87171';
-    return `<div style="display:flex;align-items:center;gap:5px;padding:3px 0;border-bottom:1px solid var(--br)">
-      <span style="font-size:8px;font-weight:800;padding:1px 4px;border-radius:3px;background:rgba(248,113,113,.1);color:${stCol};flex-shrink:0">${r.status||'대기'}</span>
+  const AS_FOLD = 3;
+  const asWaitAll = [...waitAS].sort((a,b)=>(b.requestedAt||0)-(a.requestedAt||0));
+  const asRow = r => {
+    const stCol = r.status==='자재수급중'?'#f59e0b':'#f87171';
+    const stBg  = r.status==='자재수급중'?'rgba(245,158,11,.15)':'rgba(248,113,113,.15)';
+    const sym   = (r.type||r.faultType||'기타').slice(0,5);
+    const eqNo  = (r.equip||'—').slice(0,10);
+    const loc   = (r.location||'—').slice(0,10);
+    return `<div style="display:flex;align-items:center;gap:5px;padding:4px 0;border-bottom:1px solid var(--br)">
+      <span style="font-size:8px;font-weight:800;padding:1px 4px;border-radius:3px;background:${stBg};color:${stCol};flex-shrink:0;white-space:nowrap">${r.status||'대기'}</span>
+      <span style="font-size:8px;font-weight:700;padding:1px 3px;border-radius:3px;background:rgba(248,113,113,.1);color:#f87171;flex-shrink:0;white-space:nowrap">${sym}</span>
       <span style="font-size:10px;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.company||'—'}</span>
-      <span style="font-size:9px;color:var(--tx3);font-family:monospace;flex-shrink:0">#${asSeqLocal.get(r.id)||'?'}</span>
+      <span style="font-size:9px;color:var(--tx3);flex-shrink:0;font-family:monospace;white-space:nowrap">${eqNo}</span>
+      <span style="font-size:9px;color:var(--tx3);flex-shrink:0;max-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${loc}</span>
     </div>`;
-  }).join('');
+  };
+  const asVisHtml = asWaitAll.slice(0,AS_FOLD).map(asRow).join('');
+  const asHidHtml = asWaitAll.length>AS_FOLD ? asWaitAll.slice(AS_FOLD).map(asRow).join('') : '';
+  const asExtra   = asWaitAll.length - AS_FOLD;
+  const asAccBtn  = asHidHtml ? `<button id="home-acc-btn-as" data-extra="${asExtra}"
+    onclick="_toggleHomeAcc('as')"
+    style="width:100%;margin-top:4px;padding:3px 0;font-size:10px;font-weight:700;color:var(--tx3);background:none;border:none;border-top:1px solid var(--br);cursor:pointer;text-align:center">
+    ${_homeAcc.as?'▲ 접기':`▼ 더보기 <span style="opacity:.7">(+${asExtra}건)</span>`}
+  </button>` : '';
 
   const panel3=`<div style="background:var(--bg2);border:1px solid var(--br);border-radius:12px;overflow:hidden">
     <div style="display:flex;align-items:center;gap:6px;padding:9px 12px;border-bottom:1px solid var(--br)">
@@ -235,8 +284,9 @@ async function _renderHomeAsync(){
           <div style="font-size:15px;font-weight:900;color:#60a5fa">${todayAS.length}</div>
         </div>
       </div>
-      ${asPreviewHtml||`<div style="font-size:10px;color:var(--tx3);padding:3px 0">미처리 AS 없음 ✓</div>`}
-      ${openAS.length>3?`<div style="font-size:10px;color:var(--tx3);text-align:center;margin-top:3px">외 ${openAS.length-3}건 더</div>`:''}
+      ${asVisHtml||`<div style="font-size:10px;color:var(--tx3);padding:3px 0">대기 중인 AS 없음 ✓</div>`}
+      ${asHidHtml?`<div id="home-acc-body-as" style="display:${_homeAcc.as?'block':'none'}">${asHidHtml}</div>`:''}
+      ${asAccBtn}
     </div>
   </div>`;
 
@@ -4126,8 +4176,27 @@ async function _askAI(type, targetId='ai-query-result'){
     lines.push(`• 분석 타입을 인식할 수 없습니다`);
   }
 
-  const html = lines.map(l=>`<div style="font-size:11px;line-height:1.7;padding:1px 0">${l}</div>`).join('');
-  el.innerHTML = `<div class="ai-qres"><div style="font-size:10px;font-weight:700;color:#60a5fa;margin-bottom:7px">📊 분석 결과</div>${html}</div>`;
+  const _lineDiv = l => `<div style="font-size:11px;line-height:1.7;padding:1px 0">${l}</div>`;
+  const ANALYSIS_FOLD = 5;
+  if(targetId === 'home-analysis-result' && lines.length > ANALYSIS_FOLD){
+    const visH  = lines.slice(0, ANALYSIS_FOLD).map(_lineDiv).join('');
+    const hidH  = lines.slice(ANALYSIS_FOLD).map(_lineDiv).join('');
+    const extra = lines.length - ANALYSIS_FOLD;
+    const accBtn = `<button id="home-acc-btn-analysis" data-extra="${extra}"
+      onclick="_toggleHomeAcc('analysis')"
+      style="width:100%;margin-top:4px;padding:3px 0;font-size:10px;font-weight:700;color:var(--tx3);background:none;border:none;border-top:1px solid var(--br);cursor:pointer;text-align:center">
+      ${_homeAcc.analysis?'▲ 접기':`▼ 더보기 <span style="opacity:.7">(+${extra}건)</span>`}
+    </button>`;
+    el.innerHTML = `<div class="ai-qres">
+      <div style="font-size:10px;font-weight:700;color:#60a5fa;margin-bottom:7px">📊 분석 결과</div>
+      ${visH}
+      <div id="home-acc-body-analysis" style="display:${_homeAcc.analysis?'block':'none'}">${hidH}</div>
+      ${accBtn}
+    </div>`;
+  } else {
+    const html = lines.map(_lineDiv).join('');
+    el.innerHTML = `<div class="ai-qres"><div style="font-size:10px;font-weight:700;color:#60a5fa;margin-bottom:7px">📊 분석 결과</div>${html}</div>`;
+  }
 }
 
 async function runAI(){
