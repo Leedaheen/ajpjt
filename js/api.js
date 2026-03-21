@@ -887,30 +887,43 @@ function _cleanupRealtime(){
 }
 
 let _retrySyncTimer = null;
-let _retrySyncCount = 0;          // 연속 실패 횟수
-const _MAX_RETRY_SYNC = 5;        // 최대 재시도 5회 (총 2.5분)
+let _retrySyncCount = 0;
+// 지수 백오프: 15s → 30s → 60s → 120s → 300s (총 ~8분, 5회)
+const _RETRY_DELAYS = [15000, 30000, 60000, 120000, 300000];
+function _setRetryStatus(msg, cls){
+  try{
+    const dot=document.getElementById('sdot'), txt=document.getElementById('stxt');
+    if(dot) dot.className='sdot '+(cls||'warn');
+    if(txt) txt.textContent=msg||'';
+  }catch(_){}
+}
 function scheduleRetrySync(){
-  if(_retrySyncTimer) return;
-  if(_retrySyncCount >= _MAX_RETRY_SYNC){
-    console.warn('[Sync] 재시도 최대 횟수 초과 — 중단. 다음 수동 동기화 시 초기화됨');
+  if(_retrySyncTimer) return; // 이미 예약 중
+  if(_retrySyncCount >= _RETRY_DELAYS.length){
+    console.warn('[Sync] 재시도 한도 초과 — 중단');
     _retrySyncCount = 0;
-    setTimeout(()=>{ try{ toast('동기화 재시도 실패 (5회). 네트워크를 확인하세요','err',5000); }catch(_e){} },0);
+    _setRetryStatus('동기화 실패','err');
+    setTimeout(()=>{ try{ toast('서버 동기화 실패 (5회). 네트워크를 확인해주세요','err',6000); }catch(_e){} },0);
     return;
   }
+  const delay = _RETRY_DELAYS[_retrySyncCount];
   _retrySyncCount++;
+  _setRetryStatus(`재시도 예정 (${_retrySyncCount}/${_RETRY_DELAYS.length})…`,'warn');
   _retrySyncTimer = setTimeout(async()=>{
     _retrySyncTimer = null;
+    _setRetryStatus(`동기화 중 (${_retrySyncCount}/${_RETRY_DELAYS.length})…`,'sync');
     try{
       await syncNow();
       const unsync = await IDB.getUnsynced('logs').catch(()=>[]);
       if(!unsync.length){
         _retrySyncCount = 0;
-        toast('재동기화 완료','ok');
+        _setRetryStatus('동기화 완료','ok');
+        setTimeout(()=>{ try{ toast('서버 재동기화 완료 ✓','ok'); }catch(_e){} },0);
       } else {
-        scheduleRetrySync();
+        scheduleRetrySync(); // 미동기화 항목 남아있으면 재시도
       }
     }catch(_e){ scheduleRetrySync(); }
-  }, 30*1000);
+  }, delay);
 }
 
 /* 3PM 알림 — 인덱스 활용, 알림 중복 방지 */

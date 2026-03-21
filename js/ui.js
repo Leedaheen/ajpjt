@@ -244,9 +244,8 @@ async function submitStart(){
         }
       }
     }
-    await pushToGS(entry);         // Supabase 직접 저장 (실패 시 로컬 + 재시도 예약)
-    _syncToSupabase().catch(e => console.warn('[submitStart sync]', e)); // 즉시 전체 미동기화 항목 push
-    toast(entry.synced?'사용 신청 완료':'로컬 저장 (미연동)', entry.synced?'ok':'warn');
+    await pushToGS(entry);         // 서버 직접 저장 (실패 시 내부에서 재시도 예약)
+    toast(entry.synced?'사용 신청 완료':'로컬 저장 (자동 재시도 예정)', entry.synced?'ok':'warn');
     updatePendingBanner(); updateLogBadge();
     // 이력 목록 즉시 갱신
     if(document.getElementById('log-body')) _logLoadTimer = setTimeout(_doRenderLog, 300);
@@ -258,7 +257,10 @@ async function submitStart(){
     // 팀명은 세션 팀명으로 유지 (다음 신청에도 동일 팀이므로)
     document.querySelectorAll('#ops-project-chips .chip.on').forEach(c=>c.classList.remove('on'));
   } catch(e) {
-    toast('저장 중 오류가 발생했습니다','err');
+    // IDB 오류 등 예외 발생 시 — 로컬 저장 후 재시도 예약
+    try{ entry.synced=false; await saveLog(entry); }catch(_){}
+    scheduleRetrySync();
+    toast('로컬 저장됨 (자동 재시도 예정)','warn');
   } finally {
     spinner(false); btn.classList.remove('loading'); btn.disabled=false;
   }
@@ -294,7 +296,7 @@ async function submitEnd(){
     spinner(true,'종료 저장 중...');
     await pushToGS(entry);         // ① 서버(Supabase) 우선 저장 → entry.synced=true
     await saveLog(entry);          // ② IDB 저장 (synced 상태 포함)
-    toast(entry.synced?`사용 종료 완료 (${dur?fH(dur):'—'})`: '로컬 저장 (미연동)', entry.synced?'ok':'warn');
+    toast(entry.synced?`사용 종료 완료 (${dur?fH(dur):'—'})`: '로컬 저장 (자동 재시도 예정)', entry.synced?'ok':'warn');
     updatePendingBanner(); updateLogBadge();
     // 이력 목록 즉시 갱신
     if(document.getElementById('log-body')) _logLoadTimer = setTimeout(_doRenderLog, 300);
@@ -302,7 +304,8 @@ async function submitEnd(){
     populateOpenSessions();
   } catch(e) {
     try{ entry.synced=false; await saveLog(entry); }catch(_){}
-    toast('로컬 저장됨 (서버 연결 실패)','warn');
+    scheduleRetrySync();
+    toast('로컬 저장됨 (자동 재시도 예정)','warn');
   } finally {
     spinner(false); btn.classList.remove('loading'); btn.disabled=false;
   }
@@ -329,13 +332,20 @@ async function submitIdle(){
     equip:eq, name:S.name, reason, note, status:'idle', ts:Date.now(), synced:false,
   }));
   try {
-    for(const e of entries){ await saveLog(e); await pushToGS(e); _pushIdleLogToSB(e).catch(()=>{}); }
-    toast(`미가동 등록 완료 (${equipList.length}건)`,'ok');
+    for(const e of entries){
+      await pushToGS(e);            // ① 서버 우선 저장
+      await saveLog(e);             // ② IDB 저장 (synced 상태 포함)
+      _pushIdleLogToSB(e).catch(()=>{}); // idle_logs 테이블 별도 저장 (fire-and-forget)
+    }
+    const allSynced = entries.every(e=>e.synced);
+    toast(allSynced?`미가동 등록 완료 (${equipList.length}건)`:`로컬 저장 (자동 재시도 예정)`, allSynced?'ok':'warn');
     document.getElementById('f-idle-equip').value='';
     document.getElementById('f-idle-note').value='';
     document.querySelectorAll('#idle-reason-chips .chip.on').forEach(c=>c.classList.remove('on'));
   } catch(e) {
-    toast('저장 중 오류가 발생했습니다','err');
+    for(const e2 of entries){ try{ e2.synced=false; await saveLog(e2); }catch(_){} }
+    scheduleRetrySync();
+    toast('로컬 저장됨 (자동 재시도 예정)','warn');
   } finally {
     btn.classList.remove('loading'); btn.disabled=false;
   }
