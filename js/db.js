@@ -40,7 +40,7 @@ document.addEventListener('input', function(e){
 /* 이 값이 있으면 localStorage 설정 없이도 항상 연결됩니다 */
 const SB_DEFAULT_URL = 'https://jqhlxbarstqsnizquxeu.supabase.co';
 const GOOGLE_DEFAULT_CLIENT_ID = '1075257837095-jrdnlfql4s4emh4mmhnjcvhomon6f3kk.apps.googleusercontent.com';
-const KAKAO_DEFAULT_JS_KEY = '';  // 카카오 개발자 콘솔에서 발급받은 JavaScript 앱 키
+const KAKAO_DEFAULT_JS_KEY = '572b297ef83ce900385b830830063464';  // 카카오 개발자 콘솔에서 발급받은 JavaScript 앱 키
 const SB_DEFAULT_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpxaGx4YmFyc3Rxc25penF1eGV1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI4Njg1NzIsImV4cCI6MjA4ODQ0NDU3Mn0.VIEcG6t2xRr6BUka5dOECTxND2dAW4g8UjhOjn09Ef4';
 
 const K = {
