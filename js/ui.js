@@ -2300,11 +2300,13 @@ function _trCard(r, seqNo, canEdit, canMsg){
       <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
         ${totalQty>0?`<span style="font-size:10px;font-weight:700;color:var(--tx3);flex-shrink:0">총 ${totalQty}대</span>`:''}
         <div style="text-align:right">
-          <div style="font-size:13px;font-weight:900;color:${!st.done&&diff<=1?st.color:'var(--tx)'}">${r.date}</div>
+          <div style="display:flex;align-items:baseline;justify-content:flex-end;gap:5px;flex-wrap:wrap">
+            <div style="font-size:13px;font-weight:900;color:${!st.done&&diff<=1?st.color:'var(--tx)'}">${r.date}</div>
+            ${(r.ts||r.createdAt)?`<div style="font-size:9px;color:var(--tx3);font-family:monospace;line-height:1">${_fmtAsDate(r.ts||r.createdAt)}</div>`:''}
+            ${seqNo?`<div style="font-size:9px;color:var(--tx3);font-family:monospace;line-height:1">No.${seqNo}</div>`:''}
+          </div>
           <div style="font-size:10px;font-weight:800;color:${st.color}">${st.label}${dDayStr}</div>
           ${isIn && r.planData ? `<button onclick="event.stopPropagation();_showTrPlanPopup('${r.id}')" style="margin-top:3px;padding:2px 8px;background:rgba(99,102,241,.18);border:1px solid rgba(99,102,241,.35);border-radius:5px;color:#a5b4fc;font-size:9px;font-weight:700;cursor:pointer">📄 신청서</button>` : ''}
-          ${(r.ts||r.createdAt)?`<div style="font-size:9px;color:var(--tx3);font-family:monospace;margin-top:2px">${_fmtAsDate(r.ts||r.createdAt)}</div>`:''}
-          <div style="font-size:9px;color:var(--tx3);font-family:monospace">${seqNo?'No.'+seqNo:''}</div>
         </div>
       </div>
       <span id="tr-arrow-${r.id}" style="font-size:12px;color:var(--tx3);transition:transform .2s;flex-shrink:0;align-self:center${isExpanded?';transform:rotate(180deg)':''}">▼</span>
@@ -2618,15 +2620,39 @@ function _renderSpecBlock(r, canEdit) {
   let specs = r.specs && r.specs.length ? r.specs : _parseSpecString(r.equip || r.equip_specs || '');
   if (!specs.length) {
     const fallback = r.equip || r.equip_specs || '';
+    const rid = r.id;
     // 반입 + 편집권한: spec 없어도 장비번호 직접 입력란 표시 (반입신청 스펙블록과 동일 위치)
     if (isIn && canEdit) {
+      const hasEquip = !!(r.ajEquip && r.ajEquip.trim());
+      const isEditMode = !hasEquip || (window._specEditMode && window._specEditMode.get(rid));
+      // ── 읽기 모드: 장비번호 저장됨 → 복사/수정 버튼
+      if (!isEditMode) {
+        window['_copyData_' + rid] = r.ajEquip;
+        return `<div style="margin-bottom:8px;padding:8px 10px;background:rgba(96,165,250,.04);border:1px solid rgba(96,165,250,.15);border-radius:8px">
+          <div style="font-size:10px;font-weight:700;color:#60a5fa;margin-bottom:6px">🏷 장비번호</div>
+          ${fallback?`<div style="font-size:11px;color:var(--tx3);margin-bottom:4px;line-height:1.6">${fallback.replace(/\//g,'<br>')}</div>`:''}
+          <div style="font-size:12px;font-weight:900;font-family:monospace;color:#60a5fa;line-height:1.8;margin-bottom:6px">${r.ajEquip.replace(/,/g,', ')}</div>
+          <div style="display:flex;justify-content:flex-end;gap:4px">
+            <button onclick="var t=window['_copyData_${rid}'];if(navigator.clipboard){navigator.clipboard.writeText(t).then(()=>toast('복사됨','ok')).catch(()=>{});}else{var e=document.createElement('textarea');e.value=t;document.body.appendChild(e);e.select();document.execCommand('copy');e.remove();toast('복사됨','ok');}"
+              style="width:12.5%;padding:5px 0;font-size:11px;font-weight:700;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.25);border-radius:6px;color:#60a5fa;cursor:pointer">복사</button>
+            <button onclick="if(!window._specEditMode)window._specEditMode=new Map();window._specEditMode.set('${rid}',true);renderTransit();"
+              style="width:12.5%;padding:5px 0;font-size:11px;font-weight:700;background:rgba(96,165,250,.18);border:1px solid rgba(96,165,250,.35);border-radius:6px;color:#60a5fa;cursor:pointer">수정</button>
+          </div>
+        </div>`;
+      }
+      // ── 편집 모드: 입력란 + 날짜변경/저장완료 버튼
       return `<div style="margin-bottom:8px;padding:8px 10px;background:rgba(96,165,250,.04);border:1px solid rgba(96,165,250,.15);border-radius:8px">
         <div style="font-size:10px;font-weight:700;color:#60a5fa;margin-bottom:7px">🏷 장비번호 입력</div>
-        ${fallback?`<div style="font-size:12px;font-weight:700;margin-bottom:6px;line-height:1.6">${fallback.replace(/\//g,'<br>')}</div>`:''}
-        <div style="display:flex;align-items:center;gap:6px">
-          <input type="text" id="inline-equip-${r.id}" value="${r.ajEquip||''}" placeholder="장비번호 입력 (쉼표 구분)" oninput="this.value=this.value.toUpperCase()" autocomplete="off"
+        ${fallback?`<div style="font-size:11px;color:var(--tx3);margin-bottom:4px;line-height:1.6">${fallback.replace(/\//g,'<br>')}</div>`:''}
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+          <input type="text" id="inline-equip-${rid}" value="${r.ajEquip||''}" placeholder="장비번호 입력 (쉼표 구분)" oninput="this.value=this.value.toUpperCase()" autocomplete="off"
             style="flex:1;padding:5px 8px;font-size:11px;font-family:monospace;font-weight:700;text-transform:uppercase;background:var(--bg2);border:1px solid var(--br);border-radius:6px;color:#60a5fa;outline:none">
-          <button onclick="_saveInlineEquip('${r.id}')" style="padding:5px 10px;font-size:11px;font-weight:700;background:rgba(96,165,250,.18);border:1px solid rgba(96,165,250,.35);border-radius:6px;color:#60a5fa;cursor:pointer;white-space:nowrap">저장</button>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:4px;padding-top:6px;border-top:1px solid rgba(96,165,250,.12)">
+          <button onclick="editTransitDate('${rid}')"
+            style="width:12.5%;padding:5px 0;font-size:11px;font-weight:700;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.25);border-radius:6px;color:#60a5fa;cursor:pointer">날짜변경</button>
+          <button onclick="_saveInlineEquip('${rid}')"
+            style="width:12.5%;padding:5px 0;font-size:11px;font-weight:700;background:rgba(96,165,250,.18);border:1px solid rgba(96,165,250,.35);border-radius:6px;color:#60a5fa;cursor:pointer">저장완료</button>
         </div>
       </div>`;
     }
@@ -2808,6 +2834,8 @@ async function _saveInlineEquip(id) {
   rec.ajEquip = equip;
   rec.synced  = false;
   await saveTransit(recs);
+  // 편집모드 플래그 해제
+  if (window._specEditMode) window._specEditMode.delete(id);
   // 즉시 서버 연동
   _directPushTransit(rec).catch(e => { console.warn('[_saveInlineEquip push]', e); scheduleRetrySync(); });
   // 반입완료 상태라면 마스터도 즉시 갱신
