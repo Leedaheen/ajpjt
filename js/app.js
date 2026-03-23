@@ -130,6 +130,7 @@ function onSheetOpen(id){
     ['sb-credentials-block','sb-sql-block','sb-warn-block'].forEach(bid=>{
       const el=document.getElementById(bid); if(el) el.style.display=_isAJ?'':'none';
     });
+    _loadInviteCodeInput();
     // IDB 통계 비동기 표시
     const statsEl=document.getElementById('idb-stats');
     if(statsEl){
@@ -534,7 +535,7 @@ async function doGoogleProfileSubmit(){
     const dup = allMembers.find(m=>m.google_email===email);
     if(dup) member = dup;
   }
-  const status = mode==='tech'?'approved':'pending';
+  const status = mode==='tech'?'approved':(window._inviteCodeOk?'approved':'pending');
   const role   = mode==='tech'?'tech':'sub';
   const id     = member?.id || (role+'-'+Date.now()+'-'+Math.random().toString(36).slice(2,7));
   const record = {
@@ -571,8 +572,15 @@ async function doGoogleProfileSubmit(){
     S={role:'tech',name,phone,company:co,siteId:site,siteName,team,loginAt:Date.now()};
     DB.s(K.SESSION,S); DB.s('auto_login',true);
     enterApp();
+  } else if(window._inviteCodeOk){
+    // 초대코드로 즉시 승인 — 바로 로그인
+    window._inviteCodeOk = false;
+    S={role:'sub',name,title:record.title||'',phone,company:co,siteId:site,siteName,loginAt:Date.now(),memberId:id};
+    DB.s(K.SESSION,S); DB.s('auto_login',true);
+    toast('가입 완료! 로그인됩니다.','ok',2000);
+    enterApp();
   } else {
-    // 가입 신청 완료 메시지
+    // 일반 가입 신청 — AJ 승인 대기
     addNotif({icon:'',title:`신규 관리자 가입신청: ${co}`,
       desc:`${co} ${name}님이 가입을 신청했습니다. 승인이 필요합니다.`});
     pushSBNotif({target_aj_type:'관리자', type:'signup_request', title:`신규 가입신청: ${co}`, body:`${co} ${name}님이 가입을 신청했습니다. 승인이 필요합니다.`, ref_id:record.id}).catch(()=>{});
@@ -741,6 +749,32 @@ function _adminLogin(){
   DB.s(K.SESSION, S);
   toast('관리자로 로그인됩니다.','ok');
   enterApp();
+}
+
+/* 협력사 관리자 초대코드 — 유효하면 가입 즉시 승인 */
+function _enterInviteCode(){
+  const stored = DB.g('sub_invite_code','');
+  if(!stored){
+    toast('초대코드가 설정되지 않았습니다. AJ관리자에게 문의하세요.','warn',3000);
+    return;
+  }
+  const code = prompt('AJ관리자에게 받은 초대코드를 입력하세요');
+  if(code === null) return;
+  if(code.trim() !== stored.trim()){
+    toast('초대코드가 올바르지 않습니다.','err',3000);
+    return;
+  }
+  window._inviteCodeOk = true;
+  toast('초대코드 확인! Google 또는 카카오로 가입해주세요.','ok',3000);
+}
+function _saveInviteCode(){
+  const v = document.getElementById('invite-code-input')?.value.trim()||'';
+  DB.s('sub_invite_code', v);
+  toast(v ? `초대코드 저장됨: ${v}` : '초대코드 비활성화됨', 'ok');
+}
+function _loadInviteCodeInput(){
+  const el = document.getElementById('invite-code-input');
+  if(el) el.value = DB.g('sub_invite_code','');
 }
 
 /* ═══════════════════════════════════════════════════════════
