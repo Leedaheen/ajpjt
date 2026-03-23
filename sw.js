@@ -37,6 +37,32 @@ self.addEventListener('activate', e => {
   );
 });
 
+// ── 백그라운드 푸시 수신 ──────────────────────────────────
+self.addEventListener('push', e => {
+  const data = e.data ? e.data.json() : {};
+  e.waitUntil(
+    self.registration.showNotification(data.title || 'AJ 알림', {
+      body: data.body || '',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-72.png',
+      tag: data.tag || 'ajpjt',
+      renotify: true,
+      data: data
+    })
+  );
+});
+
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      const win = list.find(w => w.url.includes(self.location.origin));
+      if (win) return win.focus();
+      return clients.openWindow('/');
+    })
+  );
+});
+
 self.addEventListener('fetch', e => {
   const url = e.request.url;
   if (e.request.method !== 'GET') return;

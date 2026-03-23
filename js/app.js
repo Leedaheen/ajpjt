@@ -737,6 +737,61 @@ function _adminLogin(){
   enterApp();
 }
 
+/* ═══════════════════════════════════════════════════════════
+   OS 알림 (Web Notifications + App Badge)
+   - PC PWA: OS 우측하단 네이티브 알림
+   - 모바일 PWA: 앱 아이콘 뱃지 + 알림 팝업
+═══════════════════════════════════════════════════════════ */
+async function _requestNotifPermission(){
+  if(!('Notification' in window)) return false;
+  if(Notification.permission === 'granted') return true;
+  if(Notification.permission === 'denied') return false;
+  const r = await Notification.requestPermission();
+  return r === 'granted';
+}
+
+async function _showOSNotif(title, body, tag){
+  if(!('Notification' in window) || Notification.permission !== 'granted') return;
+  const opts = { body, icon: '/icons/icon-192.png', badge: '/icons/icon-72.png',
+                 tag: tag||'ajpjt', renotify: true };
+  try {
+    if(navigator.serviceWorker?.controller){
+      const reg = await navigator.serviceWorker.ready;
+      await reg.showNotification(title, opts);
+    } else {
+      new Notification(title, opts);
+    }
+  } catch(e){ console.warn('[Notif]', e); }
+}
+
+function _setAppBadge(count){
+  if('setAppBadge' in navigator){
+    count > 0 ? navigator.setAppBadge(count).catch(()=>{}) : navigator.clearAppBadge().catch(()=>{});
+  }
+}
+
+async function _checkPendingNotif(){
+  if(S?.role !== 'aj') return;
+  const pending = getMembers().filter(m => (m.status||'pending') === 'pending' && m.role !== 'tech');
+  const count = pending.length;
+  _setAppBadge(count);
+  if(count === 0) return;
+  // 이미 알림을 보낸 ID는 중복 발송하지 않음
+  const notifiedSet = new Set(JSON.parse(DB.g('_notif_pend_ids','[]')));
+  const newOnes = pending.filter(m => !notifiedSet.has(m.record_id||m.id));
+  if(!newOnes.length) return;
+  const granted = await _requestNotifPermission();
+  if(!granted) return;
+  const names = newOnes.map(m=>`${m.company||''} ${m.name||''}`.trim()).join(', ');
+  await _showOSNotif(
+    `가입 승인 요청 ${count}건`,
+    `${names}님의 가입 승인이 필요합니다.`,
+    'pending-approval'
+  );
+  newOnes.forEach(m => notifiedSet.add(m.record_id||m.id));
+  DB.s('_notif_pend_ids', JSON.stringify([...notifiedSet]));
+}
+
 function saveKakaoConfig(){
   const key = document.getElementById('kakao-key-input')?.value.trim()||'';
   if(!key){ toast('카카오 키를 입력하세요','err'); return; }
@@ -1026,8 +1081,10 @@ function renderAcctSubList(){
     (m.role==='sub'||(!m.role&&m.title!=='기술인'))&&
     (!siteId||m.siteId===siteId)
   );
-  // 대기 중 개수 배지
+  // 대기 중 개수 배지 + OS 뱃지/알림 갱신
   const pendingCnt=members.filter(m=>(m.status||'approved')==='pending').length;
+  _setAppBadge(pendingCnt);
+  if(pendingCnt > 0) _checkPendingNotif();
   const cntEl=document.getElementById('sub-pending-cnt');
   if(cntEl){ cntEl.textContent=pendingCnt; cntEl.style.display=pendingCnt>0?'inline':'none'; }
   // 필터 적용
@@ -1510,6 +1567,8 @@ function enterApp(){
   updateLogBadge();
   check3PMAlert();
   setTimeout(checkUnreadNotifs, 500);
+  // AJ 관리자: 알림 권한 요청 + 승인 대기 회원 확인
+  if(S?.role === 'aj') setTimeout(()=>_requestNotifPermission().then(()=>_checkPendingNotif()), 1500);
   // IDB 초기화 완료 후 syncNow 실행 (순서 보장)
   IDB.open()
     .then(() => {
