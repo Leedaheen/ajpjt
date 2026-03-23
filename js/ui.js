@@ -1383,8 +1383,11 @@ function _asCard(r, canAct){
         ${r.status==='처리완료'&&r.techName?`<span style="font-size:9px;color:#4ade80;margin-left:4px;font-weight:700">· ${esc(r.techName)}</span>`:''}
       </div>
       <div class="lc-time" style="text-align:right">
-        <div>${_fmtAsDate(r.requestedAt)}</div>
-        <div style="font-size:9px;color:var(--tx3);margin-top:1px;font-family:monospace">${seqNo?'No.'+seqNo:''}</div>
+        <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
+          <span style="font-size:10px;color:var(--tx2)">${_fmtAsDate(r.requestedAt||r.createdAt)}</span>
+          ${seqNo?`<span style="font-size:9px;color:var(--tx3);font-family:monospace;white-space:nowrap">No.${seqNo}</span>`:''}
+        </div>
+        ${r.status==='처리완료'&&r.resolvedAt&&(r.requestedAt||r.createdAt)?`<div style="font-size:9px;color:#4ade80;margin-top:2px;text-align:right">⏱ ${(()=>{const ms=new Date(r.resolvedAt)-new Date(r.requestedAt||r.createdAt);const h=Math.floor(ms/3600000);const d=Math.floor(h/24);return d>0?d+'일 '+(h%24)+'h':h+'h '+Math.round((ms%3600000)/60000)+'m';})()}</div>`:''}
       </div>
     </div>
 
