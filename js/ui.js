@@ -190,7 +190,7 @@ async function _renderHomeAsync(){
     return `<div style="display:flex;align-items:center;gap:5px;padding:4px 0;opacity:${isDone?'.55':'1'}">
       <span style="font-size:8px;font-weight:800;padding:1px 4px;border-radius:3px;background:${bg};color:${clr};flex-shrink:0">${lbl}</span>
       <div style="flex:1;overflow:hidden;min-width:0;white-space:nowrap;text-overflow:ellipsis">
-        <span style="font-size:10px;font-weight:700">${r.company||'—'}</span><span style="font-size:10px;color:var(--tx3)"> · ${qty}대</span>${eqStr&&eqStr!=='—'?`<span style="font-size:10px;font-family:monospace;color:var(--tx3)"> ${eqStr}</span>`:''}
+        <span style="font-size:10px;color:var(--tx2);font-weight:700">${r.company||'—'}</span><span style="font-size:10px;color:var(--tx2)"> · ${qty}대</span>${eqStr&&eqStr!=='—'?`<span style="font-size:10px;font-family:monospace;color:var(--tx2)"> ${eqStr}</span>`:''}
       </div>
       ${isDone?`<span style="font-size:8px;color:#22c55e;flex-shrink:0">✓</span>`:`<span style="font-size:8px;color:#fbbf24;font-weight:700;flex-shrink:0">D-DAY</span>`}
     </div>`;
