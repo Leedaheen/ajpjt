@@ -414,11 +414,13 @@ async function _fetchFromSB(){
       }
     };
 
+    // transit: 최근 30일 생성 OR 아직 예정 상태(지연 포함) — 날짜 필터로 누락 방지
+    const trOrFilter = encodeURIComponent('예정');
     const [trRows, asRows] = await Promise.all([
       _sbGetWithFallback(
         'transit',
-        `?select=${TR_COLS}&created_at=gte.${sinceStr}${siteFilter}&order=created_at.desc&limit=200`,
-        `?select=*&created_at=gte.${sinceStr}${siteFilter}&order=created_at.desc&limit=200`
+        `?select=${TR_COLS}${siteFilter}&or=(created_at.gte.${sinceStr},status.eq.${trOrFilter})&order=created_at.desc&limit=300`,
+        `?select=*${siteFilter}&or=(created_at.gte.${sinceStr},status.eq.${trOrFilter})&order=created_at.desc&limit=300`
       ),
       _sbGetWithFallback(
         'as_requests',

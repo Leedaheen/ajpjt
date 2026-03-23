@@ -1326,11 +1326,9 @@ function _fmtAsDate(ts){
   const yy=String(d.getFullYear()).slice(2);
   const mm=String(d.getMonth()+1).padStart(2,'0');
   const dd=String(d.getDate()).padStart(2,'0');
-  const h=d.getHours();
-  const ampm=h<12?'오전':'오후';
-  const hh=String(h%12||12).padStart(2,'0');
+  const hh=String(d.getHours()).padStart(2,'0');
   const min=String(d.getMinutes()).padStart(2,'0');
-  return `${yy}-${mm}-${dd} ${ampm} ${hh}:${min}`;
+  return `${yy}/${mm}/${dd} ${hh}:${min}`;
 }
 function _asCard(r, canAct){
   const seqNo = window._asSeqMap?.get(r.id) || 0;
@@ -1384,7 +1382,7 @@ function _asCard(r, canAct){
       </div>
       <div class="lc-time" style="text-align:right">
         <div>${_fmtAsDate(r.requestedAt)}</div>
-        <div style="font-size:9px;color:var(--tx3);margin-top:1px;font-family:monospace">${seqNo||''}</div>
+        <div style="font-size:9px;color:var(--tx3);margin-top:1px;font-family:monospace">${seqNo?'No.'+seqNo:''}</div>
       </div>
     </div>
 
@@ -1542,7 +1540,7 @@ function trStatusLabel(date, type, status){
              : ['반출','금일반출','명일반출','반출완료'];
   const diff = (new Date(date) - new Date(td)) / 86400000;
   if(diff < 0 && status === '예정'){
-    const delayLabel = type==='in'?'반입 지연':type==='handover'?'인계 지연':'반출 지연';
+    const delayLabel = type==='in'?'반입지연':type==='handover'?'인계지연':'반출지연';
     return {label: delayLabel, color:'#f87171', bg:'rgba(248,113,113,.15)', done:false};
   }
   if(diff < 0)                  return {label: verb[3], color:'#22c55e',      bg:'rgba(34,197,94,.15)',   done:true};
@@ -1995,8 +1993,10 @@ function _calNavMonth(delta){
 }
 
 function _calSelectDate(ds){
-  if(!window._trFilter) window._trFilter={};
-  window._trFilter.date = ds;
+  if(!window._trFilter) window._trFilter={dateFrom:'',dateTo:'',company:'',spec:'',status:''};
+  window._trFilter.dateFrom = ds;
+  window._trFilter.dateTo   = ds;
+  window._trKpiTab = null;  // KPI 탭 초기화 → 진행예정·완료·취소 전체 표시
   _closeTransitCalendar();
   renderTransit();
 }
@@ -2311,6 +2311,8 @@ function _trCard(r, seqNo, canEdit, canMsg){
           <div style="font-size:13px;font-weight:900;color:${!st.done&&diff<=1?st.color:'var(--tx)'}">${r.date}</div>
           <div style="font-size:10px;font-weight:800;color:${st.color}">${st.label}${dDayStr}</div>
           ${isIn && r.planData ? `<button onclick="event.stopPropagation();_showTrPlanPopup('${r.id}')" style="margin-top:3px;padding:2px 8px;background:rgba(99,102,241,.18);border:1px solid rgba(99,102,241,.35);border-radius:5px;color:#a5b4fc;font-size:9px;font-weight:700;cursor:pointer">📄 신청서</button>` : ''}
+          ${(r.ts||r.createdAt)?`<div style="font-size:9px;color:var(--tx3);font-family:monospace;margin-top:2px">${_fmtAsDate(r.ts||r.createdAt)}</div>`:''}
+          <div style="font-size:9px;color:var(--tx3);font-family:monospace">${seqNo?'No.'+seqNo:''}</div>
         </div>
       </div>
       <span id="tr-arrow-${r.id}" style="font-size:12px;color:var(--tx3);transition:transform .2s;flex-shrink:0;align-self:center${isExpanded?';transform:rotate(180deg)':''}">▼</span>
@@ -2325,7 +2327,6 @@ function _trCard(r, seqNo, canEdit, canMsg){
         ${actionHtml}
         ${doneByHtml}
         ${syncFailBanner}
-        <div style="text-align:right;font-size:9px;color:var(--tx3);font-family:monospace;margin-top:4px">${seqNo||''}</div>
       </div>
     </div>
   </div>`;
