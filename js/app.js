@@ -218,6 +218,7 @@ function initLogin(){
   if(window._gsiLoadPending){ window._gsiLoadPending=false; _gsiInit(); }
   else if(typeof google!=='undefined'&&google.accounts?.id) _gsiInit();
   _kakaoInit();
+  _checkKakaoToken().catch(()=>{}); // 카카오 리다이렉트 복귀 처리
   // restore saved info (상단에서 이미 선언된 saved 재사용)
   if(saved?.name){
     if(document.getElementById('techName')) document.getElementById('techName').value=saved.name;
@@ -609,27 +610,46 @@ function _kakaoInit(){
 
 function _doKakaoLogin(role){
   const key = KAKAO_DEFAULT_JS_KEY || DB.g('kakao_js_key','');
-  if(!key || typeof Kakao==='undefined' || !Kakao.isInitialized()){
-    toast('카카오 로그인 설정이 필요합니다. 관리자에게 문의하세요.','warn',4000); return;
+  if(!key){ toast('카카오 로그인 설정이 필요합니다. 관리자에게 문의하세요.','warn',4000); return; }
+  // 역할 저장 후 카카오 OAuth 페이지로 리다이렉트 (response_type=token → 토큰 직접 반환)
+  sessionStorage.setItem('_kakaoRole', role);
+  const redirectUri = window.location.origin + window.location.pathname;
+  window.location.href =
+    `https://kauth.kakao.com/oauth/authorize?client_id=${encodeURIComponent(key)}`+
+    `&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=profile_nickname,account_email`;
+}
+
+/* 카카오 리다이렉트 복귀 처리 (앱 초기화 시 호출) */
+async function _checkKakaoToken(){
+  const hash = window.location.hash.slice(1);
+  if(!hash.includes('access_token=')) return;
+  const params = new URLSearchParams(hash);
+  const token = params.get('access_token');
+  if(!token) return;
+  // URL 정리
+  window.history.replaceState({}, document.title, window.location.pathname);
+  const role = sessionStorage.getItem('_kakaoRole')||'tech';
+  sessionStorage.removeItem('_kakaoRole');
+  toast('카카오 로그인 처리 중...','ok',2000);
+  try {
+    // /v2/user/me REST API 호출 (CORS 허용됨)
+    const res = await fetch('https://kapi.kakao.com/v2/user/me',{
+      headers:{ 'Authorization': `Bearer ${token}` }
+    });
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const kakaoId = String(data.id);
+    const nickname = data.properties?.nickname || data.kakao_account?.profile?.nickname || '';
+    const email = data.kakao_account?.email || null;
+    // Kakao SDK에 토큰 저장 (이후 SDK API 사용 가능)
+    if(typeof Kakao!=='undefined'&&Kakao.isInitialized()) Kakao.Auth.setAccessToken(token);
+    if(role==='tech') await _doKakaoTechLogin(kakaoId, nickname, email);
+    else if(role==='sub') await _doKakaoSubLogin(kakaoId, nickname, email);
+    else await _doKakaoAjLogin(kakaoId, nickname, email);
+  } catch(e){
+    console.warn('[Kakao] 토큰 처리 실패',e);
+    toast('카카오 로그인 실패: '+e.message,'err',4000);
   }
-  window._kakaoRole = role;
-  Kakao.Auth.login({
-    success: function(){
-      Kakao.API.request({
-        url:'/v2/user/me',
-        success: async function(res){
-          const kakaoId = String(res.id);
-          const nickname = res.properties?.nickname || '';
-          const email = res.kakao_account?.email || null;
-          if(role==='tech') await _doKakaoTechLogin(kakaoId, nickname, email);
-          else if(role==='sub') await _doKakaoSubLogin(kakaoId, nickname, email);
-          else await _doKakaoAjLogin(kakaoId, nickname, email);
-        },
-        fail: function(e){ console.warn('[Kakao] user/me 실패',e); toast('카카오 정보 가져오기 실패','err'); }
-      });
-    },
-    fail: function(e){ console.warn('[Kakao] login 실패',e); toast('카카오 로그인 실패','err'); }
-  });
 }
 
 async function _doKakaoTechLogin(kakaoId, nickname, email){
