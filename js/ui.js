@@ -1391,10 +1391,8 @@ function _asCard(r, canAct){
         ${r.status==='처리완료'&&r.techName?`<span style="font-size:9px;color:#4ade80;margin-left:4px;font-weight:700">· ${esc(r.techName)}</span>`:''}
       </div>
       <div class="lc-time" style="text-align:right">
-        <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
-          <span style="font-size:10px;color:var(--tx2)">${_fmtAsDate(r.requestedAt||r.createdAt)}</span>
-          ${seqNo?`<span style="font-size:9px;color:var(--tx3);font-family:monospace;white-space:nowrap">No.${seqNo}</span>`:''}
-        </div>
+        <div style="font-size:10px;color:var(--tx2)">${_fmtAsDate(r.requestedAt||r.createdAt)}</div>
+        ${seqNo?`<div style="font-size:10px;color:var(--tx2);margin-top:1px">No.${seqNo}</div>`:''}
       </div>
     </div>
 
