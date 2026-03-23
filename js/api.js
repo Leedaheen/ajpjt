@@ -857,6 +857,7 @@ function _initRealtime(){
           {event:'*',schema:'public',table:'as_requests'},
           {event:'*',schema:'public',table:'logs'},
           {event:'*',schema:'public',table:'equipment'},
+          {event:'INSERT',schema:'public',table:'notifications'},
         ]}},
         ref:'1'
       }));
@@ -873,6 +874,8 @@ function _initRealtime(){
           const tbl = msg.payload.data.table;
           console.log('[Realtime] 변경 감지:', tbl);
           // 변경된 테이블만 선택 렌더 (전체 재렌더 → 깜빡임 방지)
+          // notifications: 알림만 조용히 fetch (화면 재렌더 불필요)
+          if(tbl==='notifications'){ _fetchFromSB().catch(()=>{}); return; }
           _fetchFromSB().catch(()=>{}).then(changed=>{
             if(!changed) return;
             if(tbl==='transit'||tbl==='equipment') { renderTransit?.(); }

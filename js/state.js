@@ -374,7 +374,7 @@ function _sbAsToLocal(row){
   };
 }
 let _lastFetchTs=0;
-let _lastNotifFetchTs = 0;
+let _lastNotifFetchTs = Number(DB.g('_lastNotifFetchTs','0'))||0;
 function _buildNotifFilter(){
   if(!S) return null;
   const conds = [];
