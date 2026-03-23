@@ -604,7 +604,7 @@ function _kakaoInit(){
   if(!Kakao.isInitialized()) Kakao.init(key);
   ['tech','sub','aj'].forEach(r=>{
     const btn = document.getElementById('kakao-btn-'+r);
-    if(btn) btn.style.display = '';
+    if(btn) btn.style.display = 'block';
   });
 }
 
@@ -616,7 +616,7 @@ function _doKakaoLogin(role){
   const redirectUri = window.location.origin + window.location.pathname;
   window.location.href =
     `https://kauth.kakao.com/oauth/authorize?client_id=${encodeURIComponent(key)}`+
-    `&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=profile_nickname,account_email`;
+    `&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=profile_nickname`;
 }
 
 /* 카카오 리다이렉트 복귀 처리 (앱 초기화 시 호출) */
