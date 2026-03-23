@@ -452,27 +452,40 @@ async function _doGoogleSubLogin(email, googleName){
   _showGoogleProfileModal('sub',{email, googleName});
 }
 
-/* ── Google 프로필 모달 열기 ── */
+/* ── 프로필 모달 열기 (Google·카카오 공통) ── */
 function _showGoogleProfileModal(mode, data){
   window._gpfMode = mode;
   window._gpfEmail = data.email;
   window._gpfExistingId = data.existingId||null;
   window._gpfKakaoId = data.kakaoId||'';
+  const isKakao = !!data.kakaoId;
   // 제목/설명
-  document.getElementById('gpf-title').textContent = mode==='tech'?'기술인 프로필 확인':'협력사 담당자 가입';
+  document.getElementById('gpf-title').textContent = mode==='tech'?'기술인 프로필 입력':'협력사 담당자 가입';
   document.getElementById('gpf-desc').textContent = mode==='tech'
-    ? '현장과 업체를 선택하고 프로필을 확인해주세요.'
-    : '가입 후 AJ관리자 승인이 완료되면 로그인됩니다.';
-  // Google 계정 표시
+    ? '현장·업체를 선택하고 프로필을 입력해주세요.'
+    : '정보 입력 후 AJ관리자 승인이 완료되면 로그인됩니다.';
+  // 연동 계정 아이콘 (G: Google / K: 카카오)
+  const icon = document.getElementById('gpf-provider-icon');
+  if(icon){
+    if(isKakao){
+      icon.style.background='rgba(254,229,0,.25)'; icon.style.color='#191919'; icon.textContent='K';
+    } else {
+      icon.style.background='rgba(234,67,53,.15)'; icon.style.color='#EA4335'; icon.textContent='G';
+    }
+  }
   document.getElementById('gpf-email').textContent = data.email||'';
   document.getElementById('gpf-gname').textContent = data.googleName||data.email.split('@')[0];
   // 버튼 색상
   const btn = document.getElementById('gpf-submit-btn');
   btn.className = 'login-btn '+(mode==='tech'?'tech':'sub');
   btn.textContent = mode==='tech'?'시작하기':'가입 신청';
-  // 직함 필드 (sub만)
+  // 직함 필드 (sub만) / 팀명 필드 (tech만)
   document.getElementById('gpf-jobtitle-wrap').style.display = mode==='sub'?'':'none';
   document.getElementById('gpf-jobtitle').value = data.title||'';
+  const teamWrap = document.getElementById('gpf-team-wrap');
+  if(teamWrap){ teamWrap.style.display = mode==='tech'?'':'none'; }
+  const teamEl = document.getElementById('gpf-team');
+  if(teamEl) teamEl.value = data.team||'';
   // 현장 셀렉트 초기화
   const siteEl = document.getElementById('gpf-site');
   const sites = getSites();
@@ -507,11 +520,9 @@ async function doGoogleProfileSubmit(){
   const co      = document.getElementById('gpf-company').value;
   const name    = document.getElementById('gpf-name').value.trim();
   const phone   = document.getElementById('gpf-phone').value.trim();
-  const title   = mode==='sub'?(document.getElementById('gpf-jobtitle').value.trim()||''):'기술인';
+  const title   = mode==='sub'?(document.getElementById('gpf-jobtitle')?.value.trim()||''):'기술인';
+  const team    = mode==='tech'?(document.getElementById('gpf-team')?.value.trim()||''):'';
   if(!site||!co||!name||!phone){ toast('모든 항목을 입력해주세요','err'); return; }
-  if(mode==='tech' && (!window.privState?.p1||!window.privState?.p2)){
-    // 기술인 개인정보 동의 확인 (간소화: 모달에서는 동의로 간주)
-  }
   const siteObj = getSites().find(s=>s.id===site);
   const siteName = siteObj?.name||site;
   const allMembers = getMembers();
@@ -526,7 +537,7 @@ async function doGoogleProfileSubmit(){
   const role   = mode==='tech'?'tech':'sub';
   const id     = member?.id || (role+'-'+Date.now()+'-'+Math.random().toString(36).slice(2,7));
   const record = {
-    id, name, company:co, siteId:site, siteName, phone, title,
+    id, name, company:co, siteId:site, siteName, phone, title, team,
     role, status, google_email:email,
     kakao_id: window._gpfKakaoId||member?.kakao_id||'',
     joinedAt: member?.joinedAt||Date.now(), synced:false
@@ -535,8 +546,10 @@ async function doGoogleProfileSubmit(){
   try {
     await sbReq('members','POST',[{
       record_id:record.id, name:record.name, company:record.company,
-      site_id:record.siteId, site_name:record.siteName, phone:record.phone, title:record.title,
-      google_email:email, status:record.status, role:record.role,
+      site_id:record.siteId, site_name:record.siteName, phone:record.phone,
+      title:record.title, team:record.team||'',
+      google_email:email, kakao_id:record.kakao_id||'',
+      status:record.status, role:record.role,
       joined_at:new Date(record.joinedAt).toISOString()
     }],'?on_conflict=record_id');
     record.synced=true;
@@ -548,7 +561,7 @@ async function doGoogleProfileSubmit(){
   document.getElementById('modal-gprofile').style.display='none';
   if(mode==='tech'){
     // 바로 로그인
-    S={role:'tech',name,phone,company:co,siteId:site,siteName,loginAt:Date.now()};
+    S={role:'tech',name,phone,company:co,siteId:site,siteName,team,loginAt:Date.now()};
     DB.s(K.SESSION,S); DB.s('auto_login',true);
     enterApp();
   } else {
