@@ -622,31 +622,61 @@ function _kakaoInit(){
   });
 }
 
-function _doKakaoLogin(role){
+/* PKCE 헬퍼 — code_verifier / code_challenge 생성 */
+async function _kakaoGenPKCE(){
+  const arr = crypto.getRandomValues(new Uint8Array(32));
+  const verifier = btoa(String.fromCharCode(...arr))
+    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+  const challenge = btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+  return { verifier, challenge };
+}
+
+async function _doKakaoLogin(role){
   const key = KAKAO_DEFAULT_JS_KEY || DB.g('kakao_js_key','');
   if(!key){ toast('카카오 로그인 설정이 필요합니다. 관리자에게 문의하세요.','warn',4000); return; }
-  // 역할 저장 후 카카오 OAuth 페이지로 리다이렉트 (response_type=token → 토큰 직접 반환)
+  // PKCE Authorization Code Flow (response_type=token은 신규앱 차단 KOE202)
+  const { verifier, challenge } = await _kakaoGenPKCE();
   sessionStorage.setItem('_kakaoRole', role);
+  sessionStorage.setItem('_kakaoVerifier', verifier);
   const redirectUri = window.location.origin;
   window.location.href =
     `https://kauth.kakao.com/oauth/authorize?client_id=${encodeURIComponent(key)}`+
-    `&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=profile_nickname`;
+    `&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=profile_nickname`+
+    `&code_challenge=${challenge}&code_challenge_method=S256`;
 }
 
 /* 카카오 리다이렉트 복귀 처리 (앱 초기화 시 호출) */
 async function _checkKakaoToken(){
-  const hash = window.location.hash.slice(1);
-  if(!hash.includes('access_token=')) return;
-  const params = new URLSearchParams(hash);
-  const token = params.get('access_token');
-  if(!token) return;
+  const urlParams = new URLSearchParams(window.location.search);
+  const code = urlParams.get('code');
+  if(!code) return;
   // URL 정리
   window.history.replaceState({}, document.title, window.location.pathname);
-  const role = sessionStorage.getItem('_kakaoRole')||'tech';
+  const key = KAKAO_DEFAULT_JS_KEY || DB.g('kakao_js_key','');
+  const verifier = sessionStorage.getItem('_kakaoVerifier') || '';
+  const role = sessionStorage.getItem('_kakaoRole') || 'tech';
+  sessionStorage.removeItem('_kakaoVerifier');
   sessionStorage.removeItem('_kakaoRole');
   toast('카카오 로그인 처리 중...','ok',2000);
   try {
-    // /v2/user/me REST API 호출 (CORS 허용됨)
+    // code → access_token 교환 (PKCE, client_secret 불필요)
+    const tokenRes = await fetch('https://kauth.kakao.com/oauth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: key,
+        redirect_uri: window.location.origin,
+        code,
+        code_verifier: verifier,
+      })
+    });
+    const tokenData = await tokenRes.json();
+    const token = tokenData.access_token;
+    if(!token) throw new Error(tokenData.error_description || 'access_token 없음');
+    // /v2/user/me 호출
     const res = await fetch('https://kapi.kakao.com/v2/user/me',{
       headers:{ 'Authorization': `Bearer ${token}` }
     });
@@ -655,13 +685,12 @@ async function _checkKakaoToken(){
     const kakaoId = String(data.id);
     const nickname = data.properties?.nickname || data.kakao_account?.profile?.nickname || '';
     const email = data.kakao_account?.email || null;
-    // Kakao SDK에 토큰 저장 (이후 SDK API 사용 가능)
     if(typeof Kakao!=='undefined'&&Kakao.isInitialized()) Kakao.Auth.setAccessToken(token);
     if(role==='tech') await _doKakaoTechLogin(kakaoId, nickname, email);
     else if(role==='sub') await _doKakaoSubLogin(kakaoId, nickname, email);
     else await _doKakaoAjLogin(kakaoId, nickname, email);
   } catch(e){
-    console.warn('[Kakao] 토큰 처리 실패',e);
+    console.warn('[Kakao] 로그인 처리 실패',e);
     toast('카카오 로그인 실패: '+e.message,'err',4000);
   }
 }
