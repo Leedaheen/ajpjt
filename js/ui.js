@@ -241,7 +241,7 @@ async function _renderHomeAsync(){
     return `<div style="display:flex;align-items:center;gap:5px;padding:4px 0;border-bottom:1px solid var(--br)">
       <span style="font-size:8px;font-weight:800;padding:1px 4px;border-radius:3px;background:${stBg};color:${stCol};flex-shrink:0;white-space:nowrap">${r.status||'대기'}</span>
       <div style="flex:1;overflow:hidden;min-width:0;white-space:nowrap;text-overflow:ellipsis">
-        <span style="font-size:10px;color:var(--tx2);font-weight:700">${r.company||'—'}</span><span style="font-size:10px;color:#f87171"> · ${sym}</span>${eqNo&&eqNo!=='—'?`<span style="font-size:10px;color:var(--tx2)"> · </span><span style="font-size:10px;font-family:monospace;color:var(--tx2)">${eqNo}</span>`:''}${loc&&loc!=='—'?`<span style="font-size:10px;color:var(--tx2)"> · </span><span style="font-size:10px;color:var(--tx2)">${loc}</span>`:''}
+        <span style="font-size:10px;color:var(--tx2);font-weight:700">${r.company||'—'}</span><span style="font-size:10px;color:#f87171"> · ${sym}</span>${eqNo&&eqNo!=='—'?`<span style="font-size:10px;color:var(--tx2)"> · </span><span style="font-size:10px;font-family:monospace;color:var(--tx2)">${eqNo}</span>`:''}${loc&&loc!=='—'?`<span style="font-size:10px;color:var(--tx2)"> · </span><span style="font-size:10px;color:var(--tx2)">${loc}</span>`:''}${r.desc?`<span style="font-size:10px;color:var(--tx2)"> · </span><span style="font-size:10px;color:var(--tx2)">${esc(r.desc)}</span>`:''}
       </div>
     </div>`;
   };
