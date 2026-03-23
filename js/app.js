@@ -1648,7 +1648,7 @@ function enterApp(){
     const sel=document.getElementById('ajSiteSelect');
     if(sel && S.siteId) sel.value=S.siteId;
   }
-  seedIfEmpty();
+  _purgeSeedLogs(); // 기존 더미 데이터 일회성 정리
   renderHome();
   // 로그인 직후 동기화 상태 초기값 설정
   const _dot = document.getElementById('sdot');

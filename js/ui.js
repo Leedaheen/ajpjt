@@ -1359,13 +1359,16 @@ function _asCard(r, canAct){
       const rFull = rDate.toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric'})
                   + ' ' + rDate.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
       parts.push(`처리완료: ${rFull}`);
-      const base = r.requestedAt||r.createdAt;
+      // requestedAt 우선, 없으면 ts(신청시각), 그 다음 createdAt
+      const base = r.requestedAt || r.ts || r.createdAt;
       if(base){
-        const diffMs = new Date(r.resolvedAt) - new Date(base);
-        const diffH  = Math.floor(diffMs / 3600000);
-        const diffD  = Math.floor(diffH / 24);
-        const elapsed = diffD > 0 ? `${diffD}일 ${diffH%24}h` : `${diffH}h ${Math.round((diffMs%3600000)/60000)}m`;
-        parts.push(`소요시간 ${elapsed}`);
+        const diffMs = Number(r.resolvedAt) - Number(base);
+        if(diffMs > 0){
+          const diffH = Math.floor(diffMs / 3600000);
+          const diffD = Math.floor(diffH / 24);
+          const elapsed = diffD > 0 ? `${diffD}일 ${diffH%24}h` : `${diffH}h ${Math.round((diffMs%3600000)/60000)}m`;
+          parts.push(`소요시간 ${elapsed}`);
+        }
       }
     }
     if(parts.length){

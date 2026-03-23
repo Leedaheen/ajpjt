@@ -986,6 +986,18 @@ function saveSites(arr){
   _pushSitesToSB(arr).catch(()=>{});
 }
 
+/* 기존 seed 더미 데이터 일회성 정리 */
+function _purgeSeedLogs(){
+  if(DB.g('_seedPurged','')) return; // 이미 실행됨
+  const _seedNames = new Set(['김기술','이현장','박담당','최팀장','정인원']);
+  const logs = getLogs();
+  const clean = logs.filter(l => !_seedNames.has(l.name) && !_seedNames.has(l.recorder));
+  if(clean.length < logs.length){
+    saveLogs(clean);
+    console.log(`[purgeSeed] 더미 로그 ${logs.length - clean.length}건 삭제됨`);
+  }
+  DB.s('_seedPurged','1');
+}
 function seedIfEmpty(){
   if(DB.g(K.LOGS,null)!==null) return;
   const logs=[];
