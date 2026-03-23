@@ -1349,27 +1349,27 @@ function _asCard(r, canAct){
   const stCol = r.status==='처리완료'?'#4ade80':r.status==='자재수급중'?'#f59e0b':'#f87171';
   const stBg  = r.status==='처리완료'?'rgba(74,222,128,.15)':r.status==='자재수급중'?'rgba(245,158,11,.15)':'rgba(248,113,113,.15)';
 
-  // 처리완료 정보 블록 (담당기사 · 처리완료 시간 · 소요시간 — 각각 독립 표시)
+  // 처리완료 정보 블록
   let resolvedBlock = '';
   if(r.techName || r.resolvedAt || r.status==='처리완료'){
     const parts = [];
     if(r.techName) parts.push(`담당기사: <b style="color:#fff">${esc(r.techName)}</b>`);
     if(r.resolvedAt){
       const rDate = new Date(r.resolvedAt);
-      const rStr = rDate.toLocaleDateString('ko-KR',{month:'2-digit',day:'2-digit'})
-                 + ' ' + rDate.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
-      parts.push(`처리완료: ${rStr}`);
-      // 소요시간 — requestedAt이 있을 때만
-      if(r.requestedAt){
-        const diffMs = r.resolvedAt - r.requestedAt;
+      const rFull = rDate.toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric'})
+                  + ' ' + rDate.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+      parts.push(`처리완료: ${rFull}`);
+      const base = r.requestedAt||r.createdAt;
+      if(base){
+        const diffMs = new Date(r.resolvedAt) - new Date(base);
         const diffH  = Math.floor(diffMs / 3600000);
         const diffD  = Math.floor(diffH / 24);
         const elapsed = diffD > 0 ? `${diffD}일 ${diffH%24}h` : `${diffH}h ${Math.round((diffMs%3600000)/60000)}m`;
-        parts.push(`소요: ${elapsed}`);
+        parts.push(`소요시간 ${elapsed}`);
       }
     }
     if(parts.length){
-      resolvedBlock = `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:10px;color:#4ade80;margin-bottom:6px;padding:5px 8px;background:rgba(74,222,128,.08);border-radius:6px;border-left:2px solid rgba(74,222,128,.5)">✓ ${parts.join('<span style="color:var(--tx3);margin:0 1px">·</span>')}</div>`;
+      resolvedBlock = `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:10px;color:#4ade80;margin-bottom:6px;padding:5px 8px;background:rgba(74,222,128,.08);border-radius:6px;border-left:2px solid rgba(74,222,128,.5)">✓ ${parts.join('<span style="color:var(--tx3);margin:0 4px">·</span>')}</div>`;
     }
   }
 
@@ -1395,14 +1395,6 @@ function _asCard(r, canAct){
           <span style="font-size:10px;color:var(--tx2)">${_fmtAsDate(r.requestedAt||r.createdAt)}</span>
           ${seqNo?`<span style="font-size:9px;color:var(--tx3);font-family:monospace;white-space:nowrap">No.${seqNo}</span>`:''}
         </div>
-        ${r.status==='처리완료'&&r.resolvedAt?(()=>{
-          const rDate=new Date(r.resolvedAt);
-          const rStr=rDate.toLocaleDateString('ko-KR',{month:'2-digit',day:'2-digit'})+' '+rDate.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
-          const base=r.requestedAt||r.createdAt;
-          let elapsedHtml='';
-          if(base){const ms=new Date(r.resolvedAt)-new Date(base);const h=Math.floor(ms/3600000);const d=Math.floor(h/24);elapsedHtml=` <span style="color:#86efac">⏱ ${d>0?d+'일 '+(h%24)+'h':h+'h '+Math.round((ms%3600000)/60000)+'m'}</span>`;}
-          return `<div style="font-size:9px;color:#4ade80;margin-top:2px;text-align:right;white-space:nowrap">완료: ${rStr}${elapsedHtml}</div>`;
-        })():''}
       </div>
     </div>
 
