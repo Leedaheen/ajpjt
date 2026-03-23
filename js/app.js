@@ -554,7 +554,13 @@ async function doGoogleProfileSubmit(){
       joined_at:new Date(record.joinedAt).toISOString()
     }],'?on_conflict=record_id');
     record.synced=true;
-  } catch(e){ console.warn('[doGoogleProfileSubmit] SB 저장 실패:',e); }
+  } catch(e){
+    console.warn('[doGoogleProfileSubmit] SB 저장 실패:',e);
+    const _em = e?.message||'';
+    if(_em==='NO_SB_URL') toast('서버 연결 정보가 없습니다. 관리자에게 문의하세요.','err',4000);
+    else toast(`가입 신청 실패: ${_em.slice(0,80)||'서버 오류'}`,'err',4000);
+    return;
+  }
   // 로컬 저장
   const idx = allMembers.findIndex(m=>m.id===id);
   if(idx>=0) allMembers[idx]=record; else allMembers.push(record);

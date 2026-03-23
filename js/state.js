@@ -517,6 +517,36 @@ async function _fetchFromSB(){
       }
       if(asChanged){ changed=true; await saveAsReqs(localAs); }
     }
+    // ── AJ관리자: members 테이블 동기화 (신규 가입 신청 반영) ────────────
+    if(S?.role === 'aj'){
+      const mbRows = await sbReq('members','GET',null,
+        `?order=joined_at.desc&limit=500${siteFilter}`).catch(()=>[]);
+      if(Array.isArray(mbRows) && mbRows.length){
+        const localMb = getMembers();
+        const localMbMap = new Map(localMb.map(m=>[m.id, m]));
+        let mbChanged = false;
+        for(const row of mbRows){
+          const lid = row.record_id;
+          if(!lid) continue;
+          if(!localMbMap.has(lid)){
+            localMb.push({
+              id:lid, name:row.name||'', company:row.company||'',
+              siteId:row.site_id||'', siteName:row.site_name||'',
+              phone:row.phone||'', title:row.title||'', team:row.team||'',
+              role:row.role||'sub', status:row.status||'approved',
+              google_email:row.google_email||'', kakao_id:row.kakao_id||'',
+              joinedAt:row.joined_at?new Date(row.joined_at).getTime():Date.now(),
+              synced:true
+            });
+            mbChanged = true;
+          } else {
+            const loc = localMbMap.get(lid);
+            if(row.status && loc.status !== row.status){ loc.status = row.status; mbChanged = true; }
+          }
+        }
+        if(mbChanged){ changed = true; saveMembers(localMb); }
+      }
+    }
     // ── 크로스 디바이스 알림 수신 ────────────────────────────
     const _nFilter = _buildNotifFilter();
     if(_nFilter && _lastNotifFetchTs > 0){
@@ -546,6 +576,7 @@ async function _fetchFromSB(){
       if(curPg==='pg-transit') renderTransit();
       if(curPg==='pg-as'){ renderASPage(); updateASBadge(); }
       if(curPg==='pg-home') renderHome();
+      if(curPg==='pg-acct') renderAcctSubList?.();
     }
     return changed;
   }catch(e){ console.warn('[_fetchFromSB]',e); return false; }
