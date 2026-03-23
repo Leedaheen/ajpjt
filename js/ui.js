@@ -161,13 +161,6 @@ async function _renderHomeAsync(){
       <button onclick="goTab('pg-ops')" style="margin-left:auto;font-size:10px;font-weight:700;padding:3px 8px;border-radius:7px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.2);color:#22c55e;cursor:pointer;flex-shrink:0">가동현황 →</button>
     </div>
     <div style="padding:6px 12px 8px">
-      <div style="display:flex;gap:10px;margin-bottom:2px;align-items:flex-start">
-        <div style="text-align:center"><div style="font-size:9px;color:var(--tx3)">총 장비</div><div style="font-size:12px;font-weight:800;color:var(--tx)">${totalEquipCount>0?totalEquipCount+'대':'—'}</div></div>
-        <div style="text-align:center"><div style="font-size:9px;color:var(--tx3)">장비가동</div><div style="font-size:12px;font-weight:800;color:var(--tx)">${completedToday.length}</div></div>
-        <div style="text-align:center"><div style="font-size:9px;color:var(--tx3)">누적시간</div><div style="font-size:12px;font-weight:800;color:var(--tx)">${totalHrs>0?fH(totalHrs):'—'}</div></div>
-        <div style="text-align:center"><div style="font-size:9px;color:var(--tx3)">입력건</div><div style="font-size:12px;font-weight:800;color:var(--tx)">${todayLogs.length}</div></div>
-        <div style="flex:1"></div>
-      </div>
       ${floorTableHtml}
       ${wxWarn}
       ${p1coHtml?`<div style="margin-top:4px">${p1coHtml}</div>`:''}
