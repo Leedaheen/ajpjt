@@ -1526,12 +1526,10 @@ function enterApp(){
   _appIntervals.forEach(id => clearInterval(id));
   _appIntervals = [
     setInterval(check3PMAlert, 60000),
-    setInterval(()=>{ if(S&&document.visibilityState==='visible') _fetchFromSB().catch(()=>{}); }, 15000),
     setInterval(_runMemoryGuard, 5 * 60 * 1000), // 메모리 가드: 5분마다 비활성 캐시 해제
   ];
-  // visibilitychange: 이름 있는 함수로 교체 → 중복 방지 가능
+  // 자동 싱크 제거 — pull-to-refresh / 페이지 이동 시 수동 싱크로만 운용
   document.removeEventListener('visibilitychange', _onVisibilityChange);
-  document.addEventListener('visibilitychange', _onVisibilityChange);
   setTimeout(_initScrollTopBtn, 400);
   // Supabase Realtime 구독 — 다른 기기 변경사항 즉시 수신
   if(typeof _initRealtime==='function') setTimeout(_initRealtime, 1200);
