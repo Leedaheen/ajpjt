@@ -627,7 +627,7 @@ function _doKakaoLogin(role){
   if(!key){ toast('카카오 로그인 설정이 필요합니다. 관리자에게 문의하세요.','warn',4000); return; }
   // 역할 저장 후 카카오 OAuth 페이지로 리다이렉트 (response_type=token → 토큰 직접 반환)
   sessionStorage.setItem('_kakaoRole', role);
-  const redirectUri = window.location.origin + window.location.pathname;
+  const redirectUri = window.location.origin + '/';
   window.location.href =
     `https://kauth.kakao.com/oauth/authorize?client_id=${encodeURIComponent(key)}`+
     `&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=profile_nickname`;
