@@ -792,6 +792,40 @@ async function _checkPendingNotif(){
   DB.s('_notif_pend_ids', JSON.stringify([...notifiedSet]));
 }
 
+// AJ 관리자 홈화면 — 미입력 업체 담당자에게 일괄 알림 발송
+async function _pushMissingNotif(){
+  if(S?.role !== 'aj'){ toast('AJ 관리자만 사용 가능합니다','err'); return; }
+  const sites = getSites();
+  const tdStr = today();
+  const todayLogs = (await getTodayLogs().catch(()=>[])) || [];
+  const submitted = new Set(todayLogs.map(l=>l.company));
+  const allMembers = getMembers();
+  let sent = 0;
+  for(const s of sites){
+    for(const co of getCos(s.id)){
+      if(submitted.has(co.name)) continue;
+      // 해당 업체의 협력사 담당자 찾기
+      const subMgr = allMembers.find(m =>
+        m.company === co.name && (m.role==='sub'||(!m.role&&m.title!=='기술인')) &&
+        (m.status||'approved')==='approved'
+      );
+      const tid = subMgr?.record_id || subMgr?.id || null;
+      pushSBNotif({
+        target_user_id: tid,
+        target_role: tid ? null : 'sub',
+        site_id: s.id,
+        type: 'missing_log',
+        title: `⚠ 가동 미입력 알림 [${s.name||s.id}]`,
+        body: `${co.name} — 오늘(${tdStr}) 가동현황이 입력되지 않았습니다.`,
+        ref_id: co.name,
+      }).catch(()=>{});
+      sent++;
+    }
+  }
+  if(sent > 0) toast(`미입력 ${sent}개 업체 담당자에게 알림 발송 ✓`, 'ok', 3000);
+  else toast('미입력 업체가 없습니다', 'ok');
+}
+
 function saveKakaoConfig(){
   const key = document.getElementById('kakao-key-input')?.value.trim()||'';
   if(!key){ toast('카카오 키를 입력하세요','err'); return; }
@@ -1569,6 +1603,18 @@ function enterApp(){
   setTimeout(checkUnreadNotifs, 500);
   // AJ 관리자: 알림 권한 요청 + 승인 대기 회원 확인
   if(S?.role === 'aj') setTimeout(()=>_requestNotifPermission().then(()=>_checkPendingNotif()), 1500);
+  // 협력사 담당자: 자사 오늘 미입력 시 OS 알림
+  if(S?.role === 'sub') setTimeout(async ()=>{
+    const granted = await _requestNotifPermission();
+    if(!granted) return;
+    const logs = await getTodayLogs().catch(()=>[]);
+    const hasMine = (logs||[]).some(l=>l.company===S.company && l.siteId===S.siteId);
+    if(!hasMine) _showOSNotif(
+      `⚠ 가동 미입력 알림`,
+      `${S.company} — 오늘 가동현황이 아직 입력되지 않았습니다.`,
+      'missing_log'
+    ).catch(()=>{});
+  }, 2000);
   // IDB 초기화 완료 후 syncNow 실행 (순서 보장)
   IDB.open()
     .then(() => {

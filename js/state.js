@@ -525,10 +525,13 @@ async function _fetchFromSB(){
       const _nRows  = await sbReq('notifications','GET',null,
         `?${_nFilter}&created_at=gt.${_nSince}${_sExcl}&order=created_at.asc&limit=30`).catch(()=>[]);
       if(Array.isArray(_nRows) && _nRows.length){
-        const _nIcons = {as_new:'🔧',as_comment:'💬',as_complete:'✅',as_material:'🔩',signup_request:'👤',signup_approved:'🎉'};
+        const _nIcons = {as_new:'🔧',as_comment:'💬',as_complete:'✅',as_material:'🔩',signup_request:'👤',signup_approved:'🎉',transit_new:'📦',mention:'💬',missing_log:'⚠'};
         let _nMaxTs = _lastNotifFetchTs;
         for(const n of _nRows){
           addNotif({icon:_nIcons[n.type]||'📢', title:n.title, desc:n.body||''});
+          // OS 알림 (앱이 열려있으면 즉시, SW 통해 표시)
+          if(typeof _showOSNotif==='function')
+            _showOSNotif(n.title, n.body||'', n.type).catch(()=>{});
           const _t = new Date(n.created_at).getTime();
           if(_t > _nMaxTs) _nMaxTs = _t;
         }

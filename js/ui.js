@@ -131,7 +131,7 @@ async function _renderHomeAsync(){
       <div style="width:40px;height:3px;background:var(--br);border-radius:2px;flex-shrink:0"><div style="height:3px;border-radius:2px;background:${col};width:${Math.round(co.rate*100)}%"></div></div>
     </div>`;
   }).join('');
-  const missingBadge=missingCos.length>0?`<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:5px;background:rgba(251,191,36,.15);color:#fbbf24">미입력 ${missingCos.length}업체</span>`:'';
+  const missingBadge=missingCos.length>0?`<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:5px;background:rgba(251,191,36,.15);color:#fbbf24">미입력 ${missingCos.length}업체</span><button onclick="_pushMissingNotif()" title="미입력 업체 담당자에게 알림 발송" style="padding:1px 6px;font-size:9px;font-weight:700;border-radius:5px;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);color:#fbbf24;cursor:pointer;margin-left:2px">🔔 알림</button>`:'';
 
   // ── 위치별 가동률 테이블 (N × 2, 중앙 정렬)
   const floorTableHtml = floorEntries.length ? (() => {
@@ -1254,7 +1254,7 @@ function _asCommentBubbles(r){
           <span style="font-size:11px;font-weight:800;color:${namCol}">${esc(c.author||'AJ')}</span>
           ${fmtTs?`<span style="font-size:9px;color:var(--tx3)">${fmtTs}</span>`:''}
         </div>
-        <div style="font-size:11px;color:var(--tx);line-height:1.5;background:${msgBg};padding:5px 8px;border-radius:0 8px 8px 8px;border:1px solid ${msgBdr}">${esc(c.text)}</div>
+        <div style="font-size:11px;color:var(--tx);line-height:1.5;background:${msgBg};padding:5px 8px;border-radius:0 8px 8px 8px;border:1px solid ${msgBdr}">${esc(c.text).replace(/@([^\s@#<]+)/g,'<span style="color:#60a5fa;font-weight:700">@$1</span>')}</div>
       </div>
     </div>`;
   }).join('');
@@ -1305,6 +1305,21 @@ function _addASComment(id){
       ref_id: r.id,
       site_id: r.siteId || null,
     }).catch(()=>{});
+  }
+  // @멘션 감지 → 태그된 사람에게 알림
+  const _mentions = [...new Set((text.match(/@([^\s@#]+)/g)||[]).map(m=>m.slice(1)))];
+  if(_mentions.length){
+    const _allSub = typeof getMembers==='function' ? getMembers() : [];
+    const _allAj  = typeof _getAjMembers==='function' ? _getAjMembers() : [];
+    _mentions.forEach(mName=>{
+      const _subT = _allSub.find(m=>m.name===mName);
+      const _ajT  = _allAj.find(m=>m.name===mName);
+      const _tid  = (_subT?.record_id||_subT?.id) || (_ajT?.record_id||_ajT?.emp_no) || null;
+      if(_tid) pushSBNotif({target_user_id:_tid, type:'mention',
+        title:`💬 @${mName} 님이 태그되었습니다`,
+        body:`${S?.name||''}(${S?.company||''}) — ${text.slice(0,60)}`,
+        ref_id:r.id, site_id:r.siteId||null}).catch(()=>{});
+    });
   }
   renderASPage();
   toast('댓글 등록됨','ok');
