@@ -3,7 +3,7 @@
    - 정적 자산 캐시 (오프라인 지원)
    - 외부 API (Supabase, Anthropic, Google) 제외
 ═══════════════════════════════════════ */
-const CACHE_NAME = 'ajpjt-v3'; // JS 파일 분리 반영 — 구 캐시 자동 삭제
+const CACHE_NAME = 'ajpjt-v4'; // Network-First 전략 도입 — 구 캐시 자동 삭제
 const SHELL = [
   '/', '/index.html', '/manifest.json', '/sw.js',
   '/js/db.js', '/js/state.js', '/js/api.js',
@@ -14,6 +14,10 @@ const BYPASS = [
   'supabase.co', 'anthropic.com', 'googleapis.com',
   'gstatic.com', 'fonts.google', 'script.google'
 ];
+
+// SHELL 파일 URL 집합 (Network-First 적용 대상)
+const _origin = self.location.origin;
+const SHELL_URLS = new Set(SHELL.map(p => new URL(p, _origin).href));
 
 self.addEventListener('install', e => {
   e.waitUntil(
@@ -39,6 +43,21 @@ self.addEventListener('fetch', e => {
   if (BYPASS.some(d => url.includes(d))) return;
   if (!url.startsWith('http')) return;
 
+  // JS·HTML(SHELL) — Network-First: 항상 최신 코드 로드, 오프라인 시 캐시 fallback
+  if (SHELL_URLS.has(url) || url === _origin + '/') {
+    e.respondWith(
+      fetch(e.request).then(res => {
+        if (res && res.status === 200) {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
+        }
+        return res;
+      }).catch(() => caches.match(e.request))
+    );
+    return;
+  }
+
+  // 기타 자산 (아이콘·이미지 등) — Cache-First: 성능 우선
   e.respondWith(
     caches.match(e.request).then(cached => {
       if (cached) return cached;
@@ -49,7 +68,7 @@ self.addEventListener('fetch', e => {
         }
         return res;
       }).catch(() => {
-        if (e.request.headers.get('accept') && e.request.headers.get('accept').includes('text/html')) {
+        if (e.request.headers.get('accept')?.includes('text/html')) {
           return caches.match('/index.html');
         }
       });
