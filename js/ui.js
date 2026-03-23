@@ -2289,13 +2289,10 @@ function _trCard(r, seqNo, canEdit, canMsg){
   const isExpanded = window._trExpanded && window._trExpanded.has(r.id);
 
   return `<div class="lcard" id="tr-card-${r.id}" style="position:relative;margin-bottom:10px;border-radius:12px;overflow:hidden;${border}${r.status==='취소'?';opacity:.4':''}">
-    <!-- 날짜/고유번호 — 카드 우상단 고정 -->
-    <div style="position:absolute;top:0;right:0;z-index:2;background:rgba(0,0,0,.28);border-radius:0 12px 0 8px;padding:3px 10px;text-align:right;pointer-events:none">
-      <div style="font-size:12px;font-weight:900;color:${!st.done&&diff<=1?st.color:'#e2e8f0'};line-height:1.3">${r.date}</div>
-      <div style="display:flex;gap:5px;justify-content:flex-end;margin-top:1px">
-        ${(r.ts||r.createdAt)?`<span style="font-size:9px;color:rgba(255,255,255,.5);font-family:monospace">${_fmtAsDate(r.ts||r.createdAt)}</span>`:''}
-        ${seqNo?`<span style="font-size:9px;color:rgba(255,255,255,.5);font-family:monospace">No.${seqNo}</span>`:''}
-      </div>
+    <!-- 입력일/고유번호 — 카드 우상단 고정 -->
+    <div style="position:absolute;top:0;right:0;z-index:2;background:rgba(0,0,0,.28);border-radius:0 12px 0 8px;padding:2px 10px;text-align:right;pointer-events:none;display:flex;align-items:center;gap:6px">
+      ${(r.ts||r.createdAt)?`<span style="font-size:9px;color:rgba(255,255,255,.55);font-family:monospace">${_fmtAsDate(r.ts||r.createdAt)}</span>`:''}
+      ${seqNo?`<span style="font-size:9px;color:rgba(255,255,255,.55);font-family:monospace">No.${seqNo}</span>`:''}
     </div>
     <div onclick="toggleTrCard('${r.id}')" style="padding:10px 12px;cursor:pointer;display:flex;align-items:flex-start;gap:8px;${headerBg}">
       <div style="flex:1;display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap;min-width:0">
@@ -2306,9 +2303,10 @@ function _trCard(r, seqNo, canEdit, canMsg){
         <span style="font-family:monospace;font-size:11px;color:#60a5fa;flex-shrink:0">${equipShort}</span>
         ${(r.siteName||r.project)?`<div style="width:100%;display:flex;gap:4px;margin-top:2px;flex-wrap:wrap">${r.siteName?`<span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(245,158,11,.12);color:#f59e0b;font-weight:700">${r.siteName}</span>`:''} ${r.project?`<span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(20,184,166,.12);color:#14b8a6;font-weight:700">${r.project}</span>`:''}</div>`:''}
       </div>
-      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;padding-top:2px">
+      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
         ${totalQty>0?`<span style="font-size:10px;font-weight:700;color:var(--tx3);flex-shrink:0">총 ${totalQty}대</span>`:''}
         <div style="text-align:right">
+          <div style="font-size:13px;font-weight:900;color:${!st.done&&diff<=1?st.color:'var(--tx)'}">${r.date}</div>
           <div style="font-size:10px;font-weight:800;color:${st.color}">${st.label}${dDayStr}</div>
           ${isIn && r.planData ? `<button onclick="event.stopPropagation();_showTrPlanPopup('${r.id}')" style="margin-top:3px;padding:2px 8px;background:rgba(99,102,241,.18);border:1px solid rgba(99,102,241,.35);border-radius:5px;color:#a5b4fc;font-size:9px;font-weight:700;cursor:pointer">📄 신청서</button>` : ''}
         </div>
