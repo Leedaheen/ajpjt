@@ -1369,7 +1369,8 @@ function _asCard(r, canAct){
       }
     }
     if(parts.length){
-      resolvedBlock = `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:10px;color:#4ade80;margin-bottom:6px;padding:5px 8px;background:rgba(74,222,128,.08);border-radius:6px;border-left:2px solid rgba(74,222,128,.5)">✓ ${parts.join('<span style="color:var(--tx3);margin:0 4px">·</span>')}</div>`;
+      const materialTag = r.materialAt ? `<span style="font-size:9px;color:#f59e0b;margin-left:6px;background:rgba(245,158,11,.12);padding:1px 6px;border-radius:4px;border:1px solid rgba(245,158,11,.25)">(자재수급-처리)</span>` : '';
+      resolvedBlock = `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:10px;color:#4ade80;margin-bottom:6px;padding:5px 8px;background:rgba(74,222,128,.08);border-radius:6px;border-left:2px solid rgba(74,222,128,.5)">✓ ${parts.join('<span style="color:var(--tx3);margin:0 4px">·</span>')}${materialTag}</div>`;
     }
   }
 
