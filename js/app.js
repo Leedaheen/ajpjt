@@ -217,6 +217,7 @@ function initLogin(){
   // GIS 라이브러리가 먼저 로드됐으면 즉시 초기화, 아니면 로드 완료 시 자동 호출
   if(window._gsiLoadPending){ window._gsiLoadPending=false; _gsiInit(); }
   else if(typeof google!=='undefined'&&google.accounts?.id) _gsiInit();
+  _kakaoInit();
   // restore saved info (상단에서 이미 선언된 saved 재사용)
   if(saved?.name){
     if(document.getElementById('techName')) document.getElementById('techName').value=saved.name;
@@ -456,6 +457,7 @@ function _showGoogleProfileModal(mode, data){
   window._gpfMode = mode;
   window._gpfEmail = data.email;
   window._gpfExistingId = data.existingId||null;
+  window._gpfKakaoId = data.kakaoId||'';
   // 제목/설명
   document.getElementById('gpf-title').textContent = mode==='tech'?'기술인 프로필 확인':'협력사 담당자 가입';
   document.getElementById('gpf-desc').textContent = mode==='tech'
@@ -526,6 +528,7 @@ async function doGoogleProfileSubmit(){
   const record = {
     id, name, company:co, siteId:site, siteName, phone, title,
     role, status, google_email:email,
+    kakao_id: window._gpfKakaoId||member?.kakao_id||'',
     joinedAt: member?.joinedAt||Date.now(), synced:false
   };
   // Supabase 서버 먼저 저장
@@ -575,6 +578,126 @@ async function _doGoogleAjLogin(email, googleName){
       memberId: member.record_id||member.id||'' };
   DB.s(K.SESSION, S); DB.s('auto_login', true);
   toast(`${member.name}님 환영합니다!`,'ok'); enterApp();
+}
+
+/* ═══════════════════════════════════════════════════════════
+   카카오 로그인
+═══════════════════════════════════════════════════════════ */
+function _kakaoInit(){
+  const key = KAKAO_DEFAULT_JS_KEY || DB.g('kakao_js_key','');
+  if(!key) return;
+  if(typeof Kakao === 'undefined') return;
+  if(!Kakao.isInitialized()) Kakao.init(key);
+  ['tech','sub','aj'].forEach(r=>{
+    const btn = document.getElementById('kakao-btn-'+r);
+    if(btn) btn.style.display = '';
+  });
+}
+
+function _doKakaoLogin(role){
+  const key = KAKAO_DEFAULT_JS_KEY || DB.g('kakao_js_key','');
+  if(!key || typeof Kakao==='undefined' || !Kakao.isInitialized()){
+    toast('카카오 로그인 설정이 필요합니다. 관리자에게 문의하세요.','warn',4000); return;
+  }
+  window._kakaoRole = role;
+  Kakao.Auth.login({
+    success: function(){
+      Kakao.API.request({
+        url:'/v2/user/me',
+        success: async function(res){
+          const kakaoId = String(res.id);
+          const nickname = res.properties?.nickname || '';
+          const email = res.kakao_account?.email || null;
+          if(role==='tech') await _doKakaoTechLogin(kakaoId, nickname, email);
+          else if(role==='sub') await _doKakaoSubLogin(kakaoId, nickname, email);
+          else await _doKakaoAjLogin(kakaoId, nickname, email);
+        },
+        fail: function(e){ console.warn('[Kakao] user/me 실패',e); toast('카카오 정보 가져오기 실패','err'); }
+      });
+    },
+    fail: function(e){ console.warn('[Kakao] login 실패',e); toast('카카오 로그인 실패','err'); }
+  });
+}
+
+async function _doKakaoTechLogin(kakaoId, nickname, email){
+  toast('카카오 계정 확인 중...','ok',2000);
+  const allMembers = getMembers();
+  let member = allMembers.find(m=>m.kakao_id===kakaoId && (m.role==='tech'||m.title==='기술인'));
+  if(!member){
+    try {
+      const rows = await sbReq('members','GET',null,`?kakao_id=eq.${encodeURIComponent(kakaoId)}&role=eq.tech&limit=1`);
+      if(rows?.length){ member=rows[0]; allMembers.push(member); saveMembers(allMembers); }
+    } catch(_e){}
+  }
+  _showGoogleProfileModal('tech',{
+    email: email||`kakao:${kakaoId}`, googleName: nickname,
+    name: member?.name||nickname||'',
+    phone: member?.phone||'',
+    siteId: member?.siteId||'',
+    company: member?.company||'',
+    existingId: member?.id||null,
+    kakaoId
+  });
+}
+
+async function _doKakaoSubLogin(kakaoId, nickname, email){
+  toast('카카오 계정 확인 중...','ok',2000);
+  const allMembers = getMembers();
+  let member = allMembers.find(m=>m.kakao_id===kakaoId && m.role!=='tech' && m.title!=='기술인');
+  if(!member){
+    try {
+      const rows = await sbReq('members','GET',null,`?kakao_id=eq.${encodeURIComponent(kakaoId)}&role=eq.sub&limit=1`);
+      if(rows?.length){
+        member=rows[0];
+        const idx=allMembers.findIndex(m=>m.id===member.id);
+        if(idx>=0) allMembers[idx]=member; else allMembers.push(member);
+        saveMembers(allMembers);
+      }
+    } catch(_e){}
+  }
+  if(member){
+    const st=member.status||'approved';
+    if(st==='approved'){
+      S={role:'sub',name:member.name,title:member.title||'',phone:member.phone||'',
+         company:member.company,siteId:member.siteId,
+         siteName:getSites().find(s=>s.id===member.siteId)?.name||member.siteId,
+         loginAt:Date.now(), memberId:member.id||''};
+      DB.s(K.SESSION,S); DB.s('auto_login',true);
+      toast(`${member.name}님 환영합니다!`,'ok'); enterApp();
+    } else if(st==='pending'){
+      toast('가입 승인 대기 중입니다. AJ관리자에게 문의하세요.','warn',4000);
+    } else {
+      toast('가입이 거절되었습니다. AJ관리자에게 문의하세요.','err');
+    }
+    return;
+  }
+  _showGoogleProfileModal('sub',{email:email||`kakao:${kakaoId}`, googleName:nickname, kakaoId});
+}
+
+async function _doKakaoAjLogin(kakaoId, nickname, email){
+  toast('카카오 계정 확인 중...','ok',2000);
+  await _pullAjMembersFromSB().catch(()=>{});
+  const list = _getAjMembers();
+  const byKakao = list.filter(m=>m.kakao_id===kakaoId);
+  const member = byKakao.find(m=>(m.status||'approved')==='approved') || byKakao[0] || null;
+  if(!member){ _showGoogleLinkModal(email||`kakao:${kakaoId}`, nickname); return; }
+  const _st = member.status||'approved';
+  if(_st==='pending'){ toast('가입 승인 대기 중입니다. AJ 관리자에게 문의하세요.','warn',4000); return; }
+  if(_st==='rejected'){ toast('가입이 거절되었습니다. AJ 관리자에게 문의하세요.','err',4000); return; }
+  DB.s(K.AJ_MEMBER, member);
+  S={ role:'aj', name:member.name, phone:member.phone||'', ajType:member.aj_type||'관리자',
+      company:'AJ네트웍스', siteId:'all', siteName:'전체 현장', loginAt:Date.now(), empNo:member.emp_no,
+      memberId: member.record_id||member.id||'' };
+  DB.s(K.SESSION, S); DB.s('auto_login', true);
+  toast(`${member.name}님 환영합니다!`,'ok'); enterApp();
+}
+
+function saveKakaoConfig(){
+  const key = document.getElementById('kakao-key-input')?.value.trim()||'';
+  if(!key){ toast('카카오 키를 입력하세요','err'); return; }
+  DB.s('kakao_js_key', key);
+  _kakaoInit();
+  toast('카카오 설정 저장됨 ✓','ok');
 }
 
 /* Google 가입 신청 모달 열기 */
@@ -885,7 +1008,7 @@ function renderAcctSubList(){
     return `<div style="background:var(--bg2);border:1px solid ${isPending?'rgba(245,158,11,.3)':'var(--br)'};border-radius:10px;padding:10px 12px;margin-bottom:7px">
       <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
         <span class="mbr-badge ${st}">${statusLabel[st]||st}</span>
-        <span style="font-weight:800;font-size:13px;flex:1">${m.name}</span>
+        <span style="font-weight:800;font-size:13px">${m.name}</span>${m.title?`<span style="font-size:10px;color:var(--tx3);margin-left:5px;font-weight:500">${m.title}</span>`:''}
         <div style="display:flex;gap:4px;flex-shrink:0">
           ${isPending?`
             <button onclick="approveMember('${m.id}')" style="font-size:10px;padding:3px 8px;background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.4);border-radius:5px;color:#4ade80;cursor:pointer;font-weight:700">승인</button>
@@ -1151,61 +1274,6 @@ function openASAnalysis(filterUpdate){
     </div>`;
 }
 
-async function doAjRegister(){
-  const name=document.getElementById('regName').value.trim();
-  const phone=document.getElementById('regPhone').value.trim();
-  const pw=document.getElementById('regPw').value;
-  const pw2=document.getElementById('regPw2').value;
-  const ajType=(document.querySelector('#aj-role-chips .chip.on')?.textContent)||'관리자';
-  if(!name||!phone||!pw){ toast('필수 항목을 모두 입력하세요','err'); return; }
-  if(pw.length<6){ toast('비밀번호는 6자 이상이어야 합니다','err'); return; }
-  if(pw!==pw2){ toast('비밀번호가 일치하지 않습니다','err'); return; }
-  const pwHash=await sha256(pw);
-  const empNo='M'+Date.now().toString(36).toUpperCase();
-  const member={emp_no:empNo,name,phone,pw_hash:pwHash,aj_type:ajType,status:'pending',created_at:new Date().toISOString()};
-  // 서버 우선 저장 — 성공 후 로컬 캐시 갱신
-  try {
-    await sbBatchUpsert('aj_members',[member]);
-    const localList=_getAjMembers();
-    localList.push(member); _saveAjMembers(localList);
-    toast('가입 신청 완료! AJ 관리자 승인 후 로그인 가능합니다 ✓','ok',4000);
-  } catch(e){
-    const _em=e?.message||'';
-    if(_em==='NO_SB_URL') toast('서버 연결 정보가 없습니다. 관리자에게 문의하세요.','err',4000);
-    else toast(`가입 실패: ${_em.slice(0,80)||'서버 오류'}. 잠시 후 다시 시도해주세요.`,'err',4000);
-    return;
-  }
-  switchAjTab('login');
-  document.getElementById('ajName').value=name;
-  document.getElementById('ajPhone').focus();
-}
-async function doAjChangePwLogin(){
-  const name=document.getElementById('cpName').value.trim();
-  const pw=document.getElementById('cpPw').value;
-  const pw2=document.getElementById('cpPw2').value;
-  if(!name||!pw){ toast('모든 항목을 입력하세요','err'); return; }
-  if(pw.length<6){ toast('비밀번호는 6자 이상이어야 합니다','err'); return; }
-  if(pw!==pw2){ toast('비밀번호가 일치하지 않습니다','err'); return; }
-  // 서버에서 최신 목록 pull 후 이름으로 조회
-  await _pullAjMembersFromSB().catch(()=>{});
-  const localList=_getAjMembers();
-  const idx=localList.findIndex(m=>m.name===name);
-  if(idx===-1){ toast('등록된 이름이 아닙니다. 서버에서도 찾을 수 없습니다.','err'); return; }
-  const pwHash=await sha256(pw);
-  // 서버 우선 패치 → 로컬 캐시 갱신
-  try {
-    await sbReq('aj_members','PATCH',{pw_hash:pwHash},`?emp_no=eq.${encodeURIComponent(localList[idx].emp_no)}`);
-    localList[idx].pw_hash=pwHash; _saveAjMembers(localList);
-    const cached=DB.g(K.AJ_MEMBER,null);
-    if(cached&&cached.name===name){ cached.pw_hash=pwHash; DB.s(K.AJ_MEMBER,cached); }
-    toast('비밀번호 변경 완료 ✓','ok');
-  } catch(e){
-    toast(`비밀번호 변경 실패: ${e?.message?.slice(0,60)||'서버 오류'}`,'err',4000); return;
-  }
-  switchAjTab('login');
-  document.getElementById('ajName').value=name;
-}
-
 async function doLogin(role){
   console.log('[LOGIN CLICK] doLogin 호출:', role);
   if(role==='tech'){
@@ -1246,10 +1314,7 @@ async function doLogin(role){
     const name=document.getElementById('subName').value.trim();
     const subTitle=document.getElementById('subTitle')?.value.trim()||'';
     const subPhone=document.getElementById('subPhone')?.value.trim()||'';
-    const subPw=document.getElementById('subPw')?.value||'';
-    const subPw2=document.getElementById('subPw2')?.value||'';
-    if(!site||!co||!name||!subPhone||!subPw){ toast('현장·업체·이름·연락처·비밀번호를 입력해주세요','err'); return; }
-    if(subPw.length<6){ toast('비밀번호는 6자 이상이어야 합니다','err'); return; }
+    if(!site||!co||!name||!subPhone){ toast('현장·업체·이름·연락처를 입력해주세요','err'); return; }
     // 서버에서 먼저 조회 — 로컬 캐시는 fallback
     let existing=null;
     try {
@@ -1275,28 +1340,20 @@ async function doLogin(role){
       const st=existing.status||'approved';
       if(st==='pending'){ toast('가입 승인 대기 중입니다. AJ관리자에게 문의하세요.','warn',4000); return; }
       if(st==='rejected'){ toast('가입이 거절되었습니다. AJ관리자에게 문의하세요.','err'); return; }
-      if(existing.pw_hash==='GOOGLE_AUTH'){ toast('이 계정은 Google 로그인을 사용하세요.','err',4000); return; }
-      if(existing.pw_hash){
-        const hash=await sha256(subPw);
-        if(hash!==existing.pw_hash){ toast('비밀번호가 틀렸습니다.','err'); return; }
-      }
       // approved → 로그인
     } else {
-      // 신규 가입 신청 — 비밀번호 확인 필수
-      if(!subPw2){ toast('비밀번호 확인을 입력하세요','err'); return; }
-      if(subPw!==subPw2){ toast('비밀번호가 일치하지 않습니다','err'); return; }
-      const pwHash=await sha256(subPw);
+      // 신규 가입 신청
       const _newMbr={id:'sub-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),
         name,company:co,siteId:site,siteName:getSites().find(s=>s.id===site)?.name||site,
         phone:subPhone,title:subTitle,role:'sub',status:'pending',google_email:'',
-        pw_hash:pwHash,joinedAt:Date.now(),synced:false};
+        joinedAt:Date.now(),synced:false};
       // 서버 우선 저장 — 성공 후 로컬 캐시 갱신
       try {
         const _sm=Object.fromEntries(getSites().map(s=>[s.id,s.name]));
         await sbReq('members','POST',[{
           record_id:_newMbr.id,name:_newMbr.name,company:_newMbr.company,
           site_id:_newMbr.siteId,site_name:_sm[_newMbr.siteId]||'',
-          phone:_newMbr.phone,title:_newMbr.title,pw_hash:pwHash,
+          phone:_newMbr.phone,title:_newMbr.title,
           role:'sub',status:'pending',google_email:'',
           joined_at:new Date(_newMbr.joinedAt).toISOString()
         }],'?on_conflict=record_id');
@@ -1315,13 +1372,12 @@ async function doLogin(role){
     }
     S={role:'sub',name,title:subTitle||existing?.title||'',phone:subPhone||existing?.phone||'',company:co,siteId:site,siteName:getSites().find(s=>s.id===site)?.name||site,loginAt:Date.now(),memberId:existing?.id||''};
   } else {
-    // AJ 관리자 로그인 — 이름+연락처+비밀번호 기반
+    // AJ 관리자 로그인 — 이름+연락처 기반
     const ajName  = document.getElementById('ajName').value.trim();
     const ajPhone = document.getElementById('ajPhone').value.trim();
-    const ajPw    = document.getElementById('ajPw').value;
     const ajRoleChip = document.querySelector('#aj-role-chips .chip.on');
     const ajType = ajRoleChip?.textContent||'관리자';
-    if(!ajName||!ajPhone||!ajPw){ toast('이름·연락처·비밀번호를 입력하세요','err'); return; }
+    if(!ajName||!ajPhone){ toast('이름·연락처를 입력하세요','err'); return; }
     let member = null;
 
     // 1) Supabase 최신 목록 pull
@@ -1354,10 +1410,6 @@ async function doLogin(role){
         toast(_msg,'err'); return;
       }
     }
-    // 비밀번호 검증 (Google 계정은 Google 로그인 유도)
-    if(member.pw_hash==='GOOGLE_AUTH'){ toast('이 계정은 Google 로그인을 사용하세요.','err',4000); return; }
-    const ajPwHash = await sha256(ajPw);
-    if(ajPwHash !== member.pw_hash){ toast('비밀번호가 틀렸습니다.','err'); return; }
     DB.s(K.AJ_MEMBER, member);
     S={role:'aj',name:member.name,phone:member.phone||ajPhone,ajType:member.aj_type||ajType,company:'AJ네트웍스',siteId:'all',siteName:'전체 현장',loginAt:Date.now(),empNo:member.emp_no,memberId:member.record_id||member.id||''};
   }

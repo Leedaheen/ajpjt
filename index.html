@@ -1144,6 +1144,12 @@ textarea.fg-input{height:72px;line-height:1.5;}
       <!-- Google 로그인 -->
       <div class="gsi-wrap" id="gsi-btn-tech"></div>
       <div class="gsi-no-client" id="gsi-no-client-tech">Google 로그인 사용 시 <b onclick="openSheet('sh-supabase')" style="color:var(--blue);cursor:pointer">Client ID 설정</b>이 필요합니다</div>
+      <button id="kakao-btn-tech" onclick="_doKakaoLogin('tech')" style="display:none;width:100%;padding:10px 0;background:#FEE500;border:none;border-radius:10px;font-size:14px;font-weight:700;color:#191919;cursor:pointer;margin-bottom:8px">
+        <span style="display:inline-flex;align-items:center;gap:8px">
+          <svg width="18" height="17" viewBox="0 0 18 17" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M9 0C4.029 0 0 3.134 0 7c0 2.473 1.576 4.641 3.965 5.903-.174.694-.632 2.521-.724 2.912-.112.487.167.481.35.35.145-.102 2.302-1.573 3.234-2.21C7.176 14.0 8.08 14 9 14c4.971 0 9-3.134 9-7S13.971 0 9 0z" fill="#191919"/></svg>
+          카카오 로그인
+        </span>
+      </button>
       <div class="google-or" id="gsi-tech-or">또는 직접 입력</div>
 
       <div class="lg">
@@ -1224,7 +1230,13 @@ textarea.fg-input{height:72px;line-height:1.5;}
       <!-- Google 로그인 -->
       <div class="gsi-wrap" id="gsi-btn-sub"></div>
       <div class="gsi-no-client" id="gsi-no-client-sub">Google 로그인 사용 시 <b onclick="openSheet('sh-supabase')" style="color:var(--blue);cursor:pointer">Client ID 설정</b>이 필요합니다</div>
-      <div class="google-or" id="gsi-sub-or">또는 직접 가입</div>
+      <div class="google-or" id="gsi-sub-or">또는 직접 입력</div>
+      <button id="kakao-btn-sub" onclick="_doKakaoLogin('sub')" style="display:none;width:100%;padding:10px 0;background:#FEE500;border:none;border-radius:10px;font-size:14px;font-weight:700;color:#191919;cursor:pointer;margin-bottom:8px">
+        <span style="display:inline-flex;align-items:center;gap:8px">
+          <svg width="18" height="17" viewBox="0 0 18 17" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M9 0C4.029 0 0 3.134 0 7c0 2.473 1.576 4.641 3.965 5.903-.174.694-.632 2.521-.724 2.912-.112.487.167.481.35.35.145-.102 2.302-1.573 3.234-2.21C7.176 14.0 8.08 14 9 14c4.971 0 9-3.134 9-7S13.971 0 9 0z" fill="#191919"/></svg>
+          카카오 로그인
+        </span>
+      </button>
 
       <div class="role-notice sub">
         <div class="rn-txt">가입 후 <b>AJ관리자의 승인</b>이 필요합니다. </div>
@@ -1249,17 +1261,7 @@ textarea.fg-input{height:72px;line-height:1.5;}
         <label class="lg-label">연락처 <span class="req">*</span></label>
         <input type="tel" class="lg-input phone-input" id="subPhone" placeholder="숫자만 입력" maxlength="11">
       </div>
-      <div class="lg">
-        <label class="lg-label">비밀번호 <span class="req">*</span></label>
-        <input type="password" class="lg-input" id="subPw" placeholder="비밀번호 (6자 이상)">
-      </div>
-      <div class="lg" id="subPw2Wrap">
-        <label class="lg-label">비밀번호 확인 <span class="req">*</span></label>
-        <input type="password" class="lg-input" id="subPw2" placeholder="비밀번호 확인 재입력" onkeydown="if(event.key==='Enter')doLogin('sub')">
-      </div>
-      <div class="lg">
-        <label class="lg-label">비밀번호는 암호화처리 됩니다. </label>
-      </div>
+
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--tx2);padding:6px 0;margin-bottom:4px">
         <input type="checkbox" id="chk-auto-login-sub" checked style="width:16px;height:16px;accent-color:var(--teal);cursor:pointer;flex-shrink:0">
         자동 로그인 <span style="font-size:10px;color:var(--tx3)">(7일간 유지)</span>
@@ -1275,7 +1277,6 @@ textarea.fg-input{height:72px;line-height:1.5;}
       <!-- 탭 -->
       <div style="display:flex;gap:4px;margin-bottom:12px">
         <button id="aj-tab-login" class="aj-tab on" onclick="switchAjTab('login')">로그인</button>
-        <button id="aj-tab-changepw" class="aj-tab" onclick="switchAjTab('changepw')">비밀번호 변경</button>
       </div>
       <!-- 역할 구분 (공통) -->
       <div class="lg">
@@ -1295,10 +1296,6 @@ textarea.fg-input{height:72px;line-height:1.5;}
           <label class="lg-label">연락처 <span class="req">*</span></label>
           <input type="tel" class="lg-input phone-input" id="ajPhone" placeholder="숫자만 입력" maxlength="11" autocomplete="off">
         </div>
-        <div class="lg">
-          <label class="lg-label">비밀번호 <span class="req">*</span></label>
-          <input type="password" class="lg-input" id="ajPw" placeholder="비밀번호 입력" onkeydown="if(event.key==='Enter')doLogin('aj')">
-        </div>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--tx2);padding:6px 0;margin-bottom:4px">
           <input type="checkbox" id="chk-auto-login-aj" checked style="width:16px;height:16px;accent-color:var(--yellow);cursor:pointer;flex-shrink:0">
           자동 로그인 <span style="font-size:10px;color:var(--tx3)">(7일간 유지)</span>
@@ -1308,42 +1305,12 @@ textarea.fg-input{height:72px;line-height:1.5;}
         <div class="google-or">또는</div>
         <div class="gsi-wrap" id="gsi-btn-aj"></div>
         <div class="gsi-no-client" id="gsi-no-client">Google 로그인 사용 시 <b onclick="openSheet('sh-supabase')" style="color:var(--blue);cursor:pointer">Client ID 설정</b>이 필요합니다</div>
-      </div>
-      <!-- 회원가입 탭 -->
-      <div id="aj-pane-register" style="display:none">
-        <div class="lg">
-          <label class="lg-label">이름 <span class="req">*</span></label>
-          <input type="text" class="lg-input" id="regName" placeholder="본인 이름" autocomplete="off">
-        </div>
-        <div class="lg">
-          <label class="lg-label">연락처 <span class="req">*</span></label>
-          <input type="tel" class="lg-input" id="regPhone" placeholder="010-0000-0000">
-        </div>
-        <div class="lg">
-          <label class="lg-label">비밀번호 <span class="req">*</span></label>
-          <input type="password" class="lg-input" id="regPw" placeholder="6자 이상">
-        </div>
-        <div class="lg">
-          <label class="lg-label">비밀번호 확인 <span class="req">*</span></label>
-          <input type="password" class="lg-input" id="regPw2" placeholder="비밀번호 재입력" onkeydown="if(event.key==='Enter')doAjRegister()">
-        </div>
-        <button class="login-btn aj" onclick="doAjRegister()">가입하기</button>
-      </div>
-      <!-- 비밀번호 변경 탭 -->
-      <div id="aj-pane-changepw" style="display:none">
-        <div class="lg">
-          <label class="lg-label">이름 <span class="req">*</span></label>
-          <input type="text" class="lg-input" id="cpName" placeholder="본인 이름 (본인 확인)" autocomplete="off">
-        </div>
-        <div class="lg">
-          <label class="lg-label">새 비밀번호 <span class="req">*</span></label>
-          <input type="password" class="lg-input" id="cpPw" placeholder="6자 이상">
-        </div>
-        <div class="lg">
-          <label class="lg-label">새 비밀번호 확인 <span class="req">*</span></label>
-          <input type="password" class="lg-input" id="cpPw2" placeholder="비밀번호 재입력" onkeydown="if(event.key==='Enter')doAjChangePwLogin()">
-        </div>
-        <button class="login-btn aj" onclick="doAjChangePwLogin()">비밀번호 변경</button>
+        <button id="kakao-btn-aj" onclick="_doKakaoLogin('aj')" style="display:none;width:100%;padding:10px 0;background:#FEE500;border:none;border-radius:10px;font-size:14px;font-weight:700;color:#191919;cursor:pointer;margin-top:8px">
+          <span style="display:inline-flex;align-items:center;gap:8px">
+            <svg width="18" height="17" viewBox="0 0 18 17" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M9 0C4.029 0 0 3.134 0 7c0 2.473 1.576 4.641 3.965 5.903-.174.694-.632 2.521-.724 2.912-.112.487.167.481.35.35.145-.102 2.302-1.573 3.234-2.21C7.176 14.0 8.08 14 9 14c4.971 0 9-3.134 9-7S13.971 0 9 0z" fill="#191919"/></svg>
+            카카오 로그인
+          </span>
+        </button>
       </div>
     </div>
 
@@ -1705,6 +1672,10 @@ function doGet(e){
     <div class="lg">
       <label class="fg-lbl">anon / public Key</label>
       <input type="text" class="lg-input" id="sb-key-input" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." style="font-size:11px;font-family:'JetBrains Mono',monospace">
+    </div>
+    <div class="lg">
+      <label class="fg-lbl">카카오 JavaScript 앱 키</label>
+      <input type="text" class="lg-input" id="kakao-key-input" placeholder="카카오 개발자 콘솔 → 앱 키 → JavaScript 키" style="font-size:11px;font-family:'JetBrains Mono',monospace">
     </div>
     <div class="btn-gap" style="margin-bottom:0">
       <button class="btn-full" onclick="saveSupabaseConfig()">연동 저장</button>
@@ -2129,27 +2100,12 @@ create index if not exists idx_aj_status on aj_members(status);</pre>
   </div>
 </div>
 
-<!-- PW change sheet -->
-<div class="soverlay" id="sh-pw" onclick="if(event.target===this&&!window._forcePwChange)closeSheet('sh-pw')">
-  <div class="sheet">
-    <div class="sh-handle"></div>
-    <div class="sh-title">비밀번호 변경</div>
-    <div id="pw-force-notice" style="display:none;padding:10px 12px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:var(--rs);margin-bottom:12px;font-size:12px;color:var(--red);font-weight:600;line-height:1.6">⚠️ 보안을 위해 비밀번호 변경을 권장합니다.</div>
-    <div class="lg"><label class="lg-label">현재 비밀번호</label><input type="password" class="lg-input" id="pw-cur" placeholder="현재 비밀번호"></div>
-    <div class="lg"><label class="lg-label">새 비밀번호</label><input type="password" class="lg-input" id="pw-new" placeholder="새 비밀번호 (6자 이상)"></div>
-    <div class="lg"><label class="lg-label">새 비밀번호 확인</label><input type="password" class="lg-input" id="pw-cfm" placeholder="재입력"></div>
-    <div class="btn-gap">
-      <button class="btn-full gold" onclick="changePw()">변경</button>
-      <button class="btn-ghost" id="pw-later-btn" style="display:none" onclick="skipPwChange()">다음에 변경하기</button>
-      <button class="btn-ghost" id="pw-cancel-btn" onclick="if(!window._forcePwChange)closeSheet('sh-pw')">취소</button>
-    </div>
-  </div>
-</div>
 
 <!-- Toast & Spinner -->
 <div class="toast-wrap"><div class="toast" id="toast"></div></div>
 <div class="sp-ov" id="sp-ov"><div class="sp-box"><div class="sp"></div><div class="sp-txt" id="sp-txt">처리 중...</div></div></div>
 
+<script src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.4/kakao.min.js" crossorigin="anonymous"></script>
 <script src="js/db.js"></script>
 <script src="js/state.js"></script>
 <script src="js/api.js"></script>

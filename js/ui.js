@@ -354,7 +354,8 @@ function initInputForm(){
   const fst=document.getElementById('f-starttime'); if(fst) fst.value=nowHM();
   const fet=document.getElementById('f-endtime');   if(fet) fet.value=nowHM();
   document.getElementById('g-ico').textContent=S.role==='tech'?'기술':S.role==='sub'?'담당':'AJ';
-  document.getElementById('g-name').textContent=S.name;
+  const _titleSuffix = (S.role==='sub'&&S.title)?` <span style="font-size:10px;font-weight:500;color:var(--tx3);margin-left:4px">${S.title}</span>`:'';
+  document.getElementById('g-name').innerHTML = S.name + _titleSuffix;
   const _teamSuffix=S.team?` (${S.team}팀)`:'';
   document.getElementById('g-sub').textContent=`${S.company}${_teamSuffix} · ${S.siteName}`;
   document.getElementById('f-site-disp').textContent=S.siteName;
@@ -4497,8 +4498,8 @@ function renderAdmin(){
     <div style="padding:14px">
     <div class="admin-profile ${role}">
       <div class="ap-avi ${role}">${role==='aj'?'AJ':'담당'}</div>
-      <div style="flex:1"><div class="ap-name">${S.name}</div><div class="ap-role ${role}">${role==='aj'?'AJ 관리자 · 전체 현장':'협력사 관리자 · '+S.company+' · '+S.siteName}</div></div>
-      ${isAJ?`<button onclick="openSheet('sh-pw')" style="font-size:9px;padding:3px 8px;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);border-radius:5px;color:#fbbf24;cursor:pointer;font-weight:600;white-space:nowrap;flex-shrink:0">정보수정</button>`:''}
+      <div style="flex:1"><div class="ap-name">${S.name}${(S.role==='sub'&&S.title)?`<span style="font-size:11px;font-weight:500;color:var(--tx3);margin-left:6px">${S.title}</span>`:''}</div><div class="ap-role ${role}">${role==='aj'?'AJ 관리자 · 전체 현장':'협력사 관리자 · '+S.company+' · '+S.siteName}</div></div>
+      ${''}
     </div>
 
     ${(isSub||isAJ)?(()=>{
@@ -5479,37 +5480,6 @@ async function testSupabaseConnection(){
   } catch(e){
     toast('연결 실패: ' + e.message,'err');
   }
-}
-async function changePw(){
-  const cur=document.getElementById('pw-cur').value;
-  const nw=document.getElementById('pw-new').value;
-  const cf=document.getElementById('pw-cfm').value;
-  if(nw.length<6){ toast('6자 이상 입력하세요','err'); return; }
-  if(nw!==cf){ toast('비밀번호가 일치하지 않습니다','err'); return; }
-  const memberName=S?.name;
-  if(!memberName){ toast('로그인 정보 없음. 재로그인 후 시도하세요','err'); return; }
-  const curHash=await sha256(cur);
-  const localList=_getAjMembers();
-  const idx=localList.findIndex(m=>m.name===memberName);
-  if(idx!==-1 && localList[idx].pw_hash!==curHash){ toast('현재 비밀번호가 틀렸습니다','err'); return; }
-  const newHash=await sha256(nw);
-  if(idx!==-1){ localList[idx].pw_hash=newHash; _saveAjMembers(localList); }
-  const cached=DB.g(K.AJ_MEMBER,null);
-  if(cached){ cached.pw_hash=newHash; DB.s(K.AJ_MEMBER,cached); }
-  if(idx!==-1) _patchAjMemberSb(localList[idx].emp_no,{pw_hash:newHash});
-  _closePwSheet();
-  toast('비밀번호 변경 완료','ok');
-}
-function _closePwSheet(){
-  window._forcePwChange=false;
-  ['pw-force-notice','pw-later-btn'].forEach(id=>{ const e=document.getElementById(id); if(e) e.style.display='none'; });
-  const cancelBtn=document.getElementById('pw-cancel-btn'); if(cancelBtn) cancelBtn.style.display='';
-  ['pw-cur','pw-new','pw-cfm'].forEach(id=>document.getElementById(id).value='');
-  closeSheet('sh-pw');
-}
-function skipPwChange(){
-  _closePwSheet();
-  toast('나중에 꼭 변경해 주세요','warn');
 }
 function openForcedPwSheet(){
   window._forcePwChange=true;
