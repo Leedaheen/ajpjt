@@ -131,7 +131,7 @@ async function _renderHomeAsync(){
       <div style="width:40px;height:3px;background:var(--br);border-radius:2px;flex-shrink:0"><div style="height:3px;border-radius:2px;background:${col};width:${Math.round(co.rate*100)}%"></div></div>
     </div>`;
   }).join('');
-  const missingBadge=missingCos.length>0?`<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:5px;background:rgba(251,191,36,.15);color:#fbbf24">미입력 ${missingCos.length}업체</span><button onclick="_pushMissingNotif()" title="미입력 업체 담당자에게 알림 발송" style="padding:1px 6px;font-size:9px;font-weight:700;border-radius:5px;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);color:#fbbf24;cursor:pointer;margin-left:2px">🔔 알림</button>`:'';
+  const missingBadge='';
 
   // ── 위치별 가동률 테이블 (N × 2, 중앙 정렬)
   const floorTableHtml = floorEntries.length ? (() => {
