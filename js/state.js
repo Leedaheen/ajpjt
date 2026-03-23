@@ -540,9 +540,14 @@ async function _fetchFromSB(){
     // ─────────────────────────────────────────────────────────
     _lastFetchTs=Date.now();
     if(changed){
-      if(curPg==='pg-transit') renderTransit();
-      if(curPg==='pg-as'){ renderASPage(); updateASBadge(); }
-      if(curPg==='pg-home') renderHome();
+      // 사용자가 입력 중이면 DOM 재빌드 스킵 (입력값 날아감 방지)
+      const _activeTag = document.activeElement?.tagName;
+      const _userTyping = _activeTag==='INPUT'||_activeTag==='TEXTAREA'||_activeTag==='SELECT';
+      if(!_userTyping){
+        if(curPg==='pg-transit') renderTransit();
+        if(curPg==='pg-as'){ renderASPage(); updateASBadge(); }
+        if(curPg==='pg-home') renderHome();
+      }
     }
     return changed;
   }catch(e){ console.warn('[_fetchFromSB]',e); return false; }

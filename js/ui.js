@@ -1387,7 +1387,14 @@ function _asCard(r, canAct){
           <span style="font-size:10px;color:var(--tx2)">${_fmtAsDate(r.requestedAt||r.createdAt)}</span>
           ${seqNo?`<span style="font-size:9px;color:var(--tx3);font-family:monospace;white-space:nowrap">No.${seqNo}</span>`:''}
         </div>
-        ${r.status==='처리완료'&&r.resolvedAt&&(r.requestedAt||r.createdAt)?`<div style="font-size:9px;color:#4ade80;margin-top:2px;text-align:right">⏱ ${(()=>{const ms=new Date(r.resolvedAt)-new Date(r.requestedAt||r.createdAt);const h=Math.floor(ms/3600000);const d=Math.floor(h/24);return d>0?d+'일 '+(h%24)+'h':h+'h '+Math.round((ms%3600000)/60000)+'m';})()}</div>`:''}
+        ${r.status==='처리완료'&&r.resolvedAt?(()=>{
+          const rDate=new Date(r.resolvedAt);
+          const rStr=rDate.toLocaleDateString('ko-KR',{month:'2-digit',day:'2-digit'})+' '+rDate.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+          const base=r.requestedAt||r.createdAt;
+          let elapsedHtml='';
+          if(base){const ms=new Date(r.resolvedAt)-new Date(base);const h=Math.floor(ms/3600000);const d=Math.floor(h/24);elapsedHtml=` <span style="color:#86efac">⏱ ${d>0?d+'일 '+(h%24)+'h':h+'h '+Math.round((ms%3600000)/60000)+'m'}</span>`;}
+          return `<div style="font-size:9px;color:#4ade80;margin-top:2px;text-align:right;white-space:nowrap">완료: ${rStr}${elapsedHtml}</div>`;
+        })():''}
       </div>
     </div>
 
