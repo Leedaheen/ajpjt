@@ -871,7 +871,13 @@ function _initRealtime(){
         if(msg.event==='postgres_changes' && msg.payload?.data){
           const tbl = msg.payload.data.table;
           console.log('[Realtime] 변경 감지:', tbl);
-          _fetchFromSB().catch(()=>{});
+          // 변경된 테이블만 선택 렌더 (전체 재렌더 → 깜빡임 방지)
+          _fetchFromSB().catch(()=>{}).then(changed=>{
+            if(!changed) return;
+            if(tbl==='transit'||tbl==='equipment') { renderTransit?.(); }
+            else if(tbl==='as_requests') { renderASPage?.(); updateASBadge?.(); }
+            else if(tbl==='logs') { _renderHomeAsync?.(); }
+          });
         }
       }catch(_){}
     };

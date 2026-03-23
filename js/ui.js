@@ -1307,7 +1307,8 @@ function _addASComment(id){
   }
   renderASPage();
   toast('댓글 등록됨','ok');
-  _fetchFromSB().catch(()=>{}).then(()=>renderASPage());
+  // 서버에서 새 데이터가 있을 때만 재렌더 (깜빡임 방지)
+  _fetchFromSB().catch(()=>{}).then(changed=>{ if(changed){ renderASPage(); updateASBadge(); } });
 }
 
 function _setAsTypeFilter(f, el){
@@ -1500,7 +1501,7 @@ function updateASStatus(id, status){
   updateASBadge();
   renderASPage();
   toast(status==='처리완료'?'처리 완료로 변경됨':'자재수급중으로 변경됨','ok');
-  _fetchFromSB().catch(()=>{}).then(()=>{ renderASPage(); updateASBadge(); });
+  _fetchFromSB().catch(()=>{}).then(changed=>{ if(changed){ renderASPage(); updateASBadge(); } });
 }
 
 function resolveAS(idx){
@@ -2251,18 +2252,9 @@ function _trCard(r, seqNo, canEdit, canMsg){
     const completeBtnColor = isIn ? '#22c55e' : '#fb923c';
     const hasDispatch = !!(r.dispatch && _parseDispatch(r.dispatch).length);
     const dispBtnLabel = hasDispatch ? '배차정보 확인' : '배차정보 등록';
-    // 반입 카드: 장비번호 인라인 입력란 (반입예정 + 반입지연 공통)
-    const inlineEquipHtml = isIn
-      ? `<div style="display:flex;align-items:center;gap:6px;margin-top:6px;margin-bottom:2px">` +
-        `<input type="text" id="inline-equip-${r.id}" value="${r.ajEquip||''}" placeholder="장비번호 입력 (쉼표 구분)" oninput="this.value=this.value.toUpperCase()" autocomplete="off"` +
-        ` style="flex:1;padding:5px 8px;font-size:11px;font-family:monospace;font-weight:700;text-transform:uppercase;background:var(--bg2);border:1px solid var(--br);border-radius:6px;color:#60a5fa;outline:none">` +
-        `<button onclick="_saveInlineEquip('${r.id}')" style="padding:5px 10px;font-size:10px;font-weight:700;background:rgba(96,165,250,.15);border:1px solid rgba(96,165,250,.3);border-radius:6px;color:#60a5fa;cursor:pointer;white-space:nowrap">저장</button>` +
-        `</div>`
-      : '';
     actionHtml =
       `<div style="margin-top:4px;border-top:1px solid var(--br);padding-top:8px">` +
-      inlineEquipHtml +
-      `<div style="display:flex;gap:6px;${isIn?'margin-top:6px':''}">` +
+      `<div style="display:flex;gap:6px">` +
       `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:#a78bfa;border-color:rgba(167,139,250,.3)" onclick="openDispatchPopup('${r.id}')">${dispBtnLabel}</button>` +
       `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:#f87171;border-color:rgba(248,113,113,.3)" onclick="cancelTransit('${r.id}')">취소</button>` +
       `<button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:${completeBtnColor};border-color:${completeBtnColor}40;font-weight:700" onclick="completeTransit('${r.id}')">${completeBtnLabel}</button>` +
@@ -2581,7 +2573,7 @@ async function _addTransitMsg(id){
   // 서버 즉시 push
   try { await _directPushTransit(rec); toast('메시지 추가됨','ok'); }
   catch(e){ console.warn('[addTransitMsg push]',e); scheduleRetrySync(); toast('로컬 저장됨 — 자동 재시도','warn',2500); }
-  _fetchFromSB().catch(()=>{}).then(()=>renderTransit());
+  _fetchFromSB().catch(()=>{}).then(changed=>{ if(changed) renderTransit(); });
 }
 
 async function _delTransitMsg(id, idx){
@@ -2625,8 +2617,20 @@ function _renderSpecBlock(r, canEdit) {
   // specs가 없거나 비어있으면 equip 문자열 파싱 시도
   let specs = r.specs && r.specs.length ? r.specs : _parseSpecString(r.equip || r.equip_specs || '');
   if (!specs.length) {
-    const fallback = r.equip || r.equip_specs || '—';
-    return '<div style="font-size:12px;font-weight:700;margin-bottom:6px;line-height:1.8">' + fallback.replace(/\//g,'<br>') + '</div>';
+    const fallback = r.equip || r.equip_specs || '';
+    // 반입 + 편집권한: spec 없어도 장비번호 직접 입력란 표시 (반입신청 스펙블록과 동일 위치)
+    if (isIn && canEdit) {
+      return `<div style="margin-bottom:8px;padding:8px 10px;background:rgba(96,165,250,.04);border:1px solid rgba(96,165,250,.15);border-radius:8px">
+        <div style="font-size:10px;font-weight:700;color:#60a5fa;margin-bottom:7px">🏷 장비번호 입력</div>
+        ${fallback?`<div style="font-size:12px;font-weight:700;margin-bottom:6px;line-height:1.6">${fallback.replace(/\//g,'<br>')}</div>`:''}
+        <div style="display:flex;align-items:center;gap:6px">
+          <input type="text" id="inline-equip-${r.id}" value="${r.ajEquip||''}" placeholder="장비번호 입력 (쉼표 구분)" oninput="this.value=this.value.toUpperCase()" autocomplete="off"
+            style="flex:1;padding:5px 8px;font-size:11px;font-family:monospace;font-weight:700;text-transform:uppercase;background:var(--bg2);border:1px solid var(--br);border-radius:6px;color:#60a5fa;outline:none">
+          <button onclick="_saveInlineEquip('${r.id}')" style="padding:5px 10px;font-size:11px;font-weight:700;background:rgba(96,165,250,.18);border:1px solid rgba(96,165,250,.35);border-radius:6px;color:#60a5fa;cursor:pointer;white-space:nowrap">저장</button>
+        </div>
+      </div>`;
+    }
+    return '<div style="font-size:12px;font-weight:700;margin-bottom:6px;line-height:1.8">' + (fallback||'—').replace(/\//g,'<br>') + '</div>';
   }
 
   // 반입 카드 + 편집 권한: 제원별 장비번호 입력란 표시 (한번에 저장)
@@ -2940,7 +2944,7 @@ async function completeTransit(id) {
   }
 
   renderTransit();
-  _fetchFromSB().catch(()=>{}).then(()=>renderTransit());
+  _fetchFromSB().catch(()=>{}).then(changed=>{ if(changed) renderTransit(); });
 }
 
 
