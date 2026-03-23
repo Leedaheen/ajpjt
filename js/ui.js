@@ -1390,8 +1390,8 @@ function _asCard(r, canAct){
 
     <!-- 장비번호·위치 -->
     <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin:4px 0 4px;font-size:12px">
-      <span style="font-family:monospace;font-weight:800;color:#60a5fa">${esc(r.equip)||'—'}</span>
-      ${r.location?`<span style="color:var(--tx3)">·</span><span style="color:var(--tx2)">${esc(r.location)}</span>`:''}
+      <span style="font-family:monospace;font-weight:800;color:#93c5fd">${esc(r.equip)||'—'}</span>
+      ${r.location?`<span style="color:var(--tx2)">·</span><span style="color:var(--tx)">${esc(r.location)}</span>`:''}
     </div>
     <!-- 신청자 · 작업자 -->
     <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:5px;font-size:11px">
@@ -4730,6 +4730,7 @@ function _renderEquipMasterSheet(sh) {
           <div style="flex:1;min-width:0">
             <span style="font-family:monospace;font-weight:700;font-size:12px;color:#60a5fa">${e.equipNo}</span>
             ${e.spec?`<span style="font-size:10px;color:var(--tx3);margin-left:5px">${e.spec}${e.model?' ('+e.model+')':''}</span>`:''}
+            ${e.serialNo?`<span style="font-size:9px;color:var(--tx3);margin-left:5px;font-family:monospace">S/N:${e.serialNo}</span>`:''}
             ${_pendingBadge}
           </div>
           ${_projEl}
@@ -4770,6 +4771,9 @@ function _renderEquipMasterSheet(sh) {
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
             <input type="text" id="eq-add-no" placeholder="장비번호 * (예: GK228)" style="text-transform:uppercase;padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)">
             <input type="text" id="eq-add-co" placeholder="업체명 *" value="${esc(S?.company||'')}" style="padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)">
+          </div>
+          <div style="margin-bottom:6px">
+            <input type="text" id="eq-add-serial" placeholder="시리얼번호 (선택)" style="width:100%;padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx);box-sizing:border-box">
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
             <select id="eq-add-spec" style="padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)">
@@ -4913,12 +4917,13 @@ async function _equipMasterBulkAdd() {
 }
 
 async function _equipMasterAdd() {
-  const no     = document.getElementById('eq-add-no')?.value.toUpperCase().trim();
-  const co     = document.getElementById('eq-add-co')?.value.trim();
-  const spec   = document.getElementById('eq-add-spec')?.value.trim();
-  const inDate = document.getElementById('eq-add-indate')?.value || today();
-  const si     = document.getElementById('eq-add-site')?.value || (S?.siteId === 'all' ? '' : S?.siteId);
-  const proj   = document.getElementById('eq-add-proj')?.value || '';
+  const no       = document.getElementById('eq-add-no')?.value.toUpperCase().trim();
+  const co       = document.getElementById('eq-add-co')?.value.trim();
+  const spec     = document.getElementById('eq-add-spec')?.value.trim();
+  const inDate   = document.getElementById('eq-add-indate')?.value || today();
+  const serialNo = document.getElementById('eq-add-serial')?.value.trim() || '';
+  const si       = document.getElementById('eq-add-site')?.value || (S?.siteId === 'all' ? '' : S?.siteId);
+  const proj     = document.getElementById('eq-add-proj')?.value || '';
   if (!no)   { toast('장비번호를 입력하세요', 'err'); return; }
   if (!co)   { toast('업체명을 입력하세요', 'err'); return; }
   if (!spec) { toast('장비 제원을 선택하세요', 'err'); return; }
@@ -4931,6 +4936,7 @@ async function _equipMasterAdd() {
       exists.inDate  = inDate;
       exists.outDate = null;
       if (proj) exists.project = proj;
+      if (serialNo) exists.serialNo = serialNo;
       exists.synced  = false;
       await saveEquipMaster(arr);
       toast(`${no} 재반입 처리됨`, 'ok');
@@ -4942,7 +4948,7 @@ async function _equipMasterAdd() {
     const _needsApproval = S?.role !== 'aj';
     arr.push({
       id: 'eq-' + Date.now().toString(36),
-      equipNo: no, siteId: si,
+      equipNo: no, serialNo, siteId: si,
       siteName: getSites().find(s=>s.id===si)?.name || si,
       company: co, spec: spec, project: proj, specs: [], transitId: null,
       status: 'active', inDate: inDate, outDate: null, synced: false,

@@ -346,6 +346,7 @@ async function _syncToSupabase(){
     const rows = unsyncEq.map(e=>({
       record_id:  e.id||'',
       equip_no:   e.equipNo||'',
+      serial_no:  e.serialNo||'',
       site_id:    e.siteId||'',
       site_name:  siteMap[e.siteId]||e.siteId||'',
       company:    e.company||'',

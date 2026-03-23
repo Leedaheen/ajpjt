@@ -447,6 +447,12 @@ async function _fetchFromSB(){
           if(row.dispatch !== undefined && loc.dispatch!==row.dispatch){ loc.dispatch=row.dispatch||''; itemChanged=true; }
           if(row.aj_equip !== undefined && loc.ajEquip!==row.aj_equip){ loc.ajEquip=row.aj_equip||''; itemChanged=true; }
           if(row.manager_location !== undefined && loc.managerLocation!==row.manager_location){ loc.managerLocation=row.manager_location||''; itemChanged=true; }
+          // equip_specs: 로컬 specs가 없을 때 서버에서 보충 (반입지연 등 표시 누락 방지)
+          if(row.equip_specs && (!loc.specs || !loc.specs.length)){
+            const _ps=_parseSpecString(row.equip_specs);
+            if(_ps.length){ loc.specs=_ps; loc.equip=row.equip_specs; itemChanged=true; }
+            else if(!loc.equip && row.equip_specs){ loc.equip=row.equip_specs; itemChanged=true; }
+          }
           // messages(댓글): 서버가 더 많거나 서버가 최신이면 덮어쓰기
           if(row.messages){
             try{
@@ -600,6 +606,7 @@ async function loadEquipFromSupabase() {
     const arr = data.map(row => ({
       id:        row.record_id || row.id,
       equipNo:   row.equip_no || '',
+      serialNo:  row.serial_no || '',
       siteId:    row.site_id  || '',
       siteName:  row.site_name|| '',
       company:   row.company  || '',
