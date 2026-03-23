@@ -725,6 +725,18 @@ async function _doKakaoAjLogin(kakaoId, nickname, email){
   toast(`${member.name}님 환영합니다!`,'ok'); enterApp();
 }
 
+function _adminLogin(){
+  const pw = prompt('관리자 암호를 입력하세요');
+  if(pw === null) return;
+  if(pw !== 'aj2025!'){ toast('암호가 올바르지 않습니다.','err',3000); return; }
+  S = { role:'aj', name:'관리자', phone:'', ajType:'관리자',
+        company:'AJ네트웍스', siteId:'all', siteName:'전체 현장',
+        loginAt:Date.now(), empNo:'admin', memberId:'' };
+  DB.s(K.SESSION, S);
+  toast('관리자로 로그인됩니다.','ok');
+  enterApp();
+}
+
 function saveKakaoConfig(){
   const key = document.getElementById('kakao-key-input')?.value.trim()||'';
   if(!key){ toast('카카오 키를 입력하세요','err'); return; }
