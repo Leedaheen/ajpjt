@@ -39,6 +39,25 @@ async function sbReq(table, method='GET', data=null, query=''){
       clearTimeout(_tid);
       if(!r.ok){
         const err = await r.text();
+        // PGRST 오류 코드 → 한글 메시지 변환
+        let pgrst = null;
+        try { pgrst = JSON.parse(err); } catch(_){}
+        if(pgrst?.code){
+          const _pgrMsg = {
+            'PGRST204': '테이블에 해당 컬럼이 없습니다. Supabase 테이블에 누락된 컬럼을 추가해주세요.',
+            'PGRST200': '테이블 또는 관계를 찾을 수 없습니다. 테이블명을 확인해주세요.',
+            'PGRST116': '조회 결과가 없거나 여러 행이 반환됐습니다.',
+            'PGRST301': '인증 오류입니다. API 키를 확인해주세요.',
+            '42501':    '권한이 없습니다. Supabase RLS 정책을 확인해주세요.',
+            '23505':    '이미 존재하는 데이터입니다 (중복 키).',
+            '23503':    '참조 무결성 오류입니다.',
+          };
+          const kor = _pgrMsg[pgrst.code];
+          if(kor){
+            if(typeof toast === 'function') toast(`서버 오류 [${pgrst.code}]: ${kor}`, 'err', 6000);
+            throw new Error(`[${pgrst.code}] ${kor}`);
+          }
+        }
         throw new Error(`SB ${r.status}: ${err}`);
       }
       if(method==='DELETE'||method==='PATCH') return null;
