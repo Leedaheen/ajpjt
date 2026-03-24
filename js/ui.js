@@ -2160,7 +2160,7 @@ function _trCard(r, seqNo, canEdit, canMsg){
     headerBg = 'background:linear-gradient(135deg,rgba(30,58,95,.1),rgba(30,64,175,.1))';
   } else if (!st.done && diff === 1) {
     border = 'border:2px solid #f59e0b;box-shadow:0 0 0 3px rgba(245,158,11,.12)';
-    headerBg = 'background:linear-gradient(135deg,rgba(69,26,3,.7),rgba(146,64,14,.7))';
+    headerBg = 'background:linear-gradient(135deg,rgba(69,26,3,.1),rgba(146,64,14,.1))';
   }
 
   const typeColor = isIn ? '#60a5fa' : '#fb923c';
@@ -2351,13 +2351,20 @@ function _trCard(r, seqNo, canEdit, canMsg){
       ${seqNo?`<span style="font-size:9px;color:rgba(255,255,255,.55);font-family:monospace">No.${seqNo}</span>`:''}
     </div>
     <div onclick="toggleTrCard('${r.id}')" style="padding:10px 12px;cursor:pointer;display:flex;align-items:flex-start;gap:8px;${headerBg}">
-      <div style="flex:1;display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap;min-width:0">
-        <span style="font-size:10px;font-weight:800;padding:2px 7px;border-radius:6px;background:rgba(${isIn?'96,165,250':'251,146,60'},.2);color:${typeColor};flex-shrink:0">${typeLabel}</span>
-        ${doneBadge}
-        <span style="font-weight:800;font-size:12px;flex-shrink:0">${r.company||'—'}</span>
-        <div style="flex-shrink:0;line-height:1.4">${specSummary}</div>
-        <span style="font-family:monospace;font-size:11px;color:#60a5fa;flex-shrink:0">${equipShort}</span>
-        ${(r.siteName||r.project)?`<div style="width:100%;display:flex;gap:4px;margin-top:2px;flex-wrap:wrap">${r.siteName?`<span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(245,158,11,.12);color:#f59e0b;font-weight:700">${r.siteName}</span>`:''} ${r.project?`<span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(20,184,166,.12);color:#14b8a6;font-weight:700">${r.project}</span>`:''}</div>`:''}
+      <div style="flex:1;min-width:0">
+        <!-- 1행: 반입/반출 뱃지 + 완료뱃지 + 업체명 -->
+        <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
+          <span style="font-size:10px;font-weight:800;padding:2px 7px;border-radius:6px;background:rgba(${isIn?'96,165,250':'251,146,60'},.2);color:${typeColor};flex-shrink:0">${typeLabel}</span>
+          ${doneBadge}
+          <span style="font-weight:800;font-size:12px">${r.company||'—'}</span>
+        </div>
+        <!-- 2행: 제원×수량 + 장비번호 + 현장/프로젝트 -->
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:3px">
+          <div style="font-size:11px;line-height:1.4;color:var(--tx2)">${specSummary}</div>
+          ${equipShort!=='—'?`<span style="font-family:monospace;font-size:11px;color:#60a5fa">${equipShort}</span>`:''}
+          ${r.siteName?`<span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(245,158,11,.12);color:#f59e0b;font-weight:700">${r.siteName}</span>`:''}
+          ${r.project?`<span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(20,184,166,.12);color:#14b8a6;font-weight:700">${r.project}</span>`:''}
+        </div>
       </div>
       <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
         ${totalQty>0?`<span style="font-size:10px;font-weight:700;color:var(--tx3);flex-shrink:0">총 ${totalQty}대</span>`:''}
