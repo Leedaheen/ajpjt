@@ -4637,6 +4637,20 @@ function renderAdmin(){
       </button>
     </div>
 
+    <!-- 가동현황 로그 전체 삭제 (AJ 전용) -->
+    ${isAJ?`
+    <div style="margin-top:10px;padding:12px;background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.2);border-radius:12px;display:flex;align-items:center;gap:12px">
+      <div style="font-size:22px;flex-shrink:0">🗂️</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:800;margin-bottom:2px">가동현황 로그 전체 삭제</div>
+        <div style="font-size:10px;color:var(--tx3)">테스트·더미 로그를 서버·로컬 전부 영구 삭제합니다</div>
+      </div>
+      <button onclick="_clearAllLogs()"
+        style="padding:7px 12px;font-size:11px;font-weight:800;background:rgba(239,68,68,.18);border:1px solid rgba(239,68,68,.35);border-radius:8px;color:#f87171;cursor:pointer;flex-shrink:0;white-space:nowrap">
+        로그 삭제
+      </button>
+    </div>`:''}
+
     <!-- 캐시 삭제 -->
     <div style="margin-top:10px;padding:12px;background:rgba(99,102,241,.07);border:1px solid rgba(99,102,241,.2);border-radius:12px;display:flex;align-items:center;gap:12px">
       <div style="font-size:22px;flex-shrink:0">🗑️</div>

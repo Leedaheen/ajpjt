@@ -2062,6 +2062,78 @@ function goTab(pgId){
   }
 }
 
+/* ── 가동현황 로그 전체 삭제 (AJ 전용) ───────────────────────── */
+async function _clearAllLogs(){
+  if(S?.role !== 'aj'){ toast('AJ 관리자만 사용할 수 있습니다','err'); return; }
+  const siteId = S?.siteId;
+  const isAll  = !siteId || siteId === 'all';
+  const target = isAll ? '전체 현장' : (getSites().find(s=>s.id===siteId)?.name || siteId);
+  if(!confirm(
+    `[${target}] 가동현황 로그를 전부 삭제합니다.\n\n` +
+    '⚠️ 로컬(기기) + 서버(Supabase) 데이터가\n' +
+    '영구 삭제되며 복구가 불가합니다.\n\n' +
+    '계속하시겠습니까?'
+  )) return;
+  spinner(true, '로그 삭제 중...');
+  try {
+    const all = getLogs();
+    const keep = isAll ? [] : all.filter(l => l.siteId !== siteId);
+    const deleted = all.length - keep.length;
+    // 1. LS 삭제
+    _cache.logs = keep;
+    DB.s(K.LOGS, keep.slice(0,200));
+    _cache.todayLogs = null;
+    // 2. IDB 삭제 — clear 또는 site 필터 후 재저장
+    if(window._IDB_READY){
+      await new Promise((res)=>{
+        const req = indexedDB.open('aj_v3');
+        req.onsuccess = (e)=>{
+          const db = e.target.result;
+          if(isAll){
+            const tx = db.transaction('logs','readwrite');
+            tx.objectStore('logs').clear();
+            tx.oncomplete = ()=>{ db.close(); res(); };
+            tx.onerror    = ()=>{ db.close(); res(); };
+          } else {
+            // 전체 IDB 로드 후 해당 현장 제외하고 재저장
+            const rTx = db.transaction('logs','readonly');
+            const rReq = rTx.objectStore('logs').getAll();
+            rReq.onsuccess = ()=>{
+              const idbKeep = (rReq.result||[]).filter(l=>l.siteId!==siteId);
+              const wTx = db.transaction('logs','readwrite');
+              const os  = wTx.objectStore('logs');
+              os.clear();
+              idbKeep.forEach(r=>os.put(r));
+              wTx.oncomplete = ()=>{ db.close(); res(); };
+              wTx.onerror    = ()=>{ db.close(); res(); };
+            };
+            rReq.onerror = ()=>{ db.close(); res(); };
+          }
+        };
+        req.onerror = ()=>res();
+      });
+    }
+    // 3. Supabase 삭제
+    const sbUrl = DB.g(K.SB_URL,'');
+    if(sbUrl){
+      const q = isAll
+        ? '?date=gte.2000-01-01'
+        : `?site_id=eq.${encodeURIComponent(siteId)}&date=gte.2000-01-01`;
+      await sbReq('logs','DELETE',null,q).catch(e=>console.warn('[clearAllLogs SB]',e));
+    }
+    toast(`[${target}] 로그 ${deleted}건 삭제 완료`,'ok',4000);
+    // 4. 화면 갱신
+    if(curPg==='pg-ops') initOpsPanel(curOpsTab);
+    if(curPg==='pg-admin') renderAdmin();
+    renderHome();
+  } catch(e){
+    console.error('[clearAllLogs]',e);
+    toast('삭제 중 오류: '+e.message,'err',6000);
+  } finally {
+    spinner(false);
+  }
+}
+
 /* ═══════════════════════════════════════════
    GOOGLE SHEETS / SUPABASE
 ═══════════════════════════════════════════ */
