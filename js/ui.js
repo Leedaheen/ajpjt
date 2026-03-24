@@ -403,11 +403,13 @@ async function _populateOpenSessionsAsync(){
   const td=today();
   const siteId = S?.siteId==='all' ? null : S?.siteId;
   const isAJ = S?.role==='aj';
+  const isTech = S?.role==='tech';
   let open = await IDB.getByIndex('logs','date',td).catch(()=>getLogsByDate(td));
   open = open.filter(l=>{
     if(l.status!=='start') return false;
     if(siteId && l.siteId!==siteId) return false;
-    if(!isAJ && l.company!==S.company) return false;
+    // H7: sub·tech 역할은 자신의 회사 세션만 표시
+    if(!isAJ && S?.company && l.company!==S.company) return false;
     return true;
   });
   const sel=document.getElementById('f-open-session');
@@ -457,8 +459,18 @@ async function submitStart(){
   if(!locationDetail){ toast('상세위치를 입력하세요','err'); document.getElementById('f-location-detail')?.focus(); return; }
   if(!meterStartVal){ toast('계기판 시작 시간을 입력하세요','err'); document.getElementById('f-meter-start')?.focus(); return; }
   if(opsProjects.length && !project){ toast('프로젝트를 선택하세요','err'); return; }
+  // H5: 동일 장비 중복 사용신청 방지 — 이미 진행 중인 세션 확인
+  const _todaySiteId = S.siteId==='all' ? (document.getElementById('f-site-sel')?.value||getSites()[0]?.id||'') : S.siteId;
+  const _openDup = getLogs().find(l => l.equip===equip && l.siteId===_todaySiteId && l.status==='start' && l.date===date);
+  if(_openDup){
+    const _goAnyway = await new Promise(res=>{
+      const _msg = `[${equip}] 이미 사용 중인 장비입니다.\n(${_openDup.company} · ${_openDup.startTime||''} 시작)\n\n계속 등록하시겠습니까?`;
+      res(confirm(_msg));
+    });
+    if(!_goAnyway) return;
+  }
   // 장비마스터 유효성 검사 — 보유 장비 아니면 확인 팝업
-  const _opsSiteId = S.siteId==='all' ? (document.getElementById('f-site-sel')?.value||getSites()[0]?.id||'') : S.siteId;
+  const _opsSiteId = _todaySiteId;
   const _opsKnownNos = getEquipBySite(_opsSiteId).map(e=>e.equipNo);
   if(_opsKnownNos.length && !_opsKnownNos.includes(equip)){
     const _go = await _confirmUnknownEquip([equip]);
@@ -536,8 +548,12 @@ async function submitEnd(){
   const meterEndVal = document.getElementById('f-meter-end').value.trim();
   if(!meterEndVal){ toast('계기판 종료 시간을 입력하세요','err'); document.getElementById('f-meter-end')?.focus(); return; }
   const btn=document.getElementById('btn-end');
-  btn.classList.add('loading'); btn.disabled=true;
   const endTime=document.getElementById('f-endtime').value;
+  // C4: 종료시간 > 시작시간 검증 (meter 값이 없을 때만 시간 기준 체크)
+  if(entry.startTime && endTime && endTime < entry.startTime){
+    toast(`종료시간(${endTime})이 시작시간(${entry.startTime})보다 빠릅니다`, 'err'); return;
+  }
+  btn.classList.add('loading'); btn.disabled=true;
   const meterEnd=+meterEndVal||null;
   let dur=null;
   if(meterEnd&&entry.meterStart) dur=+(meterEnd-entry.meterStart).toFixed(2);
@@ -871,12 +887,17 @@ function _initInputFormBindings(){
   initInputForm();
   // 가동현황 장비번호 자동완성
   setupEquipAutocomplete('f-equip', {
-    siteIdFn:  () => S?.siteId === 'all' ? null : S?.siteId,
+    // M4: AJ는 가동현황 현장 선택 드롭다운 기준으로 필터
+    siteIdFn:  () => S?.siteId === 'all'
+      ? (document.getElementById('f-site-sel')?.value || null)
+      : S?.siteId,
     companyFn: () => S?.company || null,
   });
   // 미가동 장비번호 자동완성
   setupEquipAutocomplete('f-idle-equip', {
-    siteIdFn:  () => S?.siteId === 'all' ? null : S?.siteId,
+    siteIdFn:  () => S?.siteId === 'all'
+      ? (document.getElementById('f-site-sel')?.value || null)
+      : S?.siteId,
     companyFn: () => S?.company || null,
     multi: true,
   });
@@ -921,12 +942,22 @@ function _compressImage(file, maxW, maxH, quality){
 async function _onAsPhotoSelected(input){
   const file = input.files[0];
   if(!file) return;
+  // M6: 파일 크기 제한 (15MB)
+  const MAX_BYTES = 15 * 1024 * 1024;
+  if(file.size > MAX_BYTES){
+    toast(`파일 크기가 너무 큽니다 (최대 15MB, 현재 ${(file.size/1024/1024).toFixed(1)}MB)`, 'err', 5000);
+    input.value = '';
+    return;
+  }
   try {
     const [full, thumb] = await Promise.all([
       _compressImage(file, 800, 800, 0.65),  // 원본 (~100-200KB)
       _compressImage(file, 100, 100, 0.5),   // 썸네일 (~3-5KB)
     ]);
     _pendingAsPhoto = { full, thumb };
+    // C3: 사진 선택 후 페이지 이탈 시 경고
+    window._asPhotoPendingUnload = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', window._asPhotoPendingUnload);
     // 미리보기 표시
     const preview = document.getElementById('as-photo-preview');
     const thumbEl = document.getElementById('as-photo-thumb-preview');
@@ -938,9 +969,16 @@ async function _onAsPhotoSelected(input){
     toast('사진 처리 중 오류가 발생했습니다','err');
   }
 }
+function _clearAsPhotoPendingUnload(){
+  if(window._asPhotoPendingUnload){
+    window.removeEventListener('beforeunload', window._asPhotoPendingUnload);
+    window._asPhotoPendingUnload = null;
+  }
+}
 
 function _clearAsPhoto(){
   _pendingAsPhoto = null;
+  _clearAsPhotoPendingUnload();
   const preview = document.getElementById('as-photo-preview');
   const labelEl = document.getElementById('as-photo-label');
   const input   = document.getElementById('as-photo-input');
@@ -2915,6 +2953,12 @@ function _showCompleteConfirm(verb, company, date, equipNo){
 
 // ── 반입/반출 완료 처리 (장비 마스터 연동) ──────────────────
 async function completeTransit(id) {
+  // 더블클릭 / 중복 처리 방지
+  if(window._completingTransit === id) return;
+  window._completingTransit = id;
+  try { await _completeTransitInner(id); } finally { window._completingTransit = null; }
+}
+async function _completeTransitInner(id) {
   const recs = getTransit();
   const rec  = recs.find(r => r.id === id);
   if (!rec) { toast('레코드를 찾을 수 없습니다', 'err'); return; }
@@ -3760,6 +3804,7 @@ async function submitAS(){
   // 원본 사진 메모리 캐시 등록
   if(_pendingAsPhoto?.full) _asPhotoCache.set(req.id, _pendingAsPhoto.full);
   _pendingAsPhoto = null;
+  _clearAsPhotoPendingUnload();
 
   const reqs = getAsReqs(); reqs.unshift(req); saveAsReqs(reqs);
   addNotif({icon:'🔧', title:`AS신청: ${equip}`, desc:`${company} — ${desc.slice(0,30)}`});
@@ -4433,7 +4478,13 @@ function saveNotice(siteId, text){
 }
 
 function deleteNotice(id){
-  const notices = getNotices().filter(n=>n.id!==id);
+  const all = getNotices();
+  const target = all.find(n=>n.id===id);
+  // M3: 협력사 관리자는 자신의 현장 공지만 삭제 가능
+  if(target && S?.role==='sub' && target.siteId !== S?.siteId){
+    toast('자신의 현장 공지만 삭제할 수 있습니다','err'); return;
+  }
+  const notices = all.filter(n=>n.id!==id);
   saveNotices(notices);
   renderNoticeBar();
   renderAdmin();
@@ -4636,20 +4687,6 @@ function renderAdmin(){
         채팅 열기
       </button>
     </div>
-
-    <!-- 가동현황 로그 전체 삭제 (AJ 전용) -->
-    ${isAJ?`
-    <div style="margin-top:10px;padding:12px;background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.2);border-radius:12px;display:flex;align-items:center;gap:12px">
-      <div style="font-size:22px;flex-shrink:0">🗂️</div>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:12px;font-weight:800;margin-bottom:2px">가동현황 로그 전체 삭제</div>
-        <div style="font-size:10px;color:var(--tx3)">테스트·더미 로그를 서버·로컬 전부 영구 삭제합니다</div>
-      </div>
-      <button onclick="_clearAllLogs()"
-        style="padding:7px 12px;font-size:11px;font-weight:800;background:rgba(239,68,68,.18);border:1px solid rgba(239,68,68,.35);border-radius:8px;color:#f87171;cursor:pointer;flex-shrink:0;white-space:nowrap">
-        로그 삭제
-      </button>
-    </div>`:''}
 
     <!-- 캐시 삭제 -->
     <div style="margin-top:10px;padding:12px;background:rgba(99,102,241,.07);border:1px solid rgba(99,102,241,.2);border-radius:12px;display:flex;align-items:center;gap:12px">
@@ -4897,8 +4934,10 @@ async function _equipMasterBulkAdd() {
   const siteName = getSites().find(s => s.id === siteId)?.name || siteId;
   const arr = getEquipMaster();
   const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  let added = 0, duped = 0, errs = 0;
-  for (const line of lines) {
+  let added = 0, duped = 0;
+  const errLines = []; // M7: 어떤 행이 오류인지 추적
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li];
     const parts = line.split(/,|\t/).map(p => p.trim());
     // 신규 형식: 현장명,프로젝트명,업체명,장비제원,장비번호,반입일
     // 구형식1: 업체명,장비제원,장비번호,반입일[,프로젝트]
@@ -4922,7 +4961,7 @@ async function _equipMasterBulkAdd() {
       inDate  = today(); project = '';
       effectiveSiteId = siteId; effectiveSiteName = siteName;
     }
-    if (!company || !equipNo) { errs++; continue; }
+    if (!company || !equipNo) { errLines.push(`${li+1}행: "${line.slice(0,30)}"`); continue; }
     const exists = arr.find(e => e.equipNo === equipNo && e.siteId === effectiveSiteId);
     if (exists) {
       if (exists.status !== 'active') {
@@ -4940,7 +4979,12 @@ async function _equipMasterBulkAdd() {
     }
   }
   await saveEquipMaster(arr);
-  toast(`${added}대 등록 완료${duped ? ' · ' + duped + '대 이미 존재' : ''}${errs ? ' · ' + errs + '행 오류' : ''}`, added > 0 ? 'ok' : 'warn');
+  // M7: 오류 행 상세 안내
+  if(errLines.length){
+    const errMsg = `오류 ${errLines.length}행 (업체명·장비번호 필수):\n` + errLines.slice(0,5).join('\n') + (errLines.length>5?`\n외 ${errLines.length-5}행`:'');
+    toast(errMsg, 'warn', 8000);
+  }
+  toast(`${added}대 등록 완료${duped ? ' · ' + duped + '대 이미 존재' : ''}${errLines.length ? ' · ' + errLines.length + '행 오류' : ''}`, added > 0 ? 'ok' : 'warn');
   const sh = document.getElementById('sh-equip-master');
   if (sh) _renderEquipMasterSheet(sh);
 }

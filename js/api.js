@@ -986,39 +986,4 @@ function scheduleRetrySync(){
   }, delay);
 }
 
-/* 3PM 알림 — 인덱스 활용, 알림 중복 방지 */
-let _last3pmNotifDate = '';
-function check3PMAlert(){
-  if(!S) return;
-  const now=new Date(), nowH=now.getHours(), nowM=now.getMinutes();
-  const el=document.getElementById('alert3pm');
-  if(!el) return;
-  const td=today();
-  if(nowH<15){ el.style.display='none'; return; }
-  _check3PMAsync(td, nowH, nowM, el).catch(()=>{});
-}
-async function _check3PMAsync(td, nowH, nowM, el){
-  const siteId=S.siteId==='all'?null:S.siteId;
-  const sites=siteId?[{id:siteId}]:getSites();
-  const todayAll = await getTodayLogs();
-  const missingAll=[];
-  for(const site of sites){
-    const cos=getCos(site.id);
-    const loggedCos=new Set(todayAll.filter(l=>l.siteId===site.id).map(l=>l.company));
-    for(const co of cos){
-      if(!loggedCos.has(co.name))
-        missingAll.push(co.name+(sites.length>1?` (${site.name})`:'')); 
-    }
-  }
-  if(!missingAll.length){ el.style.display='none'; return; }
-  el.style.display='flex';
-  document.getElementById('a3pm-desc').textContent='오후 3시 기준 미입력 업체';
-  document.getElementById('a3pm-missing').innerHTML=
-    missingAll.slice(0,8).map(n=>`<span class="a3pm-co">${n}</span>`).join('');
-  if(_last3pmNotifDate!==td && nowH===15 && nowM<2){
-    _last3pmNotifDate=td;
-    addNotif({icon:'',title:'가동현황 미입력 알림 (15:00)',
-      desc:`${missingAll.length}개 업체가 오후 3시까지 입력하지 않았습니다`});
-  }
-}
 

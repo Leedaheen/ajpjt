@@ -534,6 +534,9 @@ async function doGoogleProfileSubmit(){
     // 중복 체크 (같은 google_email이 이미 있으면 업데이트)
     const dup = allMembers.find(m=>m.google_email===email);
     if(dup) member = dup;
+    // 연락처 중복 방지 — 다른 계정이 같은 번호를 사용 중인지 확인
+    const phoneConflict = allMembers.find(m=>m.phone===phone && m.google_email!==email && m.kakao_id!==(window._gpfKakaoId||''));
+    if(phoneConflict){ toast('이미 다른 계정으로 등록된 연락처입니다','err',4000); return; }
   }
   const status = mode==='tech'?'approved':(window._inviteCodeOk?'approved':'pending');
   const role   = mode==='tech'?'tech':'sub';
@@ -1704,7 +1707,6 @@ function enterApp(){
   // 중복 등록 방지 — 기존 인터벌 모두 해제 후 재등록
   _appIntervals.forEach(id => clearInterval(id));
   _appIntervals = [
-    setInterval(check3PMAlert, 60000),
     setInterval(_runMemoryGuard, 5 * 60 * 1000), // 메모리 가드: 5분마다 비활성 캐시 해제
   ];
   // 자동 싱크 제거 — pull-to-refresh / 페이지 이동 시 수동 싱크로만 운용
@@ -2059,78 +2061,6 @@ function goTab(pgId){
   if(pgId==='pg-admin'){
     renderAdmin();
     _fetchFromSB().then(()=>{ if(curPg==='pg-admin') renderAdmin(); }).catch(()=>{});
-  }
-}
-
-/* ── 가동현황 로그 전체 삭제 (AJ 전용) ───────────────────────── */
-async function _clearAllLogs(){
-  if(S?.role !== 'aj'){ toast('AJ 관리자만 사용할 수 있습니다','err'); return; }
-  const siteId = S?.siteId;
-  const isAll  = !siteId || siteId === 'all';
-  const target = isAll ? '전체 현장' : (getSites().find(s=>s.id===siteId)?.name || siteId);
-  if(!confirm(
-    `[${target}] 가동현황 로그를 전부 삭제합니다.\n\n` +
-    '⚠️ 로컬(기기) + 서버(Supabase) 데이터가\n' +
-    '영구 삭제되며 복구가 불가합니다.\n\n' +
-    '계속하시겠습니까?'
-  )) return;
-  spinner(true, '로그 삭제 중...');
-  try {
-    const all = getLogs();
-    const keep = isAll ? [] : all.filter(l => l.siteId !== siteId);
-    const deleted = all.length - keep.length;
-    // 1. LS 삭제
-    _cache.logs = keep;
-    DB.s(K.LOGS, keep.slice(0,200));
-    _cache.todayLogs = null;
-    // 2. IDB 삭제 — clear 또는 site 필터 후 재저장
-    if(window._IDB_READY){
-      await new Promise((res)=>{
-        const req = indexedDB.open('aj_v3');
-        req.onsuccess = (e)=>{
-          const db = e.target.result;
-          if(isAll){
-            const tx = db.transaction('logs','readwrite');
-            tx.objectStore('logs').clear();
-            tx.oncomplete = ()=>{ db.close(); res(); };
-            tx.onerror    = ()=>{ db.close(); res(); };
-          } else {
-            // 전체 IDB 로드 후 해당 현장 제외하고 재저장
-            const rTx = db.transaction('logs','readonly');
-            const rReq = rTx.objectStore('logs').getAll();
-            rReq.onsuccess = ()=>{
-              const idbKeep = (rReq.result||[]).filter(l=>l.siteId!==siteId);
-              const wTx = db.transaction('logs','readwrite');
-              const os  = wTx.objectStore('logs');
-              os.clear();
-              idbKeep.forEach(r=>os.put(r));
-              wTx.oncomplete = ()=>{ db.close(); res(); };
-              wTx.onerror    = ()=>{ db.close(); res(); };
-            };
-            rReq.onerror = ()=>{ db.close(); res(); };
-          }
-        };
-        req.onerror = ()=>res();
-      });
-    }
-    // 3. Supabase 삭제
-    const sbUrl = DB.g(K.SB_URL,'');
-    if(sbUrl){
-      const q = isAll
-        ? '?date=gte.2000-01-01'
-        : `?site_id=eq.${encodeURIComponent(siteId)}&date=gte.2000-01-01`;
-      await sbReq('logs','DELETE',null,q).catch(e=>console.warn('[clearAllLogs SB]',e));
-    }
-    toast(`[${target}] 로그 ${deleted}건 삭제 완료`,'ok',4000);
-    // 4. 화면 갱신
-    if(curPg==='pg-ops') initOpsPanel(curOpsTab);
-    if(curPg==='pg-admin') renderAdmin();
-    renderHome();
-  } catch(e){
-    console.error('[clearAllLogs]',e);
-    toast('삭제 중 오류: '+e.message,'err',6000);
-  } finally {
-    spinner(false);
   }
 }
 
