@@ -135,6 +135,15 @@ async function sbBatchUpsert(table, rows, conflictCol=''){
             continue;
           }
         }
+        // 23502: 파티션 테이블 id 자동생성 미적용 → 클라이언트 생성 bigint 로 재시도
+        const _is23502 = e.message && e.message.includes('23502');
+        if(_is23502 && batch[0]?.id === undefined){
+          console.warn('[SB] id 자동생성 실패(23502) — 클라이언트 생성 id 재시도');
+          const _base = Date.now();
+          batch = batch.map((r, idx) => ({id: _base * 1000 + idx, ...r}));
+          lastErr = e;
+          continue;
+        }
         throw e;
       }
     }
@@ -851,10 +860,9 @@ async function pushToGS(entry){
       off_reason:  entry.reason||entry.offReason||'',
       created_at:  entry.createdAt?new Date(entry.createdAt).toISOString():new Date(entry.ts||Date.now()).toISOString(),
     };
-    // 신규(start): POST INSERT / 종료·휴무 업데이트: PATCH by record_id
-    // → on_conflict=record_id 방식은 UNIQUE 제약 없는 환경에서 42P10 오류 발생
+    // 신규(start): POST INSERT (sbBatchUpsert 재시도 포함) / 종료·휴무: PATCH by record_id
     if(entry.status === 'start'){
-      await sbReq('logs','POST',row);
+      await sbBatchUpsert('logs',[row]); // 23502(파티션 id 미생성) 자동 재시도 포함
     } else {
       await sbReq('logs','PATCH',row,`?record_id=eq.${encodeURIComponent(row.record_id)}`);
     }
