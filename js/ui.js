@@ -4219,13 +4219,14 @@ async function _renderRankAsync(){
   const medals=['1위','2위','3위'];
   rl.innerHTML=ranks.length ? ranks.map((c,i)=>{
     const col=rCol(c.rate);
-    return `<div class="rc">
+    return `<div class="rc" style="cursor:pointer" onclick="_showCoDetailPopup('${(c.name||'').replace(/'/g,"\\'")}','${c.siteId||''}')">
       <div class="rk-n ${i===0?'rk-1':i===1?'rk-2':i===2?'rk-3':''}">${medals[i]||i+1}</div>
       <div class="rk-i"><div class="rk-nm">${c.name}</div><div class="rk-mt">${c.cnt}건 · ${fH(c.hrs)}</div></div>
       <div class="rk-r">
         <div class="rk-pct" style="color:${col}">${fPct(c.rate)}</div>
         <div class="rk-bar"><div class="rk-bf" style="width:${c.rate*100}%;background:${col}"></div></div>
       </div>
+      <span style="font-size:13px;color:var(--tx3);flex-shrink:0">›</span>
     </div>`;
   }).join('') : '<div class="empty"><div class="empty-txt">데이터 없음</div></div>';
 }
@@ -4300,6 +4301,105 @@ async function _renderHeatmapAsync(){
     </div>`;
   }
   hg.innerHTML=html;
+}
+
+/* ── 업체 상세 팝업 ────────────────────────────────────────── */
+async function _showCoDetailPopup(coName, siteId){
+  const _rc = r => r>=.9?'#4ade80':r>=.7?'#86efac':r>=.5?'#fbbf24':'#f87171';
+  const _fp = r => r===null||r===undefined ? '—' : Math.round(r*100)+'%';
+
+  // 오버레이 생성 (로딩 상태)
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:9999;display:flex;align-items:flex-end;justify-content:center;padding:0';
+  overlay.onclick = e => { if(e.target===overlay) document.body.removeChild(overlay); };
+  const pop = document.createElement('div');
+  pop.style.cssText = 'width:100%;max-width:540px;max-height:88vh;overflow-y:auto;background:var(--bg1);border-radius:20px 20px 0 0;padding:20px 16px 32px;box-shadow:0 -8px 32px rgba(0,0,0,.4)';
+  pop.innerHTML = `<div style="text-align:center;padding:24px;color:var(--tx3);font-size:13px"><div style="width:18px;height:18px;border:2px solid var(--br);border-top-color:#60a5fa;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 8px"></div>불러오는 중...</div>`;
+  overlay.appendChild(pop);
+  document.body.appendChild(overlay);
+
+  const now = new Date(), td = today();
+  const week7 = (() => { const d=new Date(now); d.setDate(d.getDate()-7); return d.toISOString().split('T')[0]; })();
+  const month1 = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+  const sid = siteId || null;
+
+  // 1주일 + 이번달 로그 병렬 로드
+  const [wLogs, mLogs] = await Promise.all([
+    getLogsByRange(week7, td, sid, 5000),
+    getLogsByRange(month1, td, sid, 5000)
+  ]);
+  const wCo = wLogs.filter(l=>l.company===coName);
+  const mCo = mLogs.filter(l=>l.company===coName);
+
+  const wRate = wCo.length ? wCo.filter(l=>l.status==='end').length/wCo.length : null;
+  const mRate = mCo.length ? mCo.filter(l=>l.status==='end').length/mCo.length : null;
+
+  // 장비마스터에서 해당 업체 반입 중 장비 목록
+  const equips = getEquipMaster().filter(e => e.company===coName && (sid ? e.siteId===sid : true) && e.status==='active');
+
+  // 장비별 상세: 층수/프로젝트는 최근 로그에서 추출
+  const equipRows = equips.map(e => {
+    const eLogs = mCo.filter(l => (l.equip||'').toUpperCase()===(e.equipNo||'').toUpperCase());
+    const latest = [...eLogs].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).find(l=>l.floor||l.project);
+    const floor   = latest?.floor   || '—';
+    const project = latest?.project || '—';
+    const eWLogs  = wCo.filter(l=>(l.equip||'').toUpperCase()===(e.equipNo||'').toUpperCase());
+    const ewRate  = eWLogs.length ? eWLogs.filter(l=>l.status==='end').length/eWLogs.length : null;
+    const emRate  = eLogs.length  ? eLogs.filter(l=>l.status==='end').length/eLogs.length   : null;
+    return { equipNo:e.equipNo, spec:e.spec||'', floor, project, ewRate, emRate };
+  });
+
+  // 로그에는 있지만 마스터에 없는 장비 (반출 장비 등)
+  const masterNos = new Set(equips.map(e=>(e.equipNo||'').toUpperCase()));
+  const extraNos = [...new Set(mCo.map(l=>(l.equip||'').toUpperCase()).filter(n=>n&&!masterNos.has(n)))];
+  const extraRows = extraNos.map(no => {
+    const eLogs = mCo.filter(l=>(l.equip||'').toUpperCase()===no);
+    const latest = [...eLogs].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).find(l=>l.floor||l.project);
+    const eWLogs = wCo.filter(l=>(l.equip||'').toUpperCase()===no);
+    const ewRate = eWLogs.length ? eWLogs.filter(l=>l.status==='end').length/eWLogs.length : null;
+    const emRate = eLogs.length  ? eLogs.filter(l=>l.status==='end').length/eLogs.length   : null;
+    return { equipNo:no, spec:'', floor:latest?.floor||'—', project:latest?.project||'—', ewRate, emRate };
+  });
+
+  const allRows = [...equipRows, ...extraRows];
+
+  const rowHtml = r => `
+    <div style="padding:8px 10px;background:var(--bg2);border:1px solid var(--br);border-radius:8px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+        <span style="font-family:monospace;font-size:13px;font-weight:800;color:#60a5fa;flex-shrink:0">${r.equipNo}</span>
+        ${r.spec?`<span style="font-size:10px;padding:1px 6px;background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.2);border-radius:4px;color:var(--tx2)">${r.spec}</span>`:''}
+        <span style="margin-left:auto;font-size:10px;font-weight:600;color:var(--tx3)">${r.floor}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        ${r.project&&r.project!=='—'?`<span style="font-size:10px;color:#14b8a6;font-weight:600">📂 ${r.project}</span>`:''}
+        <span style="font-size:10px;color:var(--tx3)">1주: <strong style="color:${r.ewRate!==null?_rc(r.ewRate):'var(--tx3)'}">${_fp(r.ewRate)}</strong></span>
+        <span style="font-size:10px;color:var(--tx3)">이달: <strong style="color:${r.emRate!==null?_rc(r.emRate):'var(--tx3)'}">${_fp(r.emRate)}</strong></span>
+      </div>
+    </div>`;
+
+  pop.innerHTML = `
+    <div style="width:40px;height:4px;background:var(--br);border-radius:2px;margin:0 auto 16px"></div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+      <div style="font-size:17px;font-weight:900;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${coName}</div>
+      <button onclick="this.closest('[style*=fixed]').remove()" style="background:none;border:none;font-size:22px;color:var(--tx3);cursor:pointer;line-height:1;padding:0 4px;flex-shrink:0">×</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
+      <div class="kpi" style="text-align:center;padding:10px">
+        <div style="font-size:24px;font-weight:900;color:${wRate!==null?_rc(wRate):'var(--tx3)'}">${_fp(wRate)}</div>
+        <div style="font-size:10px;color:var(--tx2);margin-top:2px">최근 1주일 가동률</div>
+        <div style="font-size:9px;color:var(--tx3);margin-top:1px">${wCo.filter(l=>l.status==='end').length}/${wCo.length}건</div>
+      </div>
+      <div class="kpi" style="text-align:center;padding:10px">
+        <div style="font-size:24px;font-weight:900;color:${mRate!==null?_rc(mRate):'var(--tx3)'}">${_fp(mRate)}</div>
+        <div style="font-size:10px;color:var(--tx2);margin-top:2px">이번달 가동률</div>
+        <div style="font-size:9px;color:var(--tx3);margin-top:1px">${mCo.filter(l=>l.status==='end').length}/${mCo.length}건</div>
+      </div>
+    </div>
+    <div style="font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:8px">장비 현황 (${allRows.length}대)</div>
+    ${allRows.length
+      ? `<div style="display:flex;flex-direction:column;gap:6px">${allRows.map(rowHtml).join('')}</div>`
+      : '<div class="empty"><div class="empty-txt">이달 가동 이력 없음</div></div>'}
+    <div style="height:8px"></div>`;
 }
 
 /* ── 데이터 기반 분석 (Open-Meteo 날씨 연동) ────────────────── */
