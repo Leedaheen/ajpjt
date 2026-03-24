@@ -5828,6 +5828,9 @@ function saveSupabaseConfig(){
     localStorage.removeItem(K.SB_URL);
     localStorage.removeItem(K.SB_KEY);
   }
+  // 카카오 JS 키 저장 (같은 폼에 있는 경우)
+  const kakaoKey = document.getElementById('kakao-key-input')?.value.trim();
+  if(kakaoKey){ DB.s('kakao_js_key', kakaoKey); if(typeof _kakaoInit==='function') _kakaoInit(); }
   toast('Supabase 연동 저장됨. 동기화 시도...','ok');
   closeSheet('sh-supabase');
   renderAdmin();

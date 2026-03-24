@@ -125,6 +125,7 @@ function onSheetOpen(id){
   if(id==='sh-supabase'){
     document.getElementById('sb-url-input').value=DB.g(K.SB_URL,'')||SB_DEFAULT_URL||'';
     document.getElementById('sb-key-input').value=DB.g(K.SB_KEY,'')||SB_DEFAULT_KEY||'';
+    const _kkEl=document.getElementById('kakao-key-input'); if(_kkEl) _kkEl.value=DB.g('kakao_js_key','')||KAKAO_DEFAULT_JS_KEY||'';
     // AJ관리자만 민감 정보 블록 표시
     const _isAJ = S?.role==='aj';
     ['sb-credentials-block','sb-sql-block','sb-warn-block'].forEach(bid=>{
@@ -755,7 +756,7 @@ async function _kakaoGenPKCE(){
 
 async function _doKakaoLogin(role){
   const key = KAKAO_DEFAULT_JS_KEY || DB.g('kakao_js_key','');
-  if(!key){ toast('카카오 로그인 설정이 필요합니다. 관리자에게 문의하세요.','warn',4000); return; }
+  if(!key){ toast('카카오 JS 키 미설정 — 관리자가 연동 설정에서 입력해야 합니다','warn',4000); openSheet('sh-supabase'); return; }
   // PKCE Authorization Code Flow (response_type=token은 신규앱 차단 KOE202)
   const { verifier, challenge } = await _kakaoGenPKCE();
   sessionStorage.setItem('_kakaoRole', role);
