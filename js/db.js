@@ -36,12 +36,15 @@ document.addEventListener('input', function(e){
 /* ═══════════════════════════════════════════
    DATA LAYER
 ═══════════════════════════════════════════ */
-/* ── Supabase 기본 연결 정보 (앱 배포 시 고정값) ── */
-/* 이 값이 있으면 localStorage 설정 없이도 항상 연결됩니다 */
-const SB_DEFAULT_URL = 'https://jqhlxbarstqsnizquxeu.supabase.co';
+/* ── Supabase / OAuth 연결 정보 ──────────────────────────────
+   ⚠ 보안 정책: 키 값은 소스에 하드코딩하지 않습니다.
+     관리 탭 → 서버 설정 화면에서 직접 입력하세요.
+     (localStorage에 저장되며, Supabase 콘솔에서 key rotate 후 재입력 필요)
+─────────────────────────────────────────────────────────── */
+const SB_DEFAULT_URL = '';
 const GOOGLE_DEFAULT_CLIENT_ID = '1075257837095-jrdnlfql4s4emh4mmhnjcvhomon6f3kk.apps.googleusercontent.com';
-const KAKAO_DEFAULT_JS_KEY = '572b297ef83ce900385b830830063464';  // 카카오 개발자 콘솔에서 발급받은 JavaScript 앱 키
-const SB_DEFAULT_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpxaGx4YmFyc3Rxc25penF1eGV1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI4Njg1NzIsImV4cCI6MjA4ODQ0NDU3Mn0.VIEcG6t2xRr6BUka5dOECTxND2dAW4g8UjhOjn09Ef4';
+const KAKAO_DEFAULT_JS_KEY = '';  // 관리 탭 설정에서 입력 (카카오 콘솔 도메인 제한 필수)
+const SB_DEFAULT_KEY = '';
 
 const K = {
   SITES:   'sites_v3',

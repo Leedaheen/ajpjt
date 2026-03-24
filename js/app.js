@@ -275,6 +275,36 @@ async function sha256(str){
   const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
   return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
 }
+// pw_hash를 캐시에 저장하지 않도록 제거 (보안: localStorage에 해시 노출 방지)
+function _safeAjMember(m){ if(!m) return m; const {pw_hash:_,...rest}=m; return rest; }
+
+/* ── 로그인 brute-force 방어 ── */
+const _LA_KEY  = '_login_attempts';
+const _LL_KEY  = '_login_lock_until';
+function _checkLoginLock(){
+  const lockUntil = DB.g(_LL_KEY, 0);
+  if(lockUntil > Date.now()){
+    const remaining = Math.ceil((lockUntil - Date.now()) / 60000);
+    toast(`로그인 시도 초과. ${remaining}분 후 재시도하세요.`, 'err', 5000);
+    return false;
+  }
+  return true;
+}
+function _recordLoginFailure(){
+  const attempts = ((DB.g(_LA_KEY, 0)||0) + 1);
+  if(attempts >= 5){
+    DB.s(_LL_KEY, Date.now() + 30*60*1000);
+    DB.s(_LA_KEY, 0);
+    toast('로그인 5회 실패. 30분간 잠금됩니다.', 'err', 5000);
+  } else {
+    DB.s(_LA_KEY, attempts);
+    toast(`암호 오류 (${attempts}/5회)`, 'err', 2500);
+  }
+}
+function _resetLoginAttempts(){
+  DB.s(_LA_KEY, 0);
+  DB.s(_LL_KEY, 0);
+}
 function switchAjTab(tab){
   ['login','register','changepw'].forEach(t=>{
     const pane=document.getElementById('aj-pane-'+t);
@@ -663,7 +693,7 @@ async function _doGoogleAjLogin(email, googleName){
   const _st = member.status||'approved';
   if(_st==='pending'){ toast('가입 승인 대기 중입니다. AJ 관리자에게 문의하세요.','warn',4000); return; }
   if(_st==='rejected'){ toast('가입이 거절되었습니다. AJ 관리자에게 문의하세요.','err',4000); return; }
-  DB.s(K.AJ_MEMBER, member);
+  DB.s(K.AJ_MEMBER, _safeAjMember(member));
   S={ role:'aj', name:member.name, phone:member.phone||'', ajType:member.aj_type||'관리자',
       company:'AJ네트웍스', siteId:'all', siteName:'전체 현장', loginAt:Date.now(), empNo:member.emp_no,
       memberId: member.record_id||member.id||'' };
@@ -823,7 +853,7 @@ async function _doKakaoAjLogin(kakaoId, nickname, email){
   const _st = member.status||'approved';
   if(_st==='pending'){ toast('가입 승인 대기 중입니다. AJ 관리자에게 문의하세요.','warn',4000); return; }
   if(_st==='rejected'){ toast('가입이 거절되었습니다. AJ 관리자에게 문의하세요.','err',4000); return; }
-  DB.s(K.AJ_MEMBER, member);
+  DB.s(K.AJ_MEMBER, _safeAjMember(member));
   S={ role:'aj', name:member.name, phone:member.phone||'', ajType:member.aj_type||'관리자',
       company:'AJ네트웍스', siteId:'all', siteName:'전체 현장', loginAt:Date.now(), empNo:member.emp_no,
       memberId: member.record_id||member.id||'' };
@@ -831,10 +861,23 @@ async function _doKakaoAjLogin(kakaoId, nickname, email){
   toast(`${member.name}님 환영합니다!`,'ok'); enterApp();
 }
 
-function _adminLogin(){
+async function _adminLogin(){
+  if(!_checkLoginLock()) return;
   const pw = prompt('관리자 암호를 입력하세요');
   if(pw === null) return;
-  if(pw !== 'aj2025!'){ toast('암호가 올바르지 않습니다.','err',3000); return; }
+  // 저장된 해시와 비교 (평문 비교 제거 — 소스에 비밀번호 노출 없음)
+  const members = _getAjMembers();
+  const adminMember = members.find(m => m.emp_no === 'admin');
+  const storedHash = adminMember?.pw_hash || '';
+  const inputHash  = await sha256(pw);
+  if(!storedHash || inputHash !== storedHash){
+    _recordLoginFailure();
+    toast('암호가 올바르지 않습니다.','err',3000);
+    return;
+  }
+  _resetLoginAttempts();
+  const {pw_hash: _h, ...safeAdmin} = adminMember || {};
+  DB.s(K.AJ_MEMBER, safeAdmin);
   S = { role:'aj', name:'관리자', phone:'', ajType:'관리자',
         company:'AJ네트웍스', siteId:'all', siteName:'전체 현장',
         loginAt:Date.now(), empNo:'admin', memberId:'' };
@@ -1003,7 +1046,7 @@ async function doGoogleAjRegister(){
     const _st = dup.status||'approved';
     if(_st==='approved'){
       document.getElementById('modal-glink').style.display='none';
-      DB.s(K.AJ_MEMBER, dup);
+      DB.s(K.AJ_MEMBER, _safeAjMember(dup));
       S={ role:'aj', name:dup.name, phone:dup.phone||'', ajType:dup.aj_type||'관리자',
           company:'AJ네트웍스', siteId:'all', siteName:'전체 현장', loginAt:Date.now(), empNo:dup.emp_no };
       DB.s(K.SESSION, S); DB.s('auto_login', true);
@@ -1100,10 +1143,11 @@ async function saveAjMember(){
   if(isNew && !pw){ toast('신규 계정은 비밀번호를 입력하세요','err'); return; }
   if(pw && pw.length<6){ toast('비밀번호는 6자 이상이어야 합니다','err'); return; }
   const empNo = isNew ? ('M'+Date.now().toString(36).toUpperCase()) : members[idx].emp_no;
+  // [보안] sha256(empNo + ':' + pw) — emp_no를 salt로 사용해 레인보우 테이블 방어
   const member = isNew
-    ? {emp_no:empNo, name, phone, pw_hash:await sha256(pw), aj_type:ajType, created_at:new Date().toISOString()}
+    ? {emp_no:empNo, name, phone, pw_hash:await sha256(empNo+':'+pw), aj_type:ajType, created_at:new Date().toISOString()}
     : {...members[idx], name, phone, aj_type:ajType};
-  if(!isNew && pw) member.pw_hash = await sha256(pw);
+  if(!isNew && pw) member.pw_hash = await sha256(empNo+':'+pw);
   if(isNew) members.unshift(member);
   else members[idx] = member;
   _saveAjMembers(members);
@@ -1389,8 +1433,9 @@ async function saveAcctAjMember(){
   if(isNew&&!pw){ toast('신규 계정은 비밀번호를 입력하세요','err'); return; }
   if(pw&&pw.length<6){ toast('비밀번호는 6자 이상이어야 합니다','err'); return; }
   const empNo=isNew?('M'+Date.now().toString(36).toUpperCase()):members[idx].emp_no;
-  const member=isNew?{emp_no:empNo,name,phone,pw_hash:await sha256(pw),aj_type:ajType,created_at:new Date().toISOString()}:{...members[idx],name,phone,aj_type:ajType};
-  if(!isNew&&pw) member.pw_hash=await sha256(pw);
+  // [보안] emp_no를 salt로 사용
+  const member=isNew?{emp_no:empNo,name,phone,pw_hash:await sha256(empNo+':'+pw),aj_type:ajType,created_at:new Date().toISOString()}:{...members[idx],name,phone,aj_type:ajType};
+  if(!isNew&&pw) member.pw_hash=await sha256(empNo+':'+pw);
   if(isNew) members.unshift(member); else members[idx]=member;
   _saveAjMembers(members); _syncAjMemberSb(member);
   toast(isNew?'계정이 추가되었습니다':'계정이 수정되었습니다','ok');
@@ -1544,6 +1589,7 @@ function openASAnalysis(filterUpdate){
 
 async function doLogin(role){
   console.log('[LOGIN CLICK] doLogin 호출:', role);
+  if(!_checkLoginLock()) return;
   if(role==='tech'){
     const site=document.getElementById('techSite').value;
     const co=document.getElementById('techCompany').value;
@@ -1657,6 +1703,8 @@ async function doLogin(role){
     if(local){
       if((local.status||'approved')==='pending'){ toast('가입 승인 대기 중입니다. AJ 관리자에게 문의하세요.','warn',4000); return; }
       if((local.status||'approved')==='rejected'){ toast('가입이 거절되었습니다.','err'); return; }
+      // 이름 불일치 시 실패 카운트 (등록된 연락처지만 이름이 다른 경우)
+      if(local.name !== ajName){ _recordLoginFailure(); toast('이름 또는 연락처가 일치하지 않습니다.','err'); return; }
       member = local;
     } else {
       // 3) Supabase 직접 조회 — 연락처 기반
@@ -1678,10 +1726,11 @@ async function doLogin(role){
         toast(_msg,'err'); return;
       }
     }
-    DB.s(K.AJ_MEMBER, member);
+    DB.s(K.AJ_MEMBER, _safeAjMember(member));
     S={role:'aj',name:member.name,phone:member.phone||ajPhone,ajType:member.aj_type||ajType,company:'AJ네트웍스',siteId:'all',siteName:'전체 현장',loginAt:Date.now(),empNo:member.emp_no,memberId:member.record_id||member.id||''};
   }
   DB.s(K.SESSION,S);
+  _resetLoginAttempts(); // 로그인 성공 시 실패 카운터 초기화
   // 자동 로그인 설정 저장
   const _autoChkId = role==='tech'?'chk-auto-login-tech':role==='sub'?'chk-auto-login-sub':'chk-auto-login-aj';
   DB.s('auto_login', document.getElementById(_autoChkId)?.checked !== false);
