@@ -1085,9 +1085,10 @@ function _showPhotoPopup(reqId){
 
 /* ═══ AS 검색 상태 ═══ */
 let _asSearchQ = '';
-let _asFilter  = 'all'; // all / 대기 / 자재수급중 / 처리완료
+let _asFilter  = '대기'; // all / 대기 / 자재수급중 / 처리완료
 let _asTypeFilter = 'all'; // all / 작동불량 / 충전불량 / 누유의심 / 파손 / 자재요청 / 오류코드 / 기타
 let _asLocFilter  = 'all'; // all / 모듈동 / 1F외곽 / 1F~9F / 기타
+let _asSort = 'desc'; // desc=최신순 / asc=오래된순
 
 function _attachASListSentinel(canFullAS){
   const sentinel = document.getElementById('as-list-sentinel');
@@ -1147,6 +1148,11 @@ function renderASPage(){
   if(_asFilter !== 'all') reqs = reqs.filter(r=>r.status===_asFilter);
   if(_asTypeFilter !== 'all') reqs = reqs.filter(r=>(r.type||r.faultType||'')===_asTypeFilter);
   if(_asLocFilter !== 'all') reqs = reqs.filter(r=>(r.location||'').startsWith(_asLocFilter));
+  // 정렬
+  reqs = reqs.slice().sort((a,b)=>{
+    const ta = a.requestedAt||a.ts||0, tb = b.requestedAt||b.ts||0;
+    return _asSort==='asc' ? ta-tb : tb-ta;
+  });
 
   const pending  = reqs.filter(r=>r.status==='대기');
   const supply   = reqs.filter(r=>r.status==='자재수급중');
@@ -1173,6 +1179,10 @@ function renderASPage(){
     ${!isGuest?`<button onclick="openASSheet()" style="font-size:11px;font-weight:800;padding:7px 12px;border-radius:8px;background:linear-gradient(135deg,#dc2626,#b91c1c);color:white;border:none;cursor:pointer;white-space:nowrap">AS신청</button>`:''}
   </div>`;
   }
+
+  // AS 순번맵 — 렌더 이전에 계산해야 카드에서 정확히 참조됨
+  const _allAsSortedPre = getAsReqs().slice().sort((a,b)=>(a.requestedAt||a.ts||0)-(b.requestedAt||b.ts||0));
+  window._asSeqMap = new Map(_allAsSortedPre.map((r,i)=>[r.id,i+1]));
 
   el.innerHTML=`<div style="padding:10px 14px 80px">
 
@@ -1204,6 +1214,7 @@ function renderASPage(){
         <option value="처리완료"${_asFilter==='처리완료'?' selected':''}>처리완료</option>
       </select>
     </div>
+    <button onclick="_asSort=_asSort==='desc'?'asc':'desc';renderASPage()" style="flex-shrink:0;padding:0 10px;font-size:11px;font-weight:700;background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);color:var(--tx2);cursor:pointer;white-space:nowrap">${_asSort==='desc'?'최신순↓':'오래된순↑'}</button>
     <div class="site-select-wrap" style="flex:1">
       <select class="fg-select" style="width:100%;font-size:11px" onchange="_asTypeFilter=this.value;renderASPage()">
         <option value="all"${_asTypeFilter==='all'?' selected':''}>전체 유형</option>
@@ -1241,9 +1252,6 @@ function renderASPage(){
   <div id="as-card-list">${reqs.slice(0,20).map(r=>_asCard(r, canFullAS)).join('')}</div>
   ${reqs.length>20?`<div id="as-list-sentinel" style="height:20px;text-align:center;padding:8px;color:var(--tx3);font-size:11px;cursor:pointer">▾ ${reqs.length-20}건 더 보기</div>`:''}`}
   </div>`;
-  // AS 순번맵 (신청 시간순 1부터)
-  const _allAsSorted=getAsReqs().sort((a,b)=>(a.requestedAt||a.ts||0)-(b.requestedAt||b.ts||0));
-  window._asSeqMap=new Map(_allAsSorted.map((r,i)=>[r.id,i+1]));
   // AS 카드 지연 로딩 초기화
   window._asAllCards = reqs;
   window._asCardIdx  = Math.min(20, reqs.length);
