@@ -2394,10 +2394,12 @@ function _parseDispatch(v){
   return [];
 }
 function _dispatchRowHtml(idx, d={}){
-  return `<div class="dispatch-row" style="margin-bottom:8px;padding:8px;background:rgba(255,255,255,.04);border:1px solid var(--br);border-radius:8px">
+  const rowId = 'dr-' + idx + '-' + Date.now().toString(36);
+  return `<div class="dispatch-row" style="margin-bottom:8px;padding:8px;background:rgba(255,255,255,.04);border:1px solid var(--br);border-radius:8px" data-row-id="${rowId}">
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
       <span style="font-size:11px;font-weight:700;color:var(--tx3)">${idx+1}번 차량</span>
-      <button onclick="this.closest('.dispatch-row').remove()" style="margin-left:auto;background:none;border:none;color:#f87171;font-size:16px;cursor:pointer;line-height:1;padding:0 4px">×</button>
+      <button onclick="_openDriverPicker(this.closest('.dispatch-row'))" style="margin-left:auto;font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.3);color:#60a5fa;cursor:pointer">기사님 불러오기</button>
+      <button onclick="this.closest('.dispatch-row').remove()" style="background:none;border:none;color:#f87171;font-size:16px;cursor:pointer;line-height:1;padding:0 4px">×</button>
     </div>
     <div style="display:flex;gap:6px">
       <input type="text" class="fg-input disp-driver" value="${d.driver||''}" placeholder="기사 성명" style="flex:1;min-width:0">
@@ -2405,6 +2407,62 @@ function _dispatchRowHtml(idx, d={}){
       <input type="tel" class="fg-input phone-input disp-phone" value="${d.phone||''}" placeholder="연락처" maxlength="11" style="flex:1;min-width:0">
     </div>
   </div>`;
+}
+// 과거 배차 이력에서 중복 없는 기사 목록 추출
+function _getDriverHistory(){
+  const seen = new Map();
+  getTransit().forEach(r=>{
+    const list = _parseDispatch(r.dispatch);
+    list.forEach(d=>{
+      if(!d.driver && !d.phone) return;
+      const key = (d.driver||'') + '|' + (d.phone||'');
+      if(!seen.has(key)) seen.set(key, {driver:d.driver||'', carNo:d.carNo||'', phone:d.phone||''});
+    });
+  });
+  return [...seen.values()].sort((a,b)=>(a.driver||'').localeCompare(b.driver||''));
+}
+// 기사님 불러오기 선택 팝업
+function _openDriverPicker(rowEl){
+  if(!rowEl) return;
+  const drivers = _getDriverHistory();
+  document.getElementById('driver-picker')?.remove();
+  const pop = document.createElement('div');
+  pop.id = 'driver-picker';
+  pop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:2000;display:flex;align-items:flex-end;justify-content:center;padding-bottom:env(safe-area-inset-bottom)';
+  const listHtml = drivers.length
+    ? drivers.map((d,i)=>`
+        <button onclick="_fillDriverRow(${i})" data-i="${i}" style="width:100%;text-align:left;padding:10px 12px;background:none;border:none;border-bottom:1px solid var(--br);cursor:pointer;display:flex;align-items:center;gap:10px">
+          <span style="font-size:18px">🚛</span>
+          <span style="flex:1;min-width:0">
+            <span style="font-size:13px;font-weight:700;color:var(--tx1)">${d.driver||'(이름 없음)'}</span>
+            ${d.carNo?`<span style="font-size:11px;color:var(--tx3);margin-left:6px">${d.carNo}</span>`:''}
+            ${d.phone?`<div style="font-size:11px;color:var(--tx3);margin-top:2px">${d.phone}</div>`:''}
+          </span>
+        </button>`).join('')
+    : '<div style="padding:20px;text-align:center;color:var(--tx3);font-size:13px">저장된 기사님 이력이 없습니다</div>';
+  pop.innerHTML = `
+    <div style="background:var(--bg1);border-radius:20px 20px 0 0;width:100%;max-width:480px;max-height:70vh;display:flex;flex-direction:column">
+      <div style="padding:16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--br);flex-shrink:0">
+        <span style="font-size:14px;font-weight:800">기사님 불러오기</span>
+        <button onclick="document.getElementById('driver-picker').remove()" style="background:none;border:none;font-size:20px;color:var(--tx2);cursor:pointer;padding:4px">✕</button>
+      </div>
+      <div style="overflow-y:auto;flex:1">${listHtml}</div>
+    </div>`;
+  // 각 버튼에 클릭 이벤트 (rowEl 참조 전달)
+  pop.addEventListener('click', e=>{
+    if(e.target === pop){ pop.remove(); return; }
+    const btn = e.target.closest('button[data-i]');
+    if(btn){
+      const d = drivers[+btn.dataset.i];
+      if(d){
+        rowEl.querySelector('.disp-driver').value = d.driver||'';
+        rowEl.querySelector('.disp-carno').value  = d.carNo||'';
+        rowEl.querySelector('.disp-phone').value  = d.phone||'';
+      }
+      pop.remove();
+    }
+  });
+  document.body.appendChild(pop);
 }
 function _dispatchAddRow(){
   const rows=document.getElementById('dispatch-rows');
