@@ -1719,10 +1719,13 @@ function enterApp(){
   const _qp = new URLSearchParams(location.search);
   const _qrEquip = _qp.get('equip');
   if(_qrEquip){
+    // _pendingQrEquip: initInputForm이 fetchFromSB 완료 후 재호출될 때도 값 유지
+    window._pendingQrEquip   = _qrEquip.toUpperCase();
+    window._pendingQrEquipTs = Date.now();
     setTimeout(()=>{
       goTab('pg-ops');
       const el = document.getElementById('f-equip');
-      if(el){ el.value = _qrEquip.toUpperCase(); el.focus(); }
+      if(el){ el.value = window._pendingQrEquip||''; el.focus(); }
     }, 600);
   }
   // PWA 설치 배너 (2초 후 표시 — 로그인 직후 UX 방해 최소화)

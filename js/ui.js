@@ -356,7 +356,9 @@ function initInputForm(){
   // reset
   const _fsel2=document.getElementById('f-floor-select'); if(_fsel2) _fsel2.value='';
   const _fdet2=document.getElementById('f-location-detail'); if(_fdet2) _fdet2.value='';
-  document.getElementById('f-equip').value='';
+  // QR 자동입력 유지 — 스캔 후 15초 이내 fetchFromSB 재호출에도 값 보존
+  const _qrActive = window._pendingQrEquip && (Date.now()-(window._pendingQrEquipTs||0))<15000;
+  document.getElementById('f-equip').value = _qrActive ? window._pendingQrEquip : '';
   document.getElementById('f-meter-start').value='';
   document.getElementById('f-meter-end').value='';
   const isAJ2 = S?.role === 'aj';
