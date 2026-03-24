@@ -284,6 +284,35 @@ function switchAjTab(tab){
   });
   if(tab==='login') setTimeout(()=>_renderGsiBtn('aj'), 50);
 }
+/* ── 가동현황 8시간 미종료 알림 ── */
+function _check8hUsageAlert(){
+  const THRESHOLD = 8 * 3600000; // 8시간(ms)
+  const now = Date.now();
+  const notifiedKey = '_8h_notif_sent';
+  const notified = new Set(DB.g(notifiedKey, []));
+  const allLogs = typeof getLogs === 'function' ? getLogs() : [];
+  const openLong = allLogs.filter(l =>
+    l.status === 'start' && l.ts && (now - l.ts) >= THRESHOLD && !notified.has(l.id)
+  );
+  if(!openLong.length) return;
+  const allMembers = typeof getMembers === 'function' ? getMembers() : [];
+  openLong.forEach(l => {
+    const elapsed = Math.floor((now - l.ts) / 3600000);
+    const body = `${l.equip||''} · ${l.floor||''} · ${elapsed}h 경과 (사용종료 미완료)`;
+    // 해당 기술인 찾기 (name + company 매칭)
+    const techMember = allMembers.find(m => m.name === (l.name||l.recorder) && m.company === l.company);
+    const tid = techMember?.record_id || techMember?.id || null;
+    if(tid) pushSBNotif({target_user_id:tid, type:'usage_timeout',
+      title:`⏰ 사용종료 미완료: ${l.equip||''}`, body, ref_id:l.id, site_id:l.siteId||null}).catch(()=>{});
+    // AJ 관리자에게도 알림
+    pushSBNotif({target_aj_type:'관리자', type:'usage_timeout',
+      title:`⏰ 8h 미종료: ${l.equip||''}`, body:`${l.company} · ${body}`,
+      ref_id:l.id, site_id:l.siteId||null}).catch(()=>{});
+    notified.add(l.id);
+  });
+  DB.s(notifiedKey, [...notified].slice(-300));
+}
+
 /* ── AJ 멤버 로컬 저장소 헬퍼 ── */
 function _getAjMembers(){ return DB.g(K.AJ_MEMBERS,[]); }
 function _saveAjMembers(arr){ DB.s(K.AJ_MEMBERS,arr); }
@@ -1715,8 +1744,10 @@ function enterApp(){
   // 중복 등록 방지 — 기존 인터벌 모두 해제 후 재등록
   _appIntervals.forEach(id => clearInterval(id));
   _appIntervals = [
-    setInterval(_runMemoryGuard, 5 * 60 * 1000), // 메모리 가드: 5분마다 비활성 캐시 해제
+    setInterval(_runMemoryGuard, 5 * 60 * 1000),          // 메모리 가드: 5분마다
+    setInterval(_check8hUsageAlert, 30 * 60 * 1000),      // 8h 미종료 알림: 30분마다
   ];
+  setTimeout(_check8hUsageAlert, 10000); // 앱 진입 10초 후 1회 즉시 체크
   // 자동 싱크 제거 — pull-to-refresh / 페이지 이동 시 수동 싱크로만 운용
   document.removeEventListener('visibilitychange', _onVisibilityChange);
   setTimeout(_initScrollTopBtn, 400);

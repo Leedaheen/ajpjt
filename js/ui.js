@@ -2749,6 +2749,30 @@ async function _addTransitMsg(id){
   // 서버 즉시 push
   try { await _directPushTransit(rec); toast('메시지 추가됨','ok'); }
   catch(e){ console.warn('[addTransitMsg push]',e); scheduleRetrySync(); toast('로컬 저장됨 — 자동 재시도','warn',2500); }
+  // 댓글 알림: AJ가 쓴 경우 → 신청인, 협력사가 쓴 경우 → AJ관리자
+  const _trNotifBody = `${S?.name||''}(${S?.company||''}) — ${text.slice(0,50)}`;
+  if(S?.role === 'aj'){
+    if(rec.submitterMemberId) pushSBNotif({target_user_id:rec.submitterMemberId, type:'transit_comment',
+      title:`💬 댓글 [${rec.company}]`, body:_trNotifBody, ref_id:rec.id, site_id:rec.siteId||null}).catch(()=>{});
+  } else {
+    pushSBNotif({target_aj_type:'관리자', type:'transit_comment',
+      title:`💬 댓글 [${rec.company}]`, body:_trNotifBody, ref_id:rec.id, site_id:rec.siteId||null}).catch(()=>{});
+  }
+  // @멘션 감지
+  const _trMentions = [...new Set((text.match(/@([^\s@#]+)/g)||[]).map(m=>m.slice(1)))];
+  if(_trMentions.length){
+    const _trAllSub = typeof getMembers==='function' ? getMembers() : [];
+    const _trAllAj  = typeof _getAjMembers==='function' ? _getAjMembers() : [];
+    _trMentions.forEach(mName=>{
+      const _st = _trAllSub.find(m=>m.name===mName);
+      const _at = _trAllAj.find(m=>m.name===mName);
+      const _tid = (_st?.record_id||_st?.id)||(_at?.record_id||_at?.emp_no)||null;
+      if(_tid) pushSBNotif({target_user_id:_tid, type:'mention',
+        title:`💬 @${mName} 님이 태그되었습니다`,
+        body:`${S?.name||''}(${S?.company||''}) — ${text.slice(0,60)}`,
+        ref_id:rec.id, site_id:rec.siteId||null}).catch(()=>{});
+    });
+  }
   _fetchFromSB().catch(()=>{}).then(changed=>{ if(changed) renderTransit(); });
 }
 
