@@ -1685,7 +1685,6 @@ function enterApp(){
     }
   }
   updateLogBadge();
-  check3PMAlert();
   setTimeout(checkUnreadNotifs, 500);
   // AJ 관리자: 알림 권한 요청 + 승인 대기 회원 확인
   if(S?.role === 'aj') setTimeout(()=>_requestNotifPermission().then(()=>_checkPendingNotif()), 1500);
