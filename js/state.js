@@ -397,6 +397,8 @@ async function _fetchFromSB(){
     const siteFilter=siteId?`&site_id=eq.${encodeURIComponent(siteId)}`:'';
     const since=new Date(); since.setDate(since.getDate()-30);
     const sinceStr=since.toISOString();
+    const asSince=new Date(); asSince.setDate(asSince.getDate()-90);
+    const asSinceStr=asSince.toISOString();
     // select=* 대신 필요한 컬럼만 지정 → payload 30~50% 절감
     const TR_COLS = 'record_id,id,date,type,site_id,site_name,company,equip_specs,aj_equip,reporter_name,reporter_phone,manager_name,manager_phone,manager_location,note,status,messages,dispatch,created_at,updated_at';
     const AS_COLS = 'record_id,id,date,site_id,site_name,company,equip,location,fault_type,description,reporter_name,reporter_phone,status,tech_name,tech_phone,resolved_at,resolve_note,requested_at,material_at,comments,worker_name,worker_phone,photo_data,created_at,updated_at';
@@ -424,8 +426,8 @@ async function _fetchFromSB(){
       ),
       _sbGetWithFallback(
         'as_requests',
-        `?select=${AS_COLS}${siteFilter}&order=created_at.desc&limit=200`,
-        `?select=*${siteFilter}&order=created_at.desc&limit=200`
+        `?select=${AS_COLS}${siteFilter}&created_at=gte.${asSinceStr}&order=created_at.desc&limit=200`,
+        `?select=*${siteFilter}&created_at=gte.${asSinceStr}&order=created_at.desc&limit=200`
       ),
     ]);
     let changed=false;
@@ -984,6 +986,35 @@ function saveSites(arr){
   _cache.sites = null;
   DB.s(K.SITES, arr);
   _pushSitesToSB(arr).catch(()=>{});
+}
+
+/* IDB 180일 초과 로그 자동 정리 — 데이터 무제한 누적 방지 */
+async function _purgeOldLogs(){
+  const KEY = '_logPurgeTs';
+  const now = Date.now();
+  const lastRun = Number(DB.g(KEY,'0'))||0;
+  // 24시간마다 한 번만 실행
+  if(now - lastRun < 86400000) return;
+  DB.s(KEY, String(now));
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-180);
+  const cutTs = cutoff.getTime();
+  const cutStr = cutoff.toISOString().split('T')[0]; // 'YYYY-MM-DD'
+  try {
+    const logs = getLogs();
+    const kept = logs.filter(l=>{
+      const d = l.date||'';
+      // date 문자열 비교로 빠른 필터
+      return !d || d >= cutStr;
+    });
+    if(kept.length < logs.length){
+      saveLogs(kept);
+      console.log(`[purgeOldLogs] ${logs.length-kept.length}건 180일 초과 로그 삭제`);
+    }
+    // IDB도 정리 (synced 항목만 — 미동기화 항목은 유지)
+    if(window._IDB_READY){
+      await IDB.deleteOlderThan?.('logs', cutTs).catch(()=>{});
+    }
+  } catch(e){ console.warn('[purgeOldLogs]', e); }
 }
 
 /* 기존 seed 더미 데이터 일회성 정리 */

@@ -237,13 +237,14 @@ async function _syncToSupabase(){
   const siteMap = Object.fromEntries(getSites().map(s=>[s.id,s.name]));
   const idbReady = !!(window._IDB_READY);
 
-  // 미동기화 항목 병렬 수집
-  const [unsyncLogs, unsyncTr, unsyncAS, unsyncM] = await Promise.all([
+  // 미동기화 항목 병렬 수집 (오프라인 장기 후 mega-batch 방지 — 테이블당 1,000건 상한)
+  const _UNSYNCED_CAP = 1000;
+  const [unsyncLogs, unsyncTr, unsyncAS, unsyncM] = (await Promise.all([
     idbReady ? IDB.getUnsynced('logs').catch(()=>[]) : Promise.resolve(getLogs().filter(l=>!l.synced)),
     idbReady ? IDB.getUnsynced('transit').catch(()=>[]) : Promise.resolve(getTransit().filter(t=>!t.synced)),
     idbReady ? IDB.getUnsynced('as_requests').catch(()=>[]) : Promise.resolve(getAsReqs().filter(a=>!a.synced)),
     idbReady ? IDB.getUnsynced('members').catch(()=>[]) : Promise.resolve([]),
-  ]);
+  ])).map(arr=>arr.slice(0, _UNSYNCED_CAP));
 
   // 병렬 업서트 (테이블 간 의존성 없음) — allSettled: 한 테이블 실패해도 나머지 계속 진행
   const _syncResults = await Promise.allSettled([
@@ -857,6 +858,12 @@ async function pushToGS(entry){
 let _rtWs = null;
 let _rtReconnTimer = null;
 let _rtHbTimer = null;
+// 테이블별 디바운스 타이머 — 짧은 시간 내 같은 테이블 이벤트 중복 방지
+const _rtDebounceTimers = {};
+function _rtDebounced(tbl, fn, ms=300){
+  if(_rtDebounceTimers[tbl]) clearTimeout(_rtDebounceTimers[tbl]);
+  _rtDebounceTimers[tbl] = setTimeout(()=>{ delete _rtDebounceTimers[tbl]; fn(); }, ms);
+}
 
 function _initRealtime(){
   const sbUrl = DB.g(K.SB_URL,'');
@@ -893,14 +900,16 @@ function _initRealtime(){
         if(msg.event==='postgres_changes' && msg.payload?.data){
           const tbl = msg.payload.data.table;
           console.log('[Realtime] 변경 감지:', tbl);
-          // 변경된 테이블만 선택 렌더 (전체 재렌더 → 깜빡임 방지)
-          // notifications/members: 알림·가입신청만 조용히 fetch
-          if(tbl==='notifications'||tbl==='members'){ _fetchFromSB().catch(()=>{}); return; }
-          _fetchFromSB().catch(()=>{}).then(changed=>{
-            if(!changed) return;
-            if(tbl==='transit'||tbl==='equipment') { renderTransit?.(); }
-            else if(tbl==='as_requests') { renderASPage?.(); updateASBadge?.(); }
-            else if(tbl==='logs') { _renderHomeAsync?.(); }
+          // 300ms 디바운스 — 같은 테이블 연속 이벤트 중복 fetch 방지
+          _rtDebounced(tbl, ()=>{
+            // notifications/members: 알림·가입신청만 조용히 fetch
+            if(tbl==='notifications'||tbl==='members'){ _fetchFromSB().catch(()=>{}); return; }
+            _fetchFromSB().catch(()=>{}).then(changed=>{
+              if(!changed) return;
+              if(tbl==='transit'||tbl==='equipment') { renderTransit?.(); }
+              else if(tbl==='as_requests') { renderASPage?.(); updateASBadge?.(); }
+              else if(tbl==='logs') { _renderHomeAsync?.(); }
+            });
           });
         }
       }catch(_){}
