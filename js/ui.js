@@ -4563,11 +4563,8 @@ async function _askAI(type, targetId='ai-query-result'){
         if(!submitted.has(co.name)) missingList.push({name:co.name, phone:co.phone||'', siteId:s.id});
     lines.push(`⚠ <b>${site}</b> 금일 입력 미완료 업체`);
     if(missingList.length){
-      missingList.forEach(co=>{
-        const ph=co.phone?` <span style="color:var(--tx3);font-size:10px">${co.phone}</span>`:'';
-        lines.push(`• <b>${co.name}</b>${ph}`);
-      });
-      lines.push(`<span style="color:var(--tx3);font-size:10px">• ${missingList.length}개 업체 미입력 (${tdStr})</span>`);
+      lines.push(missingList.map(co=>`<b>${co.name}</b>`).join(', '));
+      lines.push(`<span style="color:var(--tx3);font-size:10px">${missingList.length}개 업체 미입력 (${tdStr})</span>`);
     } else {
       lines.push(`✅ 모든 업체 입력 완료 (${tdStr})`);
     }
