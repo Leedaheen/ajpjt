@@ -555,14 +555,19 @@ async function submitEnd(){
   }
   btn.classList.add('loading'); btn.disabled=true;
   const meterEnd=+meterEndVal||null;
+  // 실제 타임스탬프 기반 사용시간 계산 (ts=신청시각, endTs=종료시각)
+  const endTs = Date.now();
   let dur=null;
-  if(meterEnd&&entry.meterStart) dur=+(meterEnd-entry.meterStart).toFixed(2);
-  else if(entry.startTime&&endTime){
+  if(entry.ts){
+    dur = +((endTs - entry.ts) / 3600000).toFixed(2);
+  } else if(meterEnd&&entry.meterStart){
+    dur=+(meterEnd-entry.meterStart).toFixed(2);
+  } else if(entry.startTime&&endTime){
     const [sh,sm]=entry.startTime.split(':').map(Number);
     const [eh,em]=endTime.split(':').map(Number);
     dur=+((eh*60+em-sh*60-sm)/60).toFixed(2);
   }
-  entry.status='end'; entry.endTime=endTime; entry.meterEnd=meterEnd;
+  entry.status='end'; entry.endTime=endTime; entry.endTs=endTs; entry.meterEnd=meterEnd;
   entry.duration=dur; entry.reason=document.querySelector('#reason-chips .chip.on')?.textContent||'';
   entry.synced=false;
   try {
@@ -4105,7 +4110,11 @@ function _renderLogChunk(el){
         <span>${esc(l.name)||'—'}</span>
         ${l.startTime?`<span style="color:var(--tx3);margin:0 4px">·</span><span style="color:var(--tx3)">${l.startTime}${l.endTime?'~'+l.endTime:''}</span>`:''}
       </div>
-      ${l.duration!=null?`<div class="lc-dur">사용시간: <b>${fH(l.duration)}</b>${l.meterStart?` · 계기 ${l.meterStart}h → ${l.meterEnd}h`:''}</div>`:''}
+      ${(()=>{
+        // 타임스탬프 기반 실제 경과시간 (endTs-ts) 우선, 없으면 저장된 duration 사용
+        const _realDur = (l.endTs && l.ts) ? +((l.endTs - l.ts)/3600000).toFixed(2) : l.duration;
+        return _realDur!=null ? `<div class="lc-dur">사용시간: <b>${fH(_realDur)}</b>${(l.endTs&&l.ts)?'<span style="font-size:9px;color:var(--tx3);margin-left:4px">(실측)</span>':''}${l.meterStart?` · 계기 ${l.meterStart}h → ${l.meterEnd}h`:''}</div>` : '';
+      })()}
       ${l.reason?`<div class="lc-dur" style="color:${stColor};font-weight:600">${l.reason}</div>`:''}`;
     frag.appendChild(div);
   }
