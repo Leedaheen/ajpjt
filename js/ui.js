@@ -1440,32 +1440,36 @@ function _asCard(r, canAct){
       </div>
     </div>
 
-    <!-- 장비번호·위치 -->
-    <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin:4px 0 4px;font-size:12px">
-      <span style="font-family:monospace;font-weight:800;color:#93c5fd">${esc(r.equip)||'—'}</span>
-      ${r.location?`<span style="color:var(--tx2)">·</span><span style="color:var(--tx)">${esc(r.location)}</span>`:''}
-    </div>
-    <!-- 신청자 · 작업자 -->
-    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:5px;font-size:11px">
-      <span style="color:var(--tx3);font-weight:600">신청자 :</span>
-      ${(r.reporterName||r.reporter)
-        ? (r.reporterPhone
-          ? `<a href="tel:${r.reporterPhone}" style="color:#60a5fa;text-decoration:none;font-weight:700">${esc(r.reporterName||r.reporter)}</a>`
-          : `<b style="color:var(--tx3)">${esc(r.reporterName||r.reporter)}</b>`)
-        : '<span style="color:var(--tx3)">—</span>'}
-      <span style="color:var(--br3);margin:0 2px">·</span>
-      <span style="color:var(--tx3);font-weight:600">작업자 :</span>
-      ${r.workerName
-        ? (r.workerPhone
-          ? `<a href="tel:${r.workerPhone}" style="color:#60a5fa;text-decoration:none;font-weight:700">${esc(r.workerName)}</a>`
-          : `<b style="color:var(--tx3)">${esc(r.workerName)}</b>`)
-        : '<span style="color:var(--tx3)">(입력 없음)</span>'}
-    </div>
-    <!-- 접수내용 + 사진 썸네일 -->
-    <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:6px">
-      <div style="flex:1;font-size:11px;color:var(--tx);line-height:1.4;padding:4px 6px;background:var(--bg2);border-radius:4px;border-left:2px solid var(--br)">${esc(r.desc||'—')}</div>
-      ${r.photoThumb ? `<div onclick="_showPhotoPopup('${r.id}')" style="flex-shrink:0;cursor:pointer;position:relative" title="사진 보기">
-        <img src="${r.photoThumb}" style="width:52px;height:52px;object-fit:cover;border-radius:6px;border:1.5px solid rgba(96,165,250,.4);display:block">
+    <!-- 장비번호·신청자·접수내용 + 썸네일 (썸네일이 세 행에 걸쳐 우측 배치) -->
+    <div style="display:flex;gap:8px;align-items:stretch;margin:4px 0 6px">
+      <div style="flex:1;min-width:0">
+        <!-- 장비번호·위치 -->
+        <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-bottom:4px;font-size:12px">
+          <span style="font-family:monospace;font-weight:800;color:#93c5fd">${esc(r.equip)||'—'}</span>
+          ${r.location?`<span style="color:var(--tx2)">·</span><span style="color:var(--tx)">${esc(r.location)}</span>`:''}
+        </div>
+        <!-- 신청자 · 작업자 -->
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:5px;font-size:11px">
+          <span style="color:var(--tx3);font-weight:600">신청자 :</span>
+          ${(r.reporterName||r.reporter)
+            ? (r.reporterPhone
+              ? `<a href="tel:${r.reporterPhone}" style="color:#60a5fa;text-decoration:none;font-weight:700">${esc(r.reporterName||r.reporter)}</a>`
+              : `<b style="color:var(--tx3)">${esc(r.reporterName||r.reporter)}</b>`)
+            : '<span style="color:var(--tx3)">—</span>'}
+          <span style="color:var(--br3);margin:0 2px">·</span>
+          <span style="color:var(--tx3);font-weight:600">작업자 :</span>
+          ${r.workerName
+            ? (r.workerPhone
+              ? `<a href="tel:${r.workerPhone}" style="color:#60a5fa;text-decoration:none;font-weight:700">${esc(r.workerName)}</a>`
+              : `<b style="color:var(--tx3)">${esc(r.workerName)}</b>`)
+            : '<span style="color:var(--tx3)">(입력 없음)</span>'}
+        </div>
+        <!-- 접수내용 -->
+        <div style="font-size:11px;color:var(--tx);line-height:1.4;padding:4px 6px;background:var(--bg2);border-radius:4px;border-left:2px solid var(--br)">${esc(r.desc||'—')}</div>
+      </div>
+      <!-- 썸네일: 장비번호~접수내용에 걸쳐 우측 배치 -->
+      ${r.photoThumb ? `<div onclick="_showPhotoPopup('${r.id}')" style="flex-shrink:0;cursor:pointer;position:relative;align-self:stretch;display:flex;align-items:center" title="사진 보기">
+        <img src="${r.photoThumb}" style="width:54px;height:100%;min-height:54px;object-fit:cover;border-radius:6px;border:1.5px solid rgba(96,165,250,.4);display:block">
         <div style="position:absolute;bottom:2px;right:2px;background:rgba(0,0,0,.55);border-radius:3px;padding:1px 3px;font-size:8px;color:#fff">🔍</div>
       </div>` : ''}
     </div>
