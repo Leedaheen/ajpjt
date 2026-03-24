@@ -825,8 +825,9 @@ function _getInputFormHTML(){
       </div>
     </div>
     <div class="fg">
-      <label class="fg-lbl">장비번호 <span class="req">*</span></label>
-      <input type="text" class="fg-input" id="f-equip" placeholder="예: GK228" style="text-transform:uppercase" autocomplete="off">
+      <label class="fg-lbl">장비번호 <span class="req">*</span> <span style="font-size:9px;font-weight:600;color:#f59e0b;margin-left:4px">📷 QR 스캔 전용</span></label>
+      <input type="text" class="fg-input" id="f-equip" placeholder="QR 스캔 후 자동입력" readonly
+        style="text-transform:uppercase;background:var(--bg2);color:#60a5fa;font-weight:700;cursor:default;opacity:.9" autocomplete="off">
     </div>
     <div class="fg"><label class="fg-lbl">팀명</label><input type="text" class="fg-input" id="f-team" placeholder="소속 팀명 (예: 홍길동팀)" maxlength="30"></div>
     <div class="fg"><label class="fg-lbl">신청 시작시간</label><input type="time" class="fg-input" id="f-starttime"></div>
@@ -885,14 +886,7 @@ function _initInputFormBindings(){
   const fd = document.getElementById('f-date');
   if(fd && !fd.value) fd.value = today();
   initInputForm();
-  // 가동현황 장비번호 자동완성
-  setupEquipAutocomplete('f-equip', {
-    // M4: AJ는 가동현황 현장 선택 드롭다운 기준으로 필터
-    siteIdFn:  () => S?.siteId === 'all'
-      ? (document.getElementById('f-site-sel')?.value || null)
-      : S?.siteId,
-    companyFn: () => S?.company || null,
-  });
+  // f-equip: QR 전용 — 자동완성 비활성화 (readonly input)
   // 미가동 장비번호 자동완성
   setupEquipAutocomplete('f-idle-equip', {
     siteIdFn:  () => S?.siteId === 'all'
@@ -1158,6 +1152,11 @@ function renderASPage(){
     '자재수급중': getAsReqs().filter(r=>(siteId?r.siteId===siteId:true)&&r.status==='자재수급중').length,
     '처리완료': getAsReqs().filter(r=>(siteId?r.siteId===siteId:true)&&r.status==='처리완료').length,
   };
+  // 처리완료 평균 소요일 계산
+  const _doneForAvg = getAsReqs().filter(r=>(siteId?r.siteId===siteId:true)&&r.status==='처리완료'&&r.resolvedAt&&(r.requestedAt||r.ts));
+  const avgDays = _doneForAvg.length
+    ? (_doneForAvg.reduce((s,r)=>s+Math.max(0,(new Date(r.resolvedAt).getTime()-new Date(r.requestedAt||r.ts).getTime())/86400000),0)/_doneForAvg.length).toFixed(1)
+    : null;
 
   // sticky 검색/필터 영역 — input이 이미 있으면 재렌더 생략 (포커스 유지)
   const stickyEl = document.getElementById('as-sticky-header');
@@ -1173,7 +1172,7 @@ function renderASPage(){
   el.innerHTML=`<div style="padding:10px 14px 80px">
 
   <!-- KPI 요약 -->
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px">
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:10px">
     <div class="kpi" style="text-align:center;padding:8px;cursor:pointer" onclick="_setAsFilter('대기',this)">
       <div style="font-size:20px;font-weight:900;color:#f87171">${statusCount['대기']}</div>
       <div style="font-size:9px;color:var(--tx2)">대기</div>
@@ -1185,6 +1184,10 @@ function renderASPage(){
     <div class="kpi" style="text-align:center;padding:8px;cursor:pointer" onclick="_setAsFilter('처리완료',this)">
       <div style="font-size:20px;font-weight:900;color:#4ade80">${statusCount['처리완료']}</div>
       <div style="font-size:9px;color:var(--tx2)">처리완료</div>
+    </div>
+    <div class="kpi" style="text-align:center;padding:8px">
+      <div style="font-size:20px;font-weight:900;color:#a78bfa">${avgDays!==null?avgDays:'—'}</div>
+      <div style="font-size:9px;color:var(--tx2)">평균소요일</div>
     </div>
   </div>
   <div style="display:flex;gap:6px;margin-bottom:12px">
@@ -2358,11 +2361,11 @@ function _trCard(r, seqNo, canEdit, canMsg){
           ${doneBadge}
           <span style="font-weight:800;font-size:12px">${r.company||'—'}</span>
         </div>
-        <!-- 2행: 제원×수량 + 장비번호 + 현장/프로젝트 -->
+        <!-- 2행: 현장 + 제원×수량 + 장비번호 + 프로젝트 -->
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:3px">
+          ${r.siteName?`<span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(245,158,11,.12);color:#f59e0b;font-weight:700">${r.siteName}</span>`:''}
           <div style="font-size:11px;line-height:1.4;color:var(--tx2)">${specSummary}</div>
           ${equipShort!=='—'?`<span style="font-family:monospace;font-size:11px;color:#60a5fa">${equipShort}</span>`:''}
-          ${r.siteName?`<span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(245,158,11,.12);color:#f59e0b;font-weight:700">${r.siteName}</span>`:''}
           ${r.project?`<span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(20,184,166,.12);color:#14b8a6;font-weight:700">${r.project}</span>`:''}
         </div>
       </div>
@@ -2773,9 +2776,9 @@ function _renderSpecBlock(r, canEdit) {
         </div>
         <div style="display:flex;justify-content:flex-end;gap:4px;padding-top:6px;border-top:1px solid rgba(96,165,250,.12)">
           <button onclick="editTransitDate('${rid}')"
-            style="width:12.5%;padding:5px 0;font-size:11px;font-weight:700;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.25);border-radius:6px;color:#60a5fa;cursor:pointer">날짜변경</button>
+            style="min-width:72px;padding:5px 10px;font-size:11px;font-weight:700;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.25);border-radius:6px;color:#60a5fa;cursor:pointer;white-space:nowrap">날짜변경</button>
           <button onclick="_saveInlineEquip('${rid}')"
-            style="width:12.5%;padding:5px 0;font-size:11px;font-weight:700;background:rgba(96,165,250,.18);border:1px solid rgba(96,165,250,.35);border-radius:6px;color:#60a5fa;cursor:pointer">저장완료</button>
+            style="min-width:72px;padding:5px 10px;font-size:11px;font-weight:700;background:rgba(96,165,250,.18);border:1px solid rgba(96,165,250,.35);border-radius:6px;color:#60a5fa;cursor:pointer;white-space:nowrap">저장완료</button>
         </div>
       </div>`;
     }
@@ -2835,9 +2838,9 @@ function _renderSpecBlock(r, canEdit) {
       ${rows}
       <div style="display:flex;justify-content:flex-end;gap:4px;margin-top:6px;padding-top:6px;border-top:1px solid rgba(96,165,250,.12)">
         <button onclick="editTransitDate('${rid}')"
-          style="width:12.5%;padding:5px 0;font-size:11px;font-weight:700;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.25);border-radius:6px;color:#60a5fa;cursor:pointer">날짜변경</button>
+          style="min-width:72px;padding:5px 10px;font-size:11px;font-weight:700;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.25);border-radius:6px;color:#60a5fa;cursor:pointer;white-space:nowrap">날짜변경</button>
         <button id="${btnId}" onclick="_saveAllSpecEquip('${rid}')"
-          style="width:12.5%;padding:5px 0;font-size:11px;font-weight:700;background:rgba(96,165,250,.18);border:1px solid rgba(96,165,250,.35);border-radius:6px;color:#60a5fa;cursor:pointer">저장</button>
+          style="min-width:72px;padding:5px 10px;font-size:11px;font-weight:700;background:rgba(96,165,250,.18);border:1px solid rgba(96,165,250,.35);border-radius:6px;color:#60a5fa;cursor:pointer;white-space:nowrap">저장</button>
       </div>
     </div>`;
   }
