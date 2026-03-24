@@ -281,13 +281,9 @@ async function _syncToSupabase(){
         off_reason:  l.offReason||'',
         created_at:  l.createdAt ? new Date(l.createdAt).toISOString() : new Date(l.ts||Date.now()).toISOString(),
       });
-      const newRows  = unsyncLogs.filter(l=>l.status==='start').map(_toRow);
-      const endLogs  = unsyncLogs.filter(l=>l.status!=='start');
-      if(newRows.length) await sbBatchUpsert('logs', newRows); // INSERT, on_conflict 없음
-      for(const l of endLogs){
-        const row = _toRow(l);
-        await sbReq('logs','PATCH',row,`?record_id=eq.${encodeURIComponent(row.record_id)}`);
-      }
+      // UNIQUE(record_id, date) 복합키 upsert — 파티션 테이블 대응
+      const allRows = unsyncLogs.map(_toRow);
+      await sbBatchUpsert('logs', allRows, 'record_id,date');
       await IDB.markSynced('logs', unsyncLogs.map(l=>l.id)).catch(()=>{});
       _cache.todayLogs = null;
     })(),
@@ -860,12 +856,8 @@ async function pushToGS(entry){
       off_reason:  entry.reason||entry.offReason||'',
       created_at:  entry.createdAt?new Date(entry.createdAt).toISOString():new Date(entry.ts||Date.now()).toISOString(),
     };
-    // 신규(start): POST INSERT (sbBatchUpsert 재시도 포함) / 종료·휴무: PATCH by record_id
-    if(entry.status === 'start'){
-      await sbBatchUpsert('logs',[row]); // 23502(파티션 id 미생성) 자동 재시도 포함
-    } else {
-      await sbReq('logs','PATCH',row,`?record_id=eq.${encodeURIComponent(row.record_id)}`);
-    }
+    // UNIQUE(record_id, date) 복합키 upsert — 파티션 테이블 대응
+    await sbBatchUpsert('logs',[row],'record_id,date');
     entry.synced=true;
   } else {
     // ── Google Sheets 폴백 — 실패 시 throw ──
