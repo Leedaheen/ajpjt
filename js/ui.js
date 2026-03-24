@@ -1491,17 +1491,16 @@ function _asCard(r, canAct){
     ${resolvedBlock}
     ${_asCommentBubbles(r)}
 
-    <!-- 댓글 입력 — AJ + 협력사 담당자 모두 표시 -->
+    <!-- 댓글 입력 — AJ + 협력사 담당자 / 처리완료 건은 입력창 숨김 -->
     ${(canAct||S?.role==='sub')?`
     <div style="margin-top:8px;border-top:1px solid var(--br);padding-top:8px">
-      <div style="font-size:10px;color:var(--tx3);margin-bottom:6px;font-weight:700">댓글</div>
-      <div style="display:flex;gap:6px;margin-bottom:${canAct&&r.status!=='처리완료'?'8':'0'}px;align-items:center">
+      ${r.status!=='처리완료'?`<div style="display:flex;gap:6px;margin-bottom:${canAct?'8':'0'}px;align-items:center">
         <div style="width:26px;height:26px;border-radius:50%;background:${S?.role==='aj'?'linear-gradient(135deg,#DE1F23,#9f1214)':'linear-gradient(135deg,#60a5fa,#2563eb)'};color:#fff;font-size:9px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">${(S?.company||S?.name||'').slice(0,2)||'AJ'}</div>
         <input type="text" placeholder="댓글 입력 (Enter 또는 등록 버튼)" id="astech-cmt-${r.id}"
           onkeydown="if(event.keyCode===13){_addASComment('${r.id}');}"
           style="flex:1;padding:5px 8px;font-size:11px;background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);color:var(--tx)">
         <button onclick="_addASComment('${r.id}')" style="padding:5px 12px;font-size:11px;background:rgba(74,222,128,.15);border:1px solid rgba(74,222,128,.35);border-radius:var(--rs);color:#4ade80;cursor:pointer;font-weight:700;flex-shrink:0">등록</button>
-      </div>
+      </div>`:''}
       <!-- AJ 처리 버튼 — AJ만 표시 -->
       ${canAct&&r.status!=='처리완료'?`<div style="display:flex;gap:6px">
         <button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:#f59e0b;border-color:rgba(245,158,11,.4)"
@@ -2303,7 +2302,8 @@ function _trCard(r, seqNo, canEdit, canMsg){
   });
   // 최대 15개, 최신 3개만 기본 표시 — 나머지는 아코디언
   const _MAX_MSGS = 15, _SHOW_MSGS = 3;
-  const _canAddMsg = (canEdit || canMsg || S?.role==='sub') && _msgs.length < _MAX_MSGS;
+  const _isDoneStatus = ['반입완료','반출완료','인계완료','취소'].includes(r.status);
+  const _canAddMsg = !_isDoneStatus && (canEdit || canMsg || S?.role==='sub') && _msgs.length < _MAX_MSGS;
   const _myInitials = (S?.company||(S?.role==='aj'?'AJ네트웍스':S?.name)||'AJ').slice(0,2);
   const _olderCnt  = Math.max(0, _allMsgHtmls.length - _SHOW_MSGS);
   const _olderHtml = _allMsgHtmls.slice(0, _olderCnt).join('');
