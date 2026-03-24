@@ -288,7 +288,7 @@ async function _renderHomeAsync(){
 
   // ── PANEL 0: 홈 운영 분석 ──
   const homeAnaQBtns = [
-    {t:'missing',    l:'⚠ 입력 미완료 업체'},
+    {t:'missing',    l:'📊 장비 사용 현황'},
     {t:'weekly',     l:'📋 주간 운영 리포트'},
     {t:'top-equip',  l:'🏆 이달 많이 쓴 장비'},
     {t:'as-heavy',   l:'🔧 AS 잦은 장비'},
@@ -4244,7 +4244,7 @@ function renderAnalysis(){
       <div class="ptab"    onclick="setPeriod('month',this)">이번달</div>
       <div class="ptab"    onclick="setPeriod('3m',this)">3개월</div>
     </div>
-    <div class="shd"><span class="shd-title">업체별 가동률 순위</span></div>
+    <div class="shd" style="display:flex;align-items:center;gap:6px"><span class="shd-title">업체별 가동률 순위</span><span style="font-size:10px;color:var(--tx3)">(업체명 클릭 시 장비별 가동율 확인)</span></div>
     <div class="rank-list" id="rank-list"></div>
     <div class="hmap">
       <div class="chart-label">일별 가동 현황 (최근 5주)</div>
