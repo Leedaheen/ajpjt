@@ -4295,8 +4295,8 @@ async function _renderHeatmapAsync(){
     }
     const ratioStr = dl.length ? `${opCount}/${totalEquip||'?'}` : '';
     html+=`<div class="hm-c" style="background:${col}${ds===td?';outline:2px solid var(--blue);outline-offset:-1px':''}">
-      <span style="font-size:8px;font-weight:700;line-height:1.3;color:rgba(255,255,255,.9)">${dt.getDate()}</span>
-      ${ratioStr?`<span style="font-size:6px;line-height:1.2;color:rgba(255,255,255,.8)">${ratioStr}</span>`:''}
+      <span style="font-size:14px;font-weight:800;line-height:1.2;color:rgba(255,255,255,.95)">${dt.getDate()}</span>
+      ${ratioStr?`<span style="font-size:11px;font-weight:700;line-height:1.2;color:rgba(255,255,255,.85)">${ratioStr}</span>`:''}
     </div>`;
   }
   hg.innerHTML=html;
