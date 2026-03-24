@@ -1421,7 +1421,10 @@ function _asCard(r, canAct){
     }
     if(parts.length){
       const materialTag = r.materialAt ? `<span style="font-size:9px;color:#f59e0b;margin-left:6px;background:rgba(245,158,11,.12);padding:1px 6px;border-radius:4px;border:1px solid rgba(245,158,11,.25)">(자재수급-처리)</span>` : '';
-      resolvedBlock = `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:10px;color:#4ade80;margin-bottom:6px;padding:5px 8px;background:rgba(74,222,128,.08);border-radius:6px;border-left:2px solid rgba(74,222,128,.5)">✓ ${parts.join('<span style="color:var(--tx3);margin:0 4px">·</span>')}${materialTag}</div>`;
+      const noteHtml = r.resolvedNote
+        ? `<div style="font-size:12px;font-weight:800;color:var(--as-note-col);background:var(--as-note-bg);padding:6px 10px;margin-top:5px;border-radius:6px;border-left:3px solid var(--as-note-col);line-height:1.5">${esc(r.resolvedNote)}</div>`
+        : '';
+      resolvedBlock = `<div style="font-size:10px;color:#4ade80;margin-bottom:6px;padding:5px 8px;background:rgba(74,222,128,.08);border-radius:6px;border-left:2px solid rgba(74,222,128,.5)"><div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">✓ ${parts.join('<span style="color:var(--tx3);margin:0 4px">·</span>')}${materialTag}</div>${noteHtml}</div>`;
     }
   }
 
@@ -1504,13 +1507,44 @@ function _asCard(r, canAct){
         <button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:#f59e0b;border-color:rgba(245,158,11,.4)"
           onclick="updateASStatus('${r.id}','자재수급중')">자재수급중</button>
         <button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:#4ade80;border-color:rgba(74,222,128,.4)"
-          onclick="updateASStatus('${r.id}','처리완료')">처리완료</button>
+          onclick="_showASCompletePopup('${r.id}')">처리완료</button>
       </div>`:''}
     </div>`:''}
   </div>`;
 }
 
-function updateASStatus(id, status){
+function _showASCompletePopup(id){
+  if(S?.role !== 'aj'){ toast('AJ 멤버만 처리완료로 변경할 수 있습니다','err'); return; }
+  const existing = document.getElementById('_as-complete-pop');
+  if(existing) existing.remove();
+  const pop = document.createElement('div');
+  pop.id = '_as-complete-pop';
+  pop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:3000;display:flex;align-items:flex-end;justify-content:center;padding-bottom:env(safe-area-inset-bottom,0px)';
+  pop.innerHTML = `
+    <div style="width:100%;max-width:500px;background:var(--bg1);border-radius:16px 16px 0 0;padding:20px 16px 24px;box-sizing:border-box">
+      <div style="font-size:14px;font-weight:800;margin-bottom:4px;color:var(--tx)">✅ 처리완료</div>
+      <div style="font-size:11px;color:var(--tx3);margin-bottom:14px">처리 내용을 입력하면 카드에 표시됩니다 (선택)</div>
+      <textarea id="_as-note-input" rows="4" placeholder="처리 내용을 입력하세요&#10;예) 배터리 교체 완료, 모터 교체 후 정상 작동 확인 등"
+        style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:13px;background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);color:var(--tx);resize:none;font-family:inherit;line-height:1.5"></textarea>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button onclick="document.getElementById('_as-complete-pop').remove()"
+          style="flex:1;padding:11px;font-size:13px;font-weight:700;background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);color:var(--tx2);cursor:pointer">취소</button>
+        <button id="_as-complete-confirm"
+          style="flex:2;padding:11px;font-size:13px;font-weight:800;background:rgba(74,222,128,.18);border:1px solid rgba(74,222,128,.4);border-radius:var(--rs);color:#4ade80;cursor:pointer">처리완료 확정</button>
+      </div>
+    </div>`;
+  pop.querySelector('#_as-complete-confirm').addEventListener('click', ()=>{
+    const note = pop.querySelector('#_as-note-input').value.trim();
+    pop.remove();
+    updateASStatus(id, '처리완료', note);
+  });
+  pop.addEventListener('click', e=>{ if(e.target===pop) pop.remove(); });
+  document.body.appendChild(pop);
+  setTimeout(()=>pop.querySelector('#_as-note-input')?.focus(), 100);
+}
+
+function updateASStatus(id, status, resolvedNote){
+  if(S?.role !== 'aj'){ toast('AJ 멤버만 상태를 변경할 수 있습니다','err'); return; }
   const reqs = getAsReqs();
   const idx = reqs.findIndex(r=>r.id===id);
   if(idx<0) return;
@@ -1532,6 +1566,7 @@ function updateASStatus(id, status){
   if(status==='처리완료'){
     r.resolvedAt = Date.now();
     r.resolvedStatus = '처리완료';
+    if(resolvedNote) r.resolvedNote = resolvedNote;
     // 담당기사 미입력 시 현재 로그인 AJ 멤버 이름으로 자동 설정
     if(!r.techName && S?.name) r.techName = S.name;
     addNotif({icon:'', title:`AS처리완료: ${r.equip}`, desc:`${r.company} — ${r.techName||'기사'}님 처리 완료`});
