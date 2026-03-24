@@ -4147,7 +4147,7 @@ function _renderLogChunk(el){
 /* ═══════════════════════════════════════════
    ANALYSIS
 ═══════════════════════════════════════════ */
-let anaP='month';
+let anaP='week';
 function setPeriod(p,el){ anaP=p; document.querySelectorAll('.ptab').forEach(t=>t.classList.remove('on')); el?.classList.add('on'); renderRank(); }
 
 function renderAnalysis(){
@@ -4164,9 +4164,9 @@ function renderAnalysis(){
       <div class="usage-grid" id="usage-grid"></div>
     </div>
     <div class="ptabs">
-      <div class="ptab on" onclick="setPeriod('month',this)">이번달</div>
+      <div class="ptab on" onclick="setPeriod('week',this)">일주일</div>
+      <div class="ptab"    onclick="setPeriod('month',this)">이번달</div>
       <div class="ptab"    onclick="setPeriod('3m',this)">3개월</div>
-      <div class="ptab"    onclick="setPeriod('all',this)">전체</div>
     </div>
     <div class="shd"><span class="shd-title">업체별 가동률 순위</span></div>
     <div class="rank-list" id="rank-list"></div>
@@ -4193,11 +4193,11 @@ async function _renderRankAsync(){
   const rl=document.getElementById('rank-list'); if(!rl)return;
   const siteId=S.siteId==='all'?null:S.siteId;
   const now=new Date();
-  const cutStr = anaP==='month'
-    ? new Date(now.getFullYear(), now.getMonth()-1, now.getDate()).toISOString().split('T')[0]
-    : anaP==='3m'
-    ? new Date(now.getFullYear(), now.getMonth()-3, now.getDate()).toISOString().split('T')[0]
-    : new Date(now.getFullYear()-1, now.getMonth(), now.getDate()).toISOString().split('T')[0];
+  const cutStr = anaP==='week'
+    ? (() => { const d=new Date(now); d.setDate(d.getDate()-7); return d.toISOString().split('T')[0]; })()
+    : anaP==='month'
+    ? new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
+    : new Date(now.getFullYear(), now.getMonth()-3, now.getDate()).toISOString().split('T')[0];
   const toStr = today();
 
   // IDB/Supabase 범위 조회 — 전체 로드 없음
@@ -4272,6 +4272,8 @@ async function _renderHeatmapAsync(){
     if(!byDate.has(l.date)) byDate.set(l.date,[]);
     byDate.get(l.date).push(l);
   }
+  // 장비마스터 — 현장 필터 (날짜별 전체장비 집계용)
+  const masterAll = getEquipMaster().filter(e => siteId ? e.siteId===siteId : true);
 
   let html=days.map(d=>`<div class="hm-hd">${d}</div>`).join('');
   const start=new Date(now); start.setDate(start.getDate()-34);
@@ -4281,12 +4283,21 @@ async function _renderHeatmapAsync(){
     if(dt>now){ html+=`<div></div>`; continue; }
     const ds=`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
     const dl=(byDate.get(ds)||[]);
+    // 전체장비: 해당 날짜 기준 반입 완료 & 반출 전 장비마스터 수
+    const totalEquip = masterAll.filter(e => e.inDate && e.inDate<=ds && (!e.outDate||e.outDate>=ds)).length;
+    // 가동장비: 해당 날짜 종료 로그의 unique 장비번호
+    const opSet = new Set(dl.filter(l=>l.status==='end').map(l=>l.equip).filter(Boolean));
+    const opCount = opSet.size;
     let col='rgba(255,255,255,.03)';
     if(dl.length){
-      const r=dl.filter(l=>l.status==='end').length/dl.length;
+      const r = totalEquip>0 ? opCount/totalEquip : dl.filter(l=>l.status==='end').length/dl.length;
       col=r>=.9?'rgba(34,197,94,.85)':r>=.7?'rgba(34,197,94,.5)':r>=.5?'rgba(234,179,8,.6)':'rgba(239,68,68,.7)';
     }
-    html+=`<div class="hm-c" style="background:${col}${ds===td?';outline:2px solid var(--blue);outline-offset:-1px':''}">${dt.getDate()}</div>`;
+    const ratioStr = dl.length ? `${opCount}/${totalEquip||'?'}` : '';
+    html+=`<div class="hm-c" style="background:${col}${ds===td?';outline:2px solid var(--blue);outline-offset:-1px':''}">
+      <span style="font-size:8px;font-weight:700;line-height:1.3;color:rgba(255,255,255,.9)">${dt.getDate()}</span>
+      ${ratioStr?`<span style="font-size:6px;line-height:1.2;color:rgba(255,255,255,.8)">${ratioStr}</span>`:''}
+    </div>`;
   }
   hg.innerHTML=html;
 }
@@ -4760,6 +4771,18 @@ function renderAdmin(){
       </button>
     </div>
 
+    ${isAJ?`<!-- 로그 초기화 (AJ 전용) -->
+    <div style="margin-top:10px;padding:12px;background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.18);border-radius:12px;display:flex;align-items:center;gap:12px">
+      <div style="font-size:22px;flex-shrink:0">🧹</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:800;margin-bottom:2px">가동현황 로그 초기화</div>
+        <div style="font-size:10px;color:var(--tx3)">특정 날짜 이전 테스트 로그 삭제 (AJ 전용)</div>
+      </div>
+      <button onclick="_clearLogsBefore()"
+        style="padding:7px 12px;font-size:11px;font-weight:800;background:rgba(239,68,68,.18);border:1px solid rgba(239,68,68,.35);border-radius:8px;color:#f87171;cursor:pointer;flex-shrink:0;white-space:nowrap">
+        초기화
+      </button>
+    </div>`:''}
     <!-- 캐시 삭제 -->
     <div style="margin-top:10px;padding:12px;background:rgba(99,102,241,.07);border:1px solid rgba(99,102,241,.2);border-radius:12px;display:flex;align-items:center;gap:12px">
       <div style="font-size:22px;flex-shrink:0">🗑️</div>
@@ -4775,6 +4798,22 @@ function renderAdmin(){
 
     <div style="height:16px"></div>
     </div>`;
+}
+
+// ── 가동현황 로그 날짜 기준 삭제 (AJ 전용) ────────────────────
+async function _clearLogsBefore(){
+  if(S?.role !== 'aj'){ toast('AJ 관리자만 사용 가능합니다','err'); return; }
+  const cutDate = prompt('이 날짜 이전(미포함) 로그를 삭제합니다.\n형식: YYYY-MM-DD\n(예: 전체 삭제는 내일 날짜 입력)', today());
+  if(!cutDate || !/^\d{4}-\d{2}-\d{2}$/.test(cutDate)) return;
+  if(!confirm(`${cutDate} 이전 가동현황 로그를 모두 삭제합니다.\n이 작업은 되돌릴 수 없습니다.\n계속하시겠습니까?`)) return;
+  const all = getLogs();
+  const kept = all.filter(l => (l.date||'') >= cutDate);
+  const removed = all.length - kept.length;
+  await saveLogs(kept);
+  _cache.logs = null; _cache.logsByDate = null; _cache.todayLogs = null;
+  toast(`${removed}건 삭제 완료`, 'ok', 3000);
+  if(curOpsTab==='log') renderLog();
+  if(curOpsTab==='ana') renderAnalysis();
 }
 
 // ── 모든 캐시 삭제 (전 사용자 접근 가능) ──────────────────────
