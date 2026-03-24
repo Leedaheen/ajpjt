@@ -2153,7 +2153,7 @@ function _trCard(r, seqNo, canEdit, canMsg){
   let headerBg = 'background:var(--bg2)';
   if (!st.done && diff === 0) {
     border = 'border:2px solid #3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.15)';
-    headerBg = 'background:linear-gradient(135deg,rgba(30,58,95,.7),rgba(30,64,175,.7))';
+    headerBg = 'background:linear-gradient(135deg,rgba(30,58,95,.1),rgba(30,64,175,.1))';
   } else if (!st.done && diff === 1) {
     border = 'border:2px solid #f59e0b;box-shadow:0 0 0 3px rgba(245,158,11,.12)';
     headerBg = 'background:linear-gradient(135deg,rgba(69,26,3,.7),rgba(146,64,14,.7))';
