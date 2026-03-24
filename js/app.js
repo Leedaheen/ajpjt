@@ -179,6 +179,10 @@ function initLogin(){
   // ── loginScreen pointer-events 복원 (이전 enterApp 실패 시 none 상태 수정) ──
   const _lsEl = document.getElementById('loginScreen');
   if(_lsEl){ _lsEl.style.pointerEvents=''; _lsEl.style.opacity='1'; _lsEl.style.display=''; }
+  // ── SB_URL 미설정 시 서버 설정 힌트 표시 ──
+  const _sbUrl = DB.g(K.SB_URL,'');
+  const _hint = document.getElementById('server-setup-hint');
+  if(_hint) _hint.style.display = _sbUrl ? 'none' : 'block';
 
   // ── 자동 로그인 처리 ────────────────────────────────────
   const autoLoginPref = DB.g('auto_login', null); // null = 아직 설정 안 됨 (=true 로 간주)
@@ -275,6 +279,28 @@ async function sha256(str){
   const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
   return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
 }
+/* ── 로그인 전 서버 연결 설정 (SB_URL 미설정 상황 복구용) ── */
+function _openServerSetup(){
+  const modal = document.getElementById('modal-server-setup');
+  if(!modal) return;
+  document.getElementById('setup-sb-url').value  = DB.g(K.SB_URL,'') || '';
+  document.getElementById('setup-sb-key').value  = DB.g(K.SB_KEY,'') || '';
+  document.getElementById('setup-kakao-key').value = DB.g('kakao_js_key','') || '';
+  modal.style.display = 'flex';
+}
+function _saveServerSetup(){
+  const url   = document.getElementById('setup-sb-url').value.trim();
+  const key   = document.getElementById('setup-sb-key').value.trim();
+  const kakao = document.getElementById('setup-kakao-key').value.trim();
+  if(!url || !key){ toast('URL과 Anon Key는 필수입니다','err'); return; }
+  DB.s(K.SB_URL, url);
+  DB.s(K.SB_KEY, key);
+  if(kakao) DB.s('kakao_js_key', kakao);
+  document.getElementById('modal-server-setup').style.display='none';
+  toast('저장됨. 페이지를 새로고침합니다...','ok',1500);
+  setTimeout(()=>location.reload(), 1600);
+}
+
 // pw_hash를 캐시에 저장하지 않도록 제거 (보안: localStorage에 해시 노출 방지)
 function _safeAjMember(m){ if(!m) return m; const {pw_hash:_,...rest}=m; return rest; }
 

@@ -1178,8 +1178,28 @@ textarea.fg-input{height:72px;line-height:1.5;}
     </div>
 
   </div><!-- /login-body -->
-  <!-- admin login link removed for security -->
+  <!-- 서버 연결 설정 (SB_URL 미설정 시 표시) -->
+  <div id="server-setup-hint" style="text-align:center;padding-bottom:12px;display:none">
+    <span onclick="_openServerSetup()" style="font-size:10px;color:var(--tx3);cursor:pointer;text-decoration:underline;opacity:.6">⚙ 서버 연결 설정</span>
+  </div>
   </div><!-- /login-content -->
+
+  <!-- 서버 설정 미니 모달 -->
+  <div id="modal-server-setup" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center">
+    <div style="background:var(--bg);border-radius:16px;padding:24px;width:90%;max-width:380px;box-shadow:0 8px 32px rgba(0,0,0,.4)">
+      <div style="font-size:15px;font-weight:800;margin-bottom:16px">서버 연결 설정</div>
+      <label style="font-size:11px;font-weight:700;color:var(--tx2);display:block;margin-bottom:4px">Supabase Project URL</label>
+      <input id="setup-sb-url" type="url" placeholder="https://xxxx.supabase.co" style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--br);background:var(--bg2);color:var(--tx);font-size:12px;box-sizing:border-box;margin-bottom:10px">
+      <label style="font-size:11px;font-weight:700;color:var(--tx2);display:block;margin-bottom:4px">Supabase Anon Key</label>
+      <input id="setup-sb-key" type="text" placeholder="eyJhbGci..." style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--br);background:var(--bg2);color:var(--tx);font-size:11px;box-sizing:border-box;margin-bottom:10px;font-family:monospace">
+      <label style="font-size:11px;font-weight:700;color:var(--tx2);display:block;margin-bottom:4px">카카오 JS 앱키</label>
+      <input id="setup-kakao-key" type="text" placeholder="카카오 개발자 콘솔 앱키" style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--br);background:var(--bg2);color:var(--tx);font-size:12px;box-sizing:border-box;margin-bottom:16px">
+      <div style="display:flex;gap:8px">
+        <button onclick="document.getElementById('modal-server-setup').style.display='none'" style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--br);background:none;color:var(--tx2);font-size:13px;cursor:pointer">취소</button>
+        <button onclick="_saveServerSetup()" style="flex:2;padding:10px;border-radius:8px;border:none;background:var(--red);color:#fff;font-size:13px;font-weight:700;cursor:pointer">저장 후 재시작</button>
+      </div>
+    </div>
+  </div>
 </div><!-- /loginScreen -->
 
 <!-- 프로필 입력 모달 (기술인/협력사 최초 가입용 — Google·카카오 공통) -->
