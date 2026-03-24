@@ -538,7 +538,16 @@ async function doGoogleProfileSubmit(){
     const phoneConflict = allMembers.find(m=>m.phone===phone && m.google_email!==email && m.kakao_id!==(window._gpfKakaoId||''));
     if(phoneConflict){ toast('이미 다른 계정으로 등록된 연락처입니다','err',4000); return; }
   }
-  const status = mode==='tech'?'approved':(window._inviteCodeOk?'approved':'pending');
+  // 기존 회원 재로그인 시 Supabase에서 최신 status 조회 (AJ 승인 반영)
+  let _sbStatus = member?.status || null;
+  if(member && mode === 'sub'){
+    try {
+      const _sr = await sbReq('members','GET',null,`?record_id=eq.${encodeURIComponent(member.id)}&limit=1`);
+      if(_sr?.length) _sbStatus = _sr[0].status || _sbStatus;
+    } catch(_){}
+  }
+  const status = mode==='tech' ? 'approved'
+    : (_sbStatus !== null ? _sbStatus : (window._inviteCodeOk ? 'approved' : 'pending'));
   const role   = mode==='tech'?'tech':'sub';
   const id     = member?.id || (role+'-'+Date.now()+'-'+Math.random().toString(36).slice(2,7));
   const record = {
@@ -579,12 +588,12 @@ async function doGoogleProfileSubmit(){
     S={role:'tech',name,phone,company:co,siteId:site,siteName,team,loginAt:Date.now()};
     DB.s(K.SESSION,S); DB.s('auto_login',true);
     enterApp();
-  } else if(window._inviteCodeOk){
-    // 초대코드로 즉시 승인 — 바로 로그인
+  } else if(window._inviteCodeOk || status === 'approved'){
+    // 초대코드 승인 또는 AJ가 이미 승인한 기존 계정 — 바로 로그인
     window._inviteCodeOk = false;
     S={role:'sub',name,title:record.title||'',phone,company:co,siteId:site,siteName,loginAt:Date.now(),memberId:id};
     DB.s(K.SESSION,S); DB.s('auto_login',true);
-    toast('가입 완료! 로그인됩니다.','ok',2000);
+    toast(status==='approved' ? '환영합니다! 로그인됩니다.' : '가입 완료! 로그인됩니다.','ok',2000);
     enterApp();
   } else {
     // 일반 가입 신청 — AJ 승인 대기
