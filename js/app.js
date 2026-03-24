@@ -556,11 +556,15 @@ async function doGoogleProfileSubmit(){
     }],'?on_conflict=record_id');
     record.synced=true;
   } catch(e){
-    console.warn('[doGoogleProfileSubmit] SB 저장 실패:',e);
     const _em = e?.message||'';
-    if(_em==='NO_SB_URL') toast('서버 연결 정보가 없습니다. 관리자에게 문의하세요.','err',4000);
-    else toast(`가입 신청 실패: ${_em.slice(0,80)||'서버 오류'}`,'err',4000);
-    return;
+    // 23505: 이미 등록된 계정 (앱캐시 삭제 후 재가입 시도) → 정상 케이스, 그대로 진행
+    if(_em.includes('23505')){ record.synced=true; console.log('[doGoogleProfileSubmit] 기존 계정 — 로그인 계속'); }
+    else {
+      console.warn('[doGoogleProfileSubmit] SB 저장 실패:',e);
+      if(_em==='NO_SB_URL') toast('서버 연결 정보가 없습니다. 관리자에게 문의하세요.','err',4000);
+      else toast(`가입 신청 실패: ${_em.slice(0,80)||'서버 오류'}`,'err',4000);
+      return;
+    }
   }
   // 로컬 저장
   const idx = allMembers.findIndex(m=>m.id===id);
