@@ -248,10 +248,10 @@ async function _syncToSupabase(){
 
   // 병렬 업서트 (테이블 간 의존성 없음) — allSettled: 한 테이블 실패해도 나머지 계속 진행
   const _syncResults = await Promise.allSettled([
-    // 1. LOGS
+    // 1. LOGS — 신규(start): POST INSERT / 업데이트(end·idle): PATCH by record_id
     (async()=>{
       if(!unsyncLogs.length) return;
-      const rows = unsyncLogs.map(l=>({
+      const _toRow = l=>({
         record_id:   l.id||'',
         date:        l.date||'',
         site_id:     l.siteId||'',
@@ -268,8 +268,14 @@ async function _syncToSupabase(){
         meter_end:   String(l.meterEnd||''),
         off_reason:  l.offReason||'',
         created_at:  l.createdAt ? new Date(l.createdAt).toISOString() : new Date(l.ts||Date.now()).toISOString(),
-      }));
-      await sbBatchUpsert('logs', rows, 'record_id');
+      });
+      const newRows  = unsyncLogs.filter(l=>l.status==='start').map(_toRow);
+      const endLogs  = unsyncLogs.filter(l=>l.status!=='start');
+      if(newRows.length) await sbBatchUpsert('logs', newRows); // INSERT, on_conflict 없음
+      for(const l of endLogs){
+        const row = _toRow(l);
+        await sbReq('logs','PATCH',row,`?record_id=eq.${encodeURIComponent(row.record_id)}`);
+      }
       await IDB.markSynced('logs', unsyncLogs.map(l=>l.id)).catch(()=>{});
       _cache.todayLogs = null;
     })(),
@@ -822,30 +828,33 @@ async function pushToGS(entry){
   const sbUrl = DB.g(K.SB_URL,'');
   if(sbUrl){
     // ── 서버 직접 저장 — 실패 시 throw (호출자가 catch 처리) ──
+    // 스키마에 있는 컬럼만 전송 (location_detail/team/project/updated_at 제외)
     const siteMap=Object.fromEntries(getSites().map(s=>[s.id,s.name]));
     const row={
-      record_id:        entry.id||'',
-      date:             entry.date||'',
-      site_id:          entry.siteId||'',
-      site_name:        siteMap[entry.siteId]||entry.siteId||'',
-      company:          entry.company||'',
-      floor:            entry.floor||'',
-      location_detail:  entry.locationDetail||'',
-      equip:            entry.equip||'',
-      recorder:         entry.name||entry.recorder||'',
-      team:             entry.team||'',
-      project:          entry.project||'',
-      status:           entry.status||'',
-      start_time:       entry.startTime||'',
-      end_time:         entry.endTime||'',
-      used_hours:       entry.duration||0,
-      meter_start:      String(entry.meterStart||''),
-      meter_end:        String(entry.meterEnd||''),
-      off_reason:       entry.reason||entry.offReason||'',
-      created_at:       entry.createdAt?new Date(entry.createdAt).toISOString():new Date(entry.ts||Date.now()).toISOString(),
-      updated_at:       new Date().toISOString(),
+      record_id:   entry.id||'',
+      date:        entry.date||'',
+      site_id:     entry.siteId||'',
+      site_name:   siteMap[entry.siteId]||entry.siteId||'',
+      company:     entry.company||'',
+      floor:       entry.floor||'',
+      equip:       entry.equip||'',
+      recorder:    entry.name||entry.recorder||'',
+      status:      entry.status||'',
+      start_time:  entry.startTime||'',
+      end_time:    entry.endTime||'',
+      used_hours:  entry.duration||0,
+      meter_start: String(entry.meterStart||''),
+      meter_end:   String(entry.meterEnd||''),
+      off_reason:  entry.reason||entry.offReason||'',
+      created_at:  entry.createdAt?new Date(entry.createdAt).toISOString():new Date(entry.ts||Date.now()).toISOString(),
     };
-    await sbBatchUpsert('logs',[row],'record_id'); // 실패 시 throw
+    // 신규(start): POST INSERT / 종료·휴무 업데이트: PATCH by record_id
+    // → on_conflict=record_id 방식은 UNIQUE 제약 없는 환경에서 42P10 오류 발생
+    if(entry.status === 'start'){
+      await sbReq('logs','POST',row);
+    } else {
+      await sbReq('logs','PATCH',row,`?record_id=eq.${encodeURIComponent(row.record_id)}`);
+    }
     entry.synced=true;
   } else {
     // ── Google Sheets 폴백 — 실패 시 throw ──
@@ -979,6 +988,7 @@ function check3PMAlert(){
   if(!S) return;
   const now=new Date(), nowH=now.getHours(), nowM=now.getMinutes();
   const el=document.getElementById('alert3pm');
+  if(!el) return;
   const td=today();
   if(nowH<15){ el.style.display='none'; return; }
   _check3PMAsync(td, nowH, nowM, el).catch(()=>{});
