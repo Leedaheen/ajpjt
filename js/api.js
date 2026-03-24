@@ -18,8 +18,11 @@ async function sbReq(table, method='GET', data=null, query=''){
   }
 
   const _exec = async () => {
-    const prefer = method==='POST' ? 'resolution=merge-duplicates,return=minimal'
-                 : method==='PATCH' ? 'return=minimal' : '';
+    // on_conflict 있을 때만 upsert(merge-duplicates) — 없으면 순수 INSERT(return=minimal)
+    // GENERATED ALWAYS AS IDENTITY PK에 resolution=merge-duplicates 단독 사용 시 400 발생 방지
+    const prefer = method==='POST'
+      ? (query.includes('on_conflict') ? 'resolution=merge-duplicates,return=minimal' : 'return=minimal')
+      : method==='PATCH' ? 'return=minimal' : '';
     // 30초 fetch 타임아웃 — 무한 대기 방지
     const controller = new AbortController();
     const _tid = setTimeout(() => controller.abort(), 30000);
