@@ -4619,22 +4619,45 @@ async function _askAI(type, targetId='ai-query-result'){
     Object.entries(trCoMap).sort((a,b)=>(b[1].in+b[1].out)-(a[1].in+a[1].out)).slice(0,3)
       .forEach(([co,v])=>lines.push(`• ${co}: 반입 ${v.in}건 / 반출 ${v.out}건`));
   } else if(type==='missing'){
-    // ── 오늘 입력 미완료 업체 ──
+    // ── 업체별 금일 장비 사용 현황 ──
     const tdStr = today();
     const todayLogs2 = allLogs.filter(l=>l.date===tdStr);
-    const submitted = new Set(todayLogs2.map(l=>l.company));
     const sites2 = siteId ? [{id:siteId}] : getSites();
-    const missingList = [];
-    for(const s of sites2)
-      for(const co of getCos(s.id))
-        if(!submitted.has(co.name)) missingList.push({name:co.name, phone:co.phone||'', siteId:s.id});
-    lines.push(`⚠ <b>${site}</b> 금일 입력 미완료 업체`);
-    if(missingList.length){
-      lines.push(missingList.map(co=>`<b>${co.name}</b>`).join(', '));
-      lines.push(`<span style="color:var(--tx3);font-size:10px">${missingList.length}개 업체 미입력 (${tdStr})</span>`);
-    } else {
-      lines.push(`✅ 모든 업체 입력 완료 (${tdStr})`);
-    }
+    // 장비마스터에서 현장별 active 장비를 회사별로 집계
+    const allEquip = typeof getEquipMaster==='function' ? getEquipMaster() : [];
+    const activeEquip = allEquip.filter(e=>e.status==='active'&&(siteId?e.siteId===siteId:true));
+    // 회사별 보유장비 Set
+    const coEquipMap = {};
+    activeEquip.forEach(e=>{
+      if(!coEquipMap[e.company]) coEquipMap[e.company] = new Set();
+      coEquipMap[e.company].add(e.equipNo);
+    });
+    // 회사 목록: 장비마스터 보유사 + 등록된 협력사 (합집합)
+    const coNames = new Set([...Object.keys(coEquipMap)]);
+    for(const s of sites2) for(const co of getCos(s.id)) coNames.add(co.name);
+    const now = new Date();
+    const hhmm = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    lines.push(`📊 <b>${site}</b> 금일 장비 사용현황 <span style="color:var(--tx3);font-size:10px">(${tdStr} ${hhmm} 기준)</span>`);
+    const sortedCos = [...coNames].sort();
+    let allDone = true;
+    sortedCos.forEach(coName=>{
+      const coLogs = todayLogs2.filter(l=>l.company===coName);
+      const startEquips = new Set(coLogs.filter(l=>l.status==='start').map(l=>l.equip));
+      const endEquips   = new Set(coLogs.filter(l=>l.status==='end').map(l=>l.equip));
+      const usedEquips  = new Set([...startEquips,...endEquips]);
+      const totalEquip  = coEquipMap[coName]?.size || 0;
+      const unusedCnt   = Math.max(0, totalEquip - usedEquips.size);
+      if(unusedCnt > 0) allDone = false;
+      const usingStr  = startEquips.size > 0 ? `<span style="color:#fbbf24">사용중 ${startEquips.size}대</span>` : '';
+      const doneStr   = endEquips.size   > 0 ? `<span style="color:#4ade80">종료 ${endEquips.size}대</span>`   : '';
+      const unusedStr = unusedCnt        > 0 ? `<span style="color:#f87171">미사용 ${unusedCnt}대</span>`      : '';
+      const parts = [usingStr,doneStr,unusedStr].filter(Boolean).join(' / ');
+      const total = totalEquip > 0 ? `<span style="color:var(--tx3);font-size:10px"> (보유 ${totalEquip}대)</span>` : '';
+      lines.push(`<b>${coName}</b>${total} — ${parts||'<span style="color:var(--tx3)">로그 없음</span>'}`);
+    });
+    if(!sortedCos.length) lines.push('<span style="color:var(--tx3)">장비 보유 업체 없음</span>');
+    else if(allDone) lines.push(`✅ 모든 업체 장비 운영 완료`);
+
   } else {
     lines.push(`• 분석 타입을 인식할 수 없습니다`);
   }

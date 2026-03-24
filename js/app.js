@@ -284,6 +284,24 @@ function switchAjTab(tab){
   });
   if(tab==='login') setTimeout(()=>_renderGsiBtn('aj'), 50);
 }
+/* ── 홈화면 업체 현황 자동 갱신 (07:00~16:00 매 시간) ── */
+let _homeRefreshTimer = null;
+function _scheduleHourlyHomeRefresh(){
+  if(_homeRefreshTimer) clearTimeout(_homeRefreshTimer);
+  const now = new Date();
+  const h = now.getHours();
+  // 다음 정시까지 남은 ms
+  const msToNext = (60 - now.getMinutes()) * 60000 - now.getSeconds() * 1000 - now.getMilliseconds();
+  _homeRefreshTimer = setTimeout(()=>{
+    const nh = new Date().getHours();
+    if(nh >= 7 && nh <= 16){
+      // 홈 탭이 보이는 경우 분석 패널 자동 갱신
+      if(typeof _askAIHome === 'function') _askAIHome('missing');
+    }
+    _scheduleHourlyHomeRefresh(); // 다음 정시 예약
+  }, msToNext);
+}
+
 /* ── 가동현황 8시간 미종료 알림 ── */
 function _check8hUsageAlert(){
   const THRESHOLD = 8 * 3600000; // 8시간(ms)
@@ -1747,7 +1765,8 @@ function enterApp(){
     setInterval(_runMemoryGuard, 5 * 60 * 1000),          // 메모리 가드: 5분마다
     setInterval(_check8hUsageAlert, 30 * 60 * 1000),      // 8h 미종료 알림: 30분마다
   ];
-  setTimeout(_check8hUsageAlert, 10000); // 앱 진입 10초 후 1회 즉시 체크
+  setTimeout(_check8hUsageAlert, 10000);  // 앱 진입 10초 후 1회 즉시 체크
+  _scheduleHourlyHomeRefresh();           // 홈 업체현황 정시 자동갱신 시작
   // 자동 싱크 제거 — pull-to-refresh / 페이지 이동 시 수동 싱크로만 운용
   document.removeEventListener('visibilitychange', _onVisibilityChange);
   setTimeout(_initScrollTopBtn, 400);
@@ -1930,6 +1949,7 @@ function doLogout(){
   // 인터벌 및 리스너 정리 (location.reload() 전 명시적 해제)
   _appIntervals.forEach(id => clearInterval(id));
   _appIntervals = [];
+  if(_homeRefreshTimer){ clearTimeout(_homeRefreshTimer); _homeRefreshTimer = null; }
   document.removeEventListener('visibilitychange', _onVisibilityChange);
   window.removeEventListener('online',  _onOnline);
   window.removeEventListener('offline', _onOffline);
