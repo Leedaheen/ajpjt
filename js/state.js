@@ -379,8 +379,9 @@ function _buildNotifFilter(){
   if(!S) return null;
   const conds = [];
   if(S.role === 'aj'){
-    conds.push('target_role.eq.aj');
-    if(S.ajType) conds.push(`target_aj_type.eq.${encodeURIComponent(S.ajType)}`);
+    // AJ: target_aj_type 없는 AJ 전체 공지 OR 내 ajType 전용 알림 — 교차 수신 방지
+    conds.push('and(target_role.eq.aj,target_aj_type.is.null)');
+    if(S.ajType) conds.push(`and(target_role.eq.aj,target_aj_type.eq.${encodeURIComponent(S.ajType)})`);
   } else if(S.role === 'sub'){
     conds.push('target_role.eq.sub');
   } else if(S.role === 'tech'){

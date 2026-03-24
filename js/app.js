@@ -705,14 +705,15 @@ async function _doGoogleAjLogin(email, googleName){
    카카오 로그인
 ═══════════════════════════════════════════════════════════ */
 function _kakaoInit(){
-  const key = KAKAO_DEFAULT_JS_KEY || DB.g('kakao_js_key','');
-  if(!key) return;
-  if(typeof Kakao === 'undefined') return;
-  if(!Kakao.isInitialized()) Kakao.init(key);
+  // 버튼은 항상 표시 — 키 없으면 클릭 시 안내 (doKakaoLogin에서 처리)
   ['tech','sub','aj'].forEach(r=>{
     const btn = document.getElementById('kakao-btn-'+r);
     if(btn) btn.style.display = 'block';
   });
+  const key = KAKAO_DEFAULT_JS_KEY || DB.g('kakao_js_key','');
+  if(!key) return;
+  if(typeof Kakao === 'undefined') return;
+  if(!Kakao.isInitialized()) Kakao.init(key);
 }
 
 /* PKCE 헬퍼 — code_verifier / code_challenge 생성 */
