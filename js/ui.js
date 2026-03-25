@@ -5844,6 +5844,26 @@ function openSubEquipSheet(){
 }
 
 /* Sites/Companies management */
+async function _openSiteMgr(){
+  closeSheet('sh-admin-hub');
+  setTimeout(()=>openSheet('sh-sites'), 60);
+  renderSiteMgr();
+  try {
+    await _pullSitesFromSB();
+    renderSiteMgr();
+  } catch(_e){}
+}
+
+async function _openCoMgr(){
+  closeSheet('sh-admin-hub');
+  setTimeout(()=>openSheet('sh-company'), 60);
+  renderCoMgr();
+  try {
+    await Promise.all([_pullSitesFromSB(), _pullCosFromSB()]);
+    renderCoMgr();
+  } catch(_e){}
+}
+
 function renderSiteMgr(){
   const sites=getSites();
   document.getElementById('site-mgr-list').innerHTML=sites.map((s)=>{

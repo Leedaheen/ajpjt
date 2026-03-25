@@ -1803,12 +1803,12 @@ alter table app_settings add column if not exists kakao_js_key text default '';<
     <div class="sh-handle"></div>
     <div class="sh-title">현장 관리</div>
     <div class="menu-list" style="margin-bottom:10px">
-      <div class="mrow" onclick="closeSheet('sh-admin-hub');setTimeout(()=>{openSheet('sh-sites');renderSiteMgr();},60)">
+      <div class="mrow" onclick="_openSiteMgr()">
         <div class="mrow-ico" style="background:rgba(245,158,11,.12);color:rgb(245,158,11)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg></div>
         <div class="mrow-inf"><div class="mrow-title">현장</div><div class="mrow-desc">현장 추가·삭제 및 목록 관리</div></div>
         <div class="mrow-arr">›</div>
       </div>
-      <div class="mrow" onclick="closeSheet('sh-admin-hub');setTimeout(()=>{openSheet('sh-company');renderCoMgr();},60)">
+      <div class="mrow" onclick="_openCoMgr()">
         <div class="mrow-ico" style="background:rgba(59,139,255,.12);color:rgb(59,139,255)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg></div>
         <div class="mrow-inf"><div class="mrow-title">협력사</div><div class="mrow-desc">현장별 업체·장비 수량 추가·수정</div></div>
         <div class="mrow-arr">›</div>
