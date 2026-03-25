@@ -125,6 +125,7 @@ function onSheetOpen(id){
   if(id==='sh-supabase'){
     document.getElementById('sb-url-input').value=DB.g(K.SB_URL,'')||SB_DEFAULT_URL||'';
     document.getElementById('sb-key-input').value=DB.g(K.SB_KEY,'')||SB_DEFAULT_KEY||'';
+    const _kkEl=document.getElementById('kakao-key-input'); if(_kkEl) _kkEl.value=DB.g('kakao_js_key','')||KAKAO_DEFAULT_JS_KEY||'';
     // AJ관리자만 민감 정보 블록 표시
     const _isAJ = S?.role==='aj';
     ['sb-credentials-block','sb-sql-block','sb-warn-block'].forEach(bid=>{
@@ -710,19 +711,20 @@ async function doGoogleProfileSubmit(){
 /* ── Google 이메일로 AJ 멤버 조회 후 로그인 ── */
 async function _doGoogleAjLogin(email, googleName){
   toast('Google 계정 확인 중...','ok',2000);
+  // SB에서 최신 멤버 목록 풀링 (google_email 컬럼 포함)
   await _pullAjMembersFromSB().catch(()=>{});
   const list = _getAjMembers();
   // google_email 일치 계정 중 approved 우선 선택
-  const byEmail = list.filter(m => m.google_email === email);
+  const byEmail = list.filter(m => m.google_email && m.google_email === email);
   const member = byEmail.find(m => (m.status||'approved') === 'approved') || byEmail[0] || null;
-  if(!member){ _showGoogleLinkModal(email, googleName); return; }
+  if(!member){ _showGoogleLinkModal(email, googleName, ''); return; }
   const _st = member.status||'approved';
   if(_st==='pending'){ toast('가입 승인 대기 중입니다. AJ 관리자에게 문의하세요.','warn',4000); return; }
   if(_st==='rejected'){ toast('가입이 거절되었습니다. AJ 관리자에게 문의하세요.','err',4000); return; }
   DB.s(K.AJ_MEMBER, _safeAjMember(member));
   S={ role:'aj', name:member.name, phone:member.phone||'', ajType:member.aj_type||'관리자',
       company:'AJ네트웍스', siteId:'all', siteName:'전체 현장', loginAt:Date.now(), empNo:member.emp_no,
-      memberId: member.record_id||member.id||'' };
+      memberId: member.record_id||member.emp_no||'' };
   DB.s(K.SESSION, S); DB.s('auto_login', true);
   toast(`${member.name}님 환영합니다!`,'ok'); enterApp();
 }
@@ -755,7 +757,7 @@ async function _kakaoGenPKCE(){
 
 async function _doKakaoLogin(role){
   const key = KAKAO_DEFAULT_JS_KEY || DB.g('kakao_js_key','');
-  if(!key){ toast('카카오 로그인 설정이 필요합니다. 관리자에게 문의하세요.','warn',4000); return; }
+  if(!key){ toast('카카오 JS 키 미설정 — 관리자가 연동 설정에서 입력해야 합니다','warn',4000); openSheet('sh-supabase'); return; }
   // PKCE Authorization Code Flow (response_type=token은 신규앱 차단 KOE202)
   const { verifier, challenge } = await _kakaoGenPKCE();
   sessionStorage.setItem('_kakaoRole', role);
@@ -876,7 +878,7 @@ async function _doKakaoAjLogin(kakaoId, nickname, email){
   const list = _getAjMembers();
   const byKakao = list.filter(m=>m.kakao_id===kakaoId);
   const member = byKakao.find(m=>(m.status||'approved')==='approved') || byKakao[0] || null;
-  if(!member){ _showGoogleLinkModal(email||`kakao:${kakaoId}`, nickname); return; }
+  if(!member){ _showGoogleLinkModal(email||`kakao:${kakaoId}`, nickname, kakaoId); return; }
   const _st = member.status||'approved';
   if(_st==='pending'){ toast('가입 승인 대기 중입니다. AJ 관리자에게 문의하세요.','warn',4000); return; }
   if(_st==='rejected'){ toast('가입이 거절되었습니다. AJ 관리자에게 문의하세요.','err',4000); return; }
@@ -1037,8 +1039,9 @@ function saveKakaoConfig(){
 }
 
 /* Google 가입 신청 모달 열기 */
-function _showGoogleLinkModal(email, googleName){
+function _showGoogleLinkModal(email, googleName, kakaoId){
   window._glEmail = email;
+  window._glKakaoId = kakaoId || '';
   document.getElementById('gl-email').textContent = email;
   document.getElementById('gl-gname').textContent = googleName || email.split('@')[0];
   document.getElementById('glName').value = googleName || '';
@@ -1058,43 +1061,81 @@ function toggleGlAjType(type){
   });
 }
 
-/* Google AJ 관리자 가입 신청 */
+/* Google/카카오 AJ 관리자 가입·연동 처리 */
 async function doGoogleAjRegister(){
   const name   = document.getElementById('glName').value.trim();
   const phone  = document.getElementById('glPhone').value.trim();
   const ajTypeChip = document.querySelector('#gl-aj-type-chips .chip.on');
   const ajType = ajTypeChip?.textContent||'관리자';
   if(!name||!phone){ toast('이름과 연락처를 입력하세요','err'); return; }
-  // 이미 이 Google 계정으로 가입된 경우 처리
+
+  const isKakao = !!window._glKakaoId;
   await _pullAjMembersFromSB().catch(()=>{});
   const localList = _getAjMembers();
-  const dup = localList.find(m => m.google_email === window._glEmail);
+
+  /* ① 이미 같은 Google/카카오 계정으로 연동된 경우 */
+  const dup = isKakao
+    ? localList.find(m => m.kakao_id === window._glKakaoId)
+    : localList.find(m => m.google_email === window._glEmail);
   if(dup){
     const _st = dup.status||'approved';
+    document.getElementById('modal-glink').style.display='none';
     if(_st==='approved'){
-      document.getElementById('modal-glink').style.display='none';
       DB.s(K.AJ_MEMBER, _safeAjMember(dup));
       S={ role:'aj', name:dup.name, phone:dup.phone||'', ajType:dup.aj_type||'관리자',
-          company:'AJ네트웍스', siteId:'all', siteName:'전체 현장', loginAt:Date.now(), empNo:dup.emp_no };
+          company:'AJ네트웍스', siteId:'all', siteName:'전체 현장', loginAt:Date.now(), empNo:dup.emp_no,
+          memberId: dup.record_id||dup.emp_no||'' };
       DB.s(K.SESSION, S); DB.s('auto_login', true);
-      toast(`${dup.name}님 환영합니다!`,'ok'); enterApp(); return;
+      toast(`${dup.name}님 환영합니다!`,'ok'); enterApp();
+    } else {
+      toast('이미 가입 신청된 계정입니다. 승인 대기 중입니다.','warn',4000);
     }
-    toast('이미 가입 신청된 계정입니다. 승인 대기 중입니다.','warn',4000);
-    document.getElementById('modal-glink').style.display='none'; return;
+    return;
   }
-  // 신규 pending 계정 생성
+
+  /* ② 이름+연락처 일치 → 기존 계정에 Google/카카오 연동 */
+  const matched = localList.find(m =>
+    m.name === name && fmtPhone(m.phone||'') === fmtPhone(phone));
+  if(matched){
+    const _st = matched.status||'approved';
+    // 서버에 연동 정보 업데이트
+    const patch = isKakao ? { kakao_id: window._glKakaoId } : { google_email: window._glEmail };
+    try {
+      await sbReq('aj_members','PATCH', patch, `?emp_no=eq.${encodeURIComponent(matched.emp_no)}`);
+      if(isKakao) matched.kakao_id = window._glKakaoId;
+      else matched.google_email = window._glEmail;
+      _saveAjMembers(localList);
+    } catch(e){ console.warn('[doGoogleAjRegister] PATCH 실패:', e?.message); }
+    document.getElementById('modal-glink').style.display='none';
+    if(_st==='approved'){
+      DB.s(K.AJ_MEMBER, _safeAjMember(matched));
+      S={ role:'aj', name:matched.name, phone:matched.phone||'', ajType:matched.aj_type||'관리자',
+          company:'AJ네트웍스', siteId:'all', siteName:'전체 현장', loginAt:Date.now(), empNo:matched.emp_no,
+          memberId: matched.record_id||matched.emp_no||'' };
+      DB.s(K.SESSION, S); DB.s('auto_login', true);
+      toast(`${matched.name}님 계정 연동 완료!`,'ok'); enterApp();
+    } else {
+      toast('가입 승인 대기 중입니다. AJ 관리자에게 문의하세요.','warn',4000);
+    }
+    return;
+  }
+
+  /* ③ 신규 pending 계정 생성 */
   const empNo = 'G' + Date.now().toString(36).toUpperCase();
-  const member = { emp_no:empNo, name, phone, pw_hash:'GOOGLE_AUTH', aj_type:ajType,
-    google_email:window._glEmail, status:'pending', created_at:new Date().toISOString() };
+  const member = {
+    emp_no: empNo, name, phone, pw_hash:'GOOGLE_AUTH', aj_type: ajType,
+    google_email: isKakao ? '' : window._glEmail,
+    kakao_id: window._glKakaoId || '',
+    status: 'pending', created_at: new Date().toISOString()
+  };
   localList.push(member);
   _saveAjMembers(localList);
   document.getElementById('modal-glink').style.display='none';
-  // Supabase 저장 (await — 실패 시 사용자에게 피드백)
   try {
     await sbBatchUpsert('aj_members', [member]);
     toast('가입 신청 완료! AJ 관리자 승인 후 로그인 가능합니다 ✓','ok',4000);
   } catch(e) {
-    console.error('[Google Register] SB 저장 실패:', e?.message);
+    console.error('[Google/Kakao Register] SB 저장 실패:', e?.message);
     toast(`가입 신청 완료(로컬 저장). 단, 서버 저장 실패: ${e?.message||'네트워크 오류'}`, 'warn', 5000);
   }
 }
