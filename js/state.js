@@ -125,9 +125,8 @@ async function getTodayLogs() {
 async function getLogsByRange(from, to, siteId=null, limit=200) {
   const sbUrl = DB.g(K.SB_URL,'');
   if(sbUrl){
-    // Supabase 서버사이드 쿼리 — select=* 대신 필요 컬럼만 지정 (payload 절감)
-    const LOG_COLS = 'record_id,id,date,site_id,company,floor,location_detail,equip,recorder,team,project,status,start_time,end_time,used_hours,meter_start,meter_end,off_reason,created_at';
-    let q = `?select=${LOG_COLS}&date=gte.${from}&date=lte.${to}&order=created_at.desc&limit=${limit}`;
+    // Supabase 서버사이드 쿼리 — select=* 사용 (컬럼 추가 시에도 안전)
+    let q = `?select=*&date=gte.${from}&date=lte.${to}&order=created_at.desc&limit=${limit}`;
     if(siteId) q += `&site_id=eq.${siteId}`;
     try {
       const rows = await sbReq('logs','GET',null,q);
@@ -400,9 +399,9 @@ async function _fetchFromSB(){
     const sinceStr=since.toISOString();
     const asSince=new Date(); asSince.setDate(asSince.getDate()-90);
     const asSinceStr=asSince.toISOString();
-    // select=* 대신 필요한 컬럼만 지정 → payload 30~50% 절감
-    const TR_COLS = 'record_id,id,date,type,site_id,site_name,company,equip_specs,aj_equip,reporter_name,reporter_phone,manager_name,manager_phone,manager_location,note,status,messages,dispatch,created_at,updated_at';
-    const AS_COLS = 'record_id,id,date,site_id,site_name,company,equip,location,fault_type,description,reporter_name,reporter_phone,status,tech_name,tech_phone,resolved_at,resolve_note,requested_at,material_at,comments,worker_name,worker_phone,photo_data,created_at,updated_at';
+    // select=* 대신 필요한 컬럼만 지정 → payload 절감 (DB에 없는 컬럼 제외)
+    const TR_COLS = 'record_id,date,type,site_id,site_name,company,equip_specs,aj_equip,reporter_name,reporter_phone,manager_name,manager_phone,manager_location,note,status,messages,created_at';
+    const AS_COLS = 'record_id,date,site_id,site_name,company,equip,location,fault_type,description,reporter_name,reporter_phone,status,tech_name,tech_phone,resolved_at,resolve_note,requested_at,material_at,created_at';
 
     // 컬럼 오류 시 select=* fallback 헬퍼
     const _sbGetWithFallback = async (table, q, fallbackQ) => {

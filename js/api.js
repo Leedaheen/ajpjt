@@ -47,7 +47,8 @@ async function sbReq(table, method='GET', data=null, query=''){
         try { pgrst = JSON.parse(err); } catch(_){}
         if(pgrst?.code){
           const _pgrMsg = {
-            'PGRST204': '테이블에 해당 컬럼이 없습니다. Supabase 테이블에 누락된 컬럼을 추가해주세요.',
+            // PGRST204: sbBatchUpsert가 컬럼 스트리핑 후 재시도 — 여기서 토스트 없이 원본 메시지 throw
+            'PGRST204': null,
             'PGRST200': '테이블 또는 관계를 찾을 수 없습니다. 테이블명을 확인해주세요.',
             'PGRST116': '조회 결과가 없거나 여러 행이 반환됐습니다.',
             'PGRST301': '인증 오류입니다. API 키를 확인해주세요.',
@@ -128,7 +129,12 @@ async function sbBatchUpsert(table, rows, conflictCol=''){
         );
         if(_isColErr){
           console.warn('[SB] 컬럼 불일치 재시도:', e.message);
-          const m = e.message.match(/'([^']+)' column/) || e.message.match(/column "([^"]+)"/);
+          // PostgREST 컬럼 에러 형식 (다양한 버전 대응):
+          // "Column 'colname' of relation ..." (PGRST204)
+          // "'colname' column ..."  / "column "colname" ..."
+          const m = e.message.match(/[Cc]olumn '([^']+)'/) ||
+                    e.message.match(/'([^']+)' column/) ||
+                    e.message.match(/column "([^"]+)"/);
           if(m){
             const badCol = m[1];
             batch = batch.map(r => { const c={...r}; delete c[badCol]; return c; });
@@ -309,9 +315,8 @@ async function _syncToSupabase(){
         note:             t.note||'',
         status:           t.status || (t.cancelled?'취소':(t.done?'완료':'대기')),
         messages:         JSON.stringify(t.ajMsgs||[]),
-        dispatch:         t.dispatch||'',
+        // dispatch, updated_at: DB 컬럼 미존재 — SQL 마이그레이션 후 자동 반영
         created_at:       t.createdAt ? new Date(t.createdAt).toISOString() : new Date().toISOString(),
-        updated_at:       t.updatedAt ? new Date(t.updatedAt).toISOString() : new Date().toISOString(),
       }));
       await sbBatchUpsert('transit', rows, 'record_id');
       await IDB.markSynced('transit', unsyncTr.map(t=>t.id)).catch(()=>{});
@@ -341,7 +346,7 @@ async function _syncToSupabase(){
         material_at:   a.materialAt ? new Date(a.materialAt).toISOString() : null,
         requested_at:  a.requestedAt ? new Date(a.requestedAt).toISOString() : null,
         created_at:    a.createdAt ? new Date(a.createdAt).toISOString() : new Date().toISOString(),
-        updated_at:    a.updatedAt  ? new Date(a.updatedAt).toISOString()  : new Date(a.createdAt||Date.now()).toISOString(),
+        // updated_at: DB 컬럼 미존재 — SQL 마이그레이션 후 자동 반영
         ...(a.photoThumb ? { photo_data: a.photoThumb } : {}),
       }));
       await sbBatchUpsert('as_requests', rows, 'record_id');
@@ -381,15 +386,13 @@ async function _syncToSupabase(){
     const rows = unsyncEq.map(e=>({
       record_id:  e.id||'',
       equip_no:   e.equipNo||'',
-      serial_no:  e.serialNo||'',
+      // serial_no, location, project: DB 컬럼 미존재 — SQL 마이그레이션 후 자동 반영
       site_id:    e.siteId||'',
       site_name:  siteMap[e.siteId]||e.siteId||'',
       company:    e.company||'',
       spec:       e.spec||'',
       model:      e.model||'',
       transit_id: e.transitId||'',
-      location:   e.location||'',
-      project:    e.project||'',
       status:     e.status||'active',
       in_date:    e.inDate||'',
       out_date:   e.outDate||null,
@@ -682,11 +685,17 @@ async function _pullRecentFromSupabase(){
     ? new Date(Date.now() - 90*24*60*60*1000).toISOString()
     : new Date(new Date(lastSync).getTime() - 60000).toISOString();
 
-  // transit pull
-  const trRows = await sbReq('transit','GET',null,
+  // transit pull — updated_at 없으면 created_at으로 폴백
+  let trRows = await sbReq('transit','GET',null,
     `?updated_at=gte.${encodeURIComponent(since)}&order=updated_at.desc&limit=500`
-  ).catch(()=>[]);
-  if(Array.isArray(trRows) && trRows.length){
+  ).catch(()=>null);
+  if(trRows === null){
+    trRows = await sbReq('transit','GET',null,
+      `?created_at=gte.${encodeURIComponent(since)}&order=created_at.desc&limit=500`
+    ).catch(()=>[]);
+  }
+  if(!Array.isArray(trRows)) trRows = [];
+  if(trRows.length){
     const localTr = getTransit();
     let changed = false;
     for(const sr of trRows){
@@ -734,11 +743,17 @@ async function _pullRecentFromSupabase(){
     if(changed){ await saveTransit(localTr); _cache.transit=null; _cache.transitBySite=null; }
   }
 
-  // AS pull (기존 로직 유지 + fullPull 추가)
-  const asRows = await sbReq('as_requests','GET',null,
+  // AS pull — updated_at 없으면 created_at으로 폴백
+  let asRows = await sbReq('as_requests','GET',null,
     `?updated_at=gte.${encodeURIComponent(since)}&order=updated_at.desc&limit=200`
-  ).catch(()=>[]);
-  if(Array.isArray(asRows) && asRows.length){
+  ).catch(()=>null);
+  if(asRows === null){
+    asRows = await sbReq('as_requests','GET',null,
+      `?created_at=gte.${encodeURIComponent(since)}&order=created_at.desc&limit=200`
+    ).catch(()=>[]);
+  }
+  if(!Array.isArray(asRows)) asRows = [];
+  if(asRows.length){
     const localAs = getAsReqs();
     let changed = false;
     for(const sr of asRows){
@@ -913,17 +928,17 @@ function _initRealtime(){
         if(msg.event==='postgres_changes' && msg.payload?.data){
           const tbl = msg.payload.data.table;
           console.log('[Realtime] 변경 감지:', tbl);
-          // 300ms 디바운스 — 같은 테이블 연속 이벤트 중복 fetch 방지
+          // 1500ms 디바운스 — 연속 이벤트 중복 fetch 및 화면 깜빡임 방지
           _rtDebounced(tbl, ()=>{
             // notifications/members: 알림·가입신청만 조용히 fetch
             if(tbl==='notifications'||tbl==='members'){ _fetchFromSB().catch(()=>{}); return; }
-            _fetchFromSB().catch(()=>{}).then(changed=>{
-              if(!changed) return;
+            _fetchFromSB().catch(()=>null).then(changed=>{
+              if(!changed) return; // 변경 없으면 렌더 건너뜀 (깜빡임 방지)
               if(tbl==='transit'||tbl==='equipment') { renderTransit?.(); }
               else if(tbl==='as_requests') { renderASPage?.(); updateASBadge?.(); }
               else if(tbl==='logs') { _renderHomeAsync?.(); }
             });
-          });
+          }, 1500);
         }
       }catch(_){}
     };
