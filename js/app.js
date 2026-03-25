@@ -2227,27 +2227,29 @@ function goTab(pgId){
 
   if(pgId==='pg-home'){
     renderHome(); // 로컬 데이터로 즉시 렌더
-    _fetchFromSB().then(()=>{ if(curPg==='pg-home') renderHome(); }).catch(()=>{});
+    // 서버 데이터가 실제로 변경된 경우에만 재렌더 (깜빡임 방지)
+    _fetchFromSB().then(changed=>{ if(changed && curPg==='pg-home') renderHome(); }).catch(()=>{});
   }
   if(pgId==='pg-ops'){
     const _oc=document.getElementById('ops-log-panel');
     initOpsPanel(curOpsTab);
     if(curOpsTab==='log' && _oc) _oc.innerHTML=_spin();
-    _fetchFromSB().then(()=>{ if(curPg==='pg-ops') initOpsPanel(curOpsTab); }).catch(()=>{ if(curPg==='pg-ops') initOpsPanel(curOpsTab); });
+    _fetchFromSB().then(changed=>{ if(curPg==='pg-ops') initOpsPanel(curOpsTab); }).catch(()=>{ if(curPg==='pg-ops') initOpsPanel(curOpsTab); });
   }
   if(pgId==='pg-transit'){
     const _tc=document.getElementById('transit-content');
     if(_tc) _tc.innerHTML=_spin('var(--blue)');
-    _fetchFromSB().then(()=>renderTransit()).catch(()=>renderTransit());
+    // 항상 렌더 (스피너 제거), 서버 변경 시 업데이트
+    _fetchFromSB().then(changed=>{ renderTransit(); }).catch(()=>renderTransit());
   }
   if(pgId==='pg-as'){
     const _ac=document.getElementById('as-content');
     if(_ac) _ac.innerHTML=_spin('var(--red)');
-    _fetchFromSB().then(()=>{ renderASPage(); updateASBadge(); }).catch(()=>{ renderASPage(); updateASBadge(); });
+    _fetchFromSB().then(changed=>{ renderASPage(); updateASBadge(); }).catch(()=>{ renderASPage(); updateASBadge(); });
   }
   if(pgId==='pg-admin'){
     renderAdmin();
-    _fetchFromSB().then(()=>{ if(curPg==='pg-admin') renderAdmin(); }).catch(()=>{});
+    _fetchFromSB().then(changed=>{ if(changed && curPg==='pg-admin') renderAdmin(); }).catch(()=>{});
   }
 }
 
