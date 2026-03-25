@@ -480,7 +480,7 @@ async function submitStart(){
   btn.classList.add('loading'); btn.disabled=true;
   const team = document.getElementById('f-team')?.value.trim() || S.team || '';
   const entry={
-    id:`${S.siteId}-${date}-${S.company}-${equip}-${Date.now().toString(36)}`,
+    id:`${S.siteId}-${date}-${S.company}-${equip}-${(typeof crypto!=='undefined'&&crypto.randomUUID?crypto.randomUUID().replace(/-/g,'').slice(0,12):Date.now().toString(36)+Math.random().toString(36).slice(2,7))}`,
     siteId:S.siteId, date, company:S.company,
     floor:floors, locationDetail, equip, name:S.name, project, team,
     meterStart:+document.getElementById('f-meter-start').value||null,
@@ -547,6 +547,10 @@ async function submitEnd(){
   if(!entry){ toast('세션을 찾을 수 없습니다','err'); return; }
   const meterEndVal = document.getElementById('f-meter-end').value.trim();
   if(!meterEndVal){ toast('계기판 종료 시간을 입력하세요','err'); document.getElementById('f-meter-end')?.focus(); return; }
+  // C5: 미터기 역행 방지 — 종료값이 시작값보다 작으면 입력 오류
+  if(entry.meterStart!=null && +meterEndVal < entry.meterStart){
+    toast(`계기판 종료값(${meterEndVal})이 시작값(${entry.meterStart})보다 작습니다`,'err'); return;
+  }
   const btn=document.getElementById('btn-end');
   const endTime=document.getElementById('f-endtime').value;
   // C4: 종료시간 > 시작시간 검증 (meter 값이 없을 때만 시간 기준 체크)
@@ -608,7 +612,7 @@ async function submitIdle(){
   // 여러 장비 처리 (쉼표 구분 or "전체")
   const equipList = equip==='전체' ? ['전체'] : equip.split(',').map(e=>e.trim()).filter(Boolean);
   const entries = equipList.map(eq=>({
-    id:`idle-${S.siteId}-${date}-${S.company}-${eq}-${Date.now().toString(36)}`,
+    id:`idle-${S.siteId}-${date}-${S.company}-${eq}-${(typeof crypto!=='undefined'&&crypto.randomUUID?crypto.randomUUID().replace(/-/g,'').slice(0,12):Date.now().toString(36)+Math.random().toString(36).slice(2,7))}`,
     type:'idle', siteId:S.siteId, date, company:S.company,
     equip:eq, name:S.name, reason, note, status:'idle', ts:Date.now(), synced:false,
   }));

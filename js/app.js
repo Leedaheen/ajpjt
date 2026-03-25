@@ -53,9 +53,18 @@ let _tt; function toast(msg,type='',ms=2600){
     _tt=setTimeout(()=>el.classList.remove('on'),ms);
   }
 }
+let _spinnerTimer = null;
 function spinner(on,txt='처리 중...'){
   document.getElementById('sp-ov').classList.toggle('on',on);
   document.getElementById('sp-txt').textContent=txt;
+  clearTimeout(_spinnerTimer);
+  if(on){
+    // 30초 강제 해제 — 네트워크 hang 등으로 스피너가 영구 표시되는 현상 방지
+    _spinnerTimer = setTimeout(()=>{
+      document.getElementById('sp-ov').classList.remove('on');
+      console.warn('[spinner] 30s 강제 해제');
+    }, 30000);
+  }
 }
 function openSheet(id){ document.getElementById(id).classList.add('on'); onSheetOpen(id); setTimeout(_setupAllSheetSwipe, 50); }
 function closeSheet(id){ document.getElementById(id).classList.remove('on'); }
@@ -360,6 +369,33 @@ function _scheduleHourlyHomeRefresh(){
 }
 
 /* ── 가동현황 8시간 미종료 알림 ── */
+/* ── 6시간 이상 미종료 로그 자동 강제종료 ──
+   비정상 앱 종료/네트워크 단절로 status='start'가 유지되는 로그를
+   다음 앱 진입 시 자동으로 status='err-auto-closed'로 처리.
+   duration은 ts 기준으로 산정, 사용자에게 toast 안내.
+──────────────────────────────────────────── */
+async function _autoCloseStuckLogs(){
+  const THRESHOLD_MS = 6 * 3600000; // 6시간
+  const now = Date.now();
+  let allLogs;
+  try { allLogs = await IDB.getAll('logs'); } catch(_){ allLogs = getLogs(); }
+  const stuck = (allLogs||[]).filter(l => l.status==='start' && l.ts && (now - l.ts) >= THRESHOLD_MS);
+  if(!stuck.length) return;
+  for(const l of stuck){
+    const durH = +((now - l.ts)/3600000).toFixed(2);
+    l.status = 'err-auto-closed';
+    l.duration = durH;
+    l.endTime = nowHM();
+    l.endTs = now;
+    l.synced = false;
+    try{ await saveLog(l); }catch(_){}
+  }
+  const cnt = stuck.length;
+  console.warn(`[autoClose] ${cnt}건 6h+ 미종료 로그 자동 처리됨`);
+  toast(`⚠ ${cnt}건의 장시간 미종료 기록이 자동 처리되었습니다`, 'warn', 4000);
+  scheduleRetrySync();
+}
+
 function _check8hUsageAlert(){
   const THRESHOLD = 8 * 3600000; // 8시간(ms)
   const now = Date.now();
@@ -1841,6 +1877,8 @@ function enterApp(){
   }
   _purgeSeedLogs(); // 기존 더미 데이터 일회성 정리
   _purgeOldLogs().catch(()=>{}); // 180일 초과 로그 비동기 정리
+  // 6시간 이상 미종료 로그 자동 처리 (비정상 종료 방지)
+  setTimeout(_autoCloseStuckLogs, 3000);
   renderHome();
   // 로그인 직후 동기화 상태 초기값 설정
   const _dot = document.getElementById('sdot');
