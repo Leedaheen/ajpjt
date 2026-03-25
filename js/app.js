@@ -293,9 +293,9 @@ async function sha256(str){
 function _openServerSetup(){
   const modal = document.getElementById('modal-server-setup');
   if(!modal) return;
-  document.getElementById('setup-sb-url').value  = DB.g(K.SB_URL,'') || '';
-  document.getElementById('setup-sb-key').value  = DB.g(K.SB_KEY,'') || '';
-  document.getElementById('setup-kakao-key').value = DB.g('kakao_js_key','') || '';
+  document.getElementById('setup-sb-url').value  = DB.g(K.SB_URL,'') || (typeof SB_DEFAULT_URL!=='undefined'?SB_DEFAULT_URL:'') || '';
+  document.getElementById('setup-sb-key').value  = DB.g(K.SB_KEY,'') || (typeof SB_DEFAULT_KEY!=='undefined'?SB_DEFAULT_KEY:'') || '';
+  document.getElementById('setup-kakao-key').value = DB.g('kakao_js_key','') || (typeof KAKAO_DEFAULT_JS_KEY!=='undefined'?KAKAO_DEFAULT_JS_KEY:'') || '';
   modal.style.display = 'flex';
 }
 function _saveServerSetup(){

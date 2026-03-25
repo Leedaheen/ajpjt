@@ -6,8 +6,9 @@ const _pendingGETs = new Map();
 const _SB_RETRY_DELAYS = [5000, 15000, 30000];
 
 async function sbReq(table, method='GET', data=null, query=''){
-  const url = DB.g(K.SB_URL,'');
-  const key  = DB.g(K.SB_KEY,'');
+  // localStorage 우선, 없으면 서버 주입 기본값(window._SRV) 사용 → 캐시 삭제 후 자동 복구
+  const url = DB.g(K.SB_URL,'') || SB_DEFAULT_URL;
+  const key  = DB.g(K.SB_KEY,'') || SB_DEFAULT_KEY;
   if(!url || !key) throw new Error('NO_SB_URL');
 
   const endpoint = `${url}/rest/v1/${table}${query}`;

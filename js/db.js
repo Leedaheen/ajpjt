@@ -37,14 +37,14 @@ document.addEventListener('input', function(e){
    DATA LAYER
 ═══════════════════════════════════════════ */
 /* ── Supabase / OAuth 연결 정보 ──────────────────────────────
-   ⚠ 보안 정책: 키 값은 소스에 하드코딩하지 않습니다.
-     관리 탭 → 서버 설정 화면에서 직접 입력하세요.
-     (localStorage에 저장되며, Supabase 콘솔에서 key rotate 후 재입력 필요)
+   서버(Render)에서 환경변수 SB_URL / SB_KEY / KAKAO_JS_KEY 설정 시
+   window._SRV 로 주입되어 캐시 삭제해도 자동 복구됩니다.
+   직접 입력 시: 관리 탭 → 서버 설정 (localStorage 우선 적용)
 ─────────────────────────────────────────────────────────── */
-const SB_DEFAULT_URL = '';
+const SB_DEFAULT_URL = (typeof window !== 'undefined' && window._SRV?.u) || '';
 const GOOGLE_DEFAULT_CLIENT_ID = '1075257837095-jrdnlfql4s4emh4mmhnjcvhomon6f3kk.apps.googleusercontent.com';
-const KAKAO_DEFAULT_JS_KEY = '';  // 관리 탭 설정에서 입력 (카카오 콘솔 도메인 제한 필수)
-const SB_DEFAULT_KEY = '';
+const KAKAO_DEFAULT_JS_KEY = (typeof window !== 'undefined' && window._SRV?.kk) || '';
+const SB_DEFAULT_KEY = (typeof window !== 'undefined' && window._SRV?.k) || '';
 
 const K = {
   SITES:   'sites_v3',
