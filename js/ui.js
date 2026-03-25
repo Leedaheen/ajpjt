@@ -1530,8 +1530,11 @@ function _showASCompletePopup(id){
   pop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:3000;display:flex;align-items:flex-end;justify-content:center;padding-bottom:env(safe-area-inset-bottom,0px)';
   pop.innerHTML = `
     <div style="width:100%;max-width:500px;background:var(--bg1);border-radius:16px 16px 0 0;padding:20px 16px 24px;box-sizing:border-box">
-      <div style="font-size:14px;font-weight:800;margin-bottom:12px;color:var(--tx)">✅ 처리완료</div>
-      <div style="display:flex;gap:8px">
+      <div style="font-size:14px;font-weight:800;margin-bottom:4px;color:var(--tx)">✅ 처리완료</div>
+      <div style="font-size:11px;color:var(--tx3);margin-bottom:14px">처리 내용을 입력하면 댓글로 자동 등록됩니다 (선택)</div>
+      <textarea id="_as-note-input" rows="4" placeholder="처리 내용 입력 (댓글로 자동 등록)&#10;예) 배터리 교체 완료, 모터 교체 후 정상 작동 확인 등"
+        style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:13px;background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);color:var(--tx);resize:none;font-family:inherit;line-height:1.5"></textarea>
+      <div style="display:flex;gap:8px;margin-top:12px">
         <button onclick="document.getElementById('_as-complete-pop').remove()"
           style="flex:1;padding:11px;font-size:13px;font-weight:700;background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);color:var(--tx2);cursor:pointer">취소</button>
         <button id="_as-complete-confirm"
@@ -1539,8 +1542,9 @@ function _showASCompletePopup(id){
       </div>
     </div>`;
   pop.querySelector('#_as-complete-confirm').addEventListener('click', ()=>{
+    const note = pop.querySelector('#_as-note-input').value.trim();
     pop.remove();
-    updateASStatus(id, '처리완료');
+    updateASStatus(id, '처리완료', note);
   });
   pop.addEventListener('click', e=>{ if(e.target===pop) pop.remove(); });
   document.body.appendChild(pop);
@@ -1570,7 +1574,10 @@ function updateASStatus(id, status, resolvedNote){
   if(status==='처리완료'){
     r.resolvedAt = Date.now();
     r.resolvedStatus = '처리완료';
-    if(resolvedNote) r.resolvedNote = resolvedNote;
+    if(resolvedNote){
+      if(!Array.isArray(r.comments)) r.comments = [];
+      r.comments.push({text:'[처리완료] '+resolvedNote, author:S?.name||r.techName||'AJ', company:S?.company||'AJ네트웍스', role:S?.role||'aj', ts:Date.now()});
+    }
     // 담당기사 미입력 시 현재 로그인 AJ 멤버 이름으로 자동 설정
     if(!r.techName && S?.name) r.techName = S.name;
     addNotif({icon:'', title:`AS처리완료: ${r.equip}`, desc:`${r.company} — ${r.techName||'기사'}님 처리 완료`});
@@ -5075,8 +5082,9 @@ function _renderEquipMasterSheet(sh) {
       <div style="font-size:11px;font-weight:800;color:var(--blue);margin-bottom:4px;padding:4px 8px;background:rgba(59,130,246,.08);border-radius:6px">${co} (${list.length}대)</div>
       ${list.map(e => {
         const _eProjs = getSites().find(s=>s.id===e.siteId)?.projects||[];
-        const _projEl = _eProjs.length
-          ? `<select style="font-size:9px;padding:2px 5px;max-width:72px;border-radius:4px;border:1px solid var(--br);background:var(--bg2);color:${e.project?'#14b8a6':'var(--tx3)'}" onchange="_equipSetProject('${e.id}',this.value)"><option value="">구분없음</option>${_eProjs.map(p=>`<option value="${p}"${e.project===p?' selected':''}>${p}</option>`).join('')}</select>`
+        const _allProjs = (e.project && !_eProjs.includes(e.project)) ? [..._eProjs, e.project] : _eProjs;
+        const _projEl = _allProjs.length
+          ? `<select style="font-size:9px;padding:2px 5px;max-width:72px;border-radius:4px;border:1px solid var(--br);background:var(--bg2);color:${e.project?'#14b8a6':'var(--tx3)'}" onchange="_equipSetProject('${e.id}',this.value)"><option value="">구분없음</option>${_allProjs.map(p=>`<option value="${p}"${e.project===p?' selected':''}>${p}</option>`).join('')}</select>`
           : (e.project?`<span style="font-size:9px;padding:2px 5px;background:rgba(20,184,166,.1);border-radius:4px;color:#14b8a6">${e.project}</span>`:'');
         const _pendingBadge = e.pendingApproval
           ? `<span style="font-size:9px;padding:1px 5px;border-radius:4px;background:rgba(245,158,11,.15);color:#f59e0b;border:1px solid rgba(245,158,11,.3);margin-left:4px">⏳승인대기</span>`
