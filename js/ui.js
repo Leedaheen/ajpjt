@@ -1635,6 +1635,24 @@ function updateASBadge(){
 ═══════════════════════════════════════════ */
 // ── 제원 목록 ──
 const TR_SPECS = ['6M','8M','10M','12M','14M','16M','18M','16M굴절','기타'];
+const EQUIP_MODELS = {
+  '6M':     ['GS1330'],
+  '8M':     ['GS1930','OPTIMUM8'],
+  '10M':    ['GS2632','GS2646'],
+  '12M':    ['GS3246','MS10.4'],
+  '14M':    ['GS-4047'],
+  '16M':    ['GS-4655'],
+  '18M':    ['GS-5069'],
+  '16M굴절':['SIGMA16','Z45_25J','E450AJ'],
+  '기타':   [],
+};
+function _equipUpdateModelOptions(spec){
+  const sel = document.getElementById('eq-add-model');
+  if(!sel) return;
+  const models = EQUIP_MODELS[spec] || [];
+  sel.innerHTML = '<option value="">모델명 (선택)</option>' + models.map(m=>`<option value="${m}">${m}</option>`).join('');
+  sel.style.color = 'var(--tx3)';
+}
 
 // 영업일 기준 다음 날 (주말 건너뜀)
 function nextBizDay(dateStr){
@@ -5119,10 +5137,10 @@ function _renderEquipMasterSheet(sh) {
 
       <!-- 일괄 CSV 등록 -->
       <details style="margin-bottom:12px">
-        <summary style="font-size:11px;font-weight:700;color:var(--tx3);cursor:pointer;padding:6px 8px;background:var(--bg2);border-radius:6px;user-select:none">📋 CSV 일괄 등록 (현장명,프로젝트명,업체명,장비제원,장비번호,반입일 형식)</summary>
+        <summary style="font-size:11px;font-weight:700;color:var(--tx3);cursor:pointer;padding:6px 8px;background:var(--bg2);border-radius:6px;user-select:none">📋 CSV 일괄 등록 (현장명,프로젝트명,업체명,장비제원,모델명,장비번호,반입일 형식)</summary>
         <div style="padding:8px 4px 4px">
-          <div style="font-size:10px;color:var(--tx3);margin-bottom:6px">한 줄에 하나씩: <code style="background:rgba(59,130,246,.1);padding:1px 5px;border-radius:3px">현장명,프로젝트명,업체명,장비제원,장비번호,반입일</code> 형식<br>예) P4복합동,Ph2,AJ네트웍스,10M,GF123,2026-03-01</div>
-          <textarea id="eq-csv-input" rows="5" placeholder="P4복합동,Ph2,AJ네트웍스,10M,GF123,2026-03-01" style="width:100%;padding:8px;font-size:12px;font-family:monospace;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx);resize:vertical;box-sizing:border-box"></textarea>
+          <div style="font-size:10px;color:var(--tx3);margin-bottom:6px">한 줄에 하나씩: <code style="background:rgba(59,130,246,.1);padding:1px 5px;border-radius:3px">현장명,프로젝트명,업체명,장비제원,모델명,장비번호,반입일</code> 형식<br>예) P4복합동,Ph2,AJ네트웍스,10M,GS2636,GF123,2026-03-01</div>
+          <textarea id="eq-csv-input" rows="5" placeholder="P4복합동,Ph2,AJ네트웍스,10M,GS2636,GF123,2026-03-01" style="width:100%;padding:8px;font-size:12px;font-family:monospace;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx);resize:vertical;box-sizing:border-box"></textarea>
           <button onclick="_equipMasterBulkAdd()" style="width:100%;margin-top:6px;padding:7px;font-size:12px;font-weight:700;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);border-radius:6px;color:#60a5fa;cursor:pointer">일괄 등록</button>
         </div>
       </details>
@@ -5138,11 +5156,14 @@ function _renderEquipMasterSheet(sh) {
             <input type="text" id="eq-add-no" placeholder="장비번호 * (예: GK228)" style="text-transform:uppercase;padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)">
             <input type="text" id="eq-add-co" placeholder="업체명 *" value="${esc(S?.company||'')}" style="padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)">
           </div>
-          <div style="margin-bottom:6px">
-            <input type="text" id="eq-add-serial" placeholder="시리얼번호 (선택)" style="width:100%;padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx);box-sizing:border-box">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+            <input type="text" id="eq-add-serial" placeholder="시리얼번호 (선택)" style="padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)">
+            <select id="eq-add-model" style="padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx3)">
+              <option value="">모델명 (선택)</option>
+            </select>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
-            <select id="eq-add-spec" style="padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)">
+            <select id="eq-add-spec" onchange="_equipUpdateModelOptions(this.value)" style="padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)">
               <option value="">장비제원 선택 *</option>
               ${TR_SPECS.map(s=>`<option value="${s}">${s}</option>`).join('')}
             </select>
@@ -5239,12 +5260,20 @@ async function _equipMasterBulkAdd() {
   for (let li = 0; li < lines.length; li++) {
     const line = lines[li];
     const parts = line.split(/,|\t/).map(p => p.trim());
-    // 신규 형식: 현장명,프로젝트명,업체명,장비제원,장비번호,반입일
+    // 7열 신규: 현장명,프로젝트명,업체명,장비제원,모델명,장비번호,반입일
+    // 6열 구형식: 현장명,프로젝트명,업체명,장비제원,장비번호,반입일
     // 구형식1: 업체명,장비제원,장비번호,반입일[,프로젝트]
     // 구형식2: 업체명,장비번호
-    let company, spec, equipNo, inDate, project, effectiveSiteId, effectiveSiteName;
-    if (parts.length >= 5 && !/^\d{4}-/.test(parts[3]) && /^\d{4}-/.test(parts[5]||'x')) {
-      // 신규 형식: 현장명,프로젝트명,업체명,장비제원,장비번호,반입일
+    let company, spec, equipNo, inDate, project, model, effectiveSiteId, effectiveSiteName;
+    if (parts.length >= 7 && /^\d{4}-/.test(parts[6]||'')) {
+      // 7열 신규: 현장명,프로젝트명,업체명,장비제원,모델명,장비번호,반입일
+      const _csvSite = getSites().find(s=>s.name===parts[0]||s.id===parts[0]);
+      effectiveSiteId   = _csvSite?.id   || siteId;
+      effectiveSiteName = _csvSite?.name || siteName;
+      project = parts[1]; company = parts[2]; spec = parts[3]; model = parts[4];
+      equipNo = (parts[5]||'').toUpperCase(); inDate = parts[6] || today();
+    } else if (parts.length >= 5 && !/^\d{4}-/.test(parts[3]) && /^\d{4}-/.test(parts[5]||'x')) {
+      // 6열 구형식: 현장명,프로젝트명,업체명,장비제원,장비번호,반입일
       const _csvSite = getSites().find(s=>s.name===parts[0]||s.id===parts[0]);
       effectiveSiteId   = _csvSite?.id   || siteId;
       effectiveSiteName = _csvSite?.name || siteName;
@@ -5266,13 +5295,13 @@ async function _equipMasterBulkAdd() {
     if (exists) {
       if (exists.status !== 'active') {
         exists.status = 'active'; exists.inDate = inDate; exists.outDate = null;
-        if (spec) exists.spec = spec; if (project) exists.project = project;
+        if (spec) exists.spec = spec; if (project) exists.project = project; if (model) exists.model = model;
         exists.synced = false; added++;
       } else { duped++; }
     } else {
       arr.push({
         id: 'eq-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,5),
-        equipNo, siteId: effectiveSiteId, siteName: effectiveSiteName, company, spec, project,
+        equipNo, siteId: effectiveSiteId, siteName: effectiveSiteName, company, spec, model: model||'', project,
         specs: [], transitId: null, status: 'active', inDate, outDate: null, synced: false,
       });
       added++;
@@ -5296,6 +5325,7 @@ async function _equipMasterAdd() {
   const spec     = document.getElementById('eq-add-spec')?.value.trim();
   const inDate   = document.getElementById('eq-add-indate')?.value || today();
   const serialNo = document.getElementById('eq-add-serial')?.value.trim() || '';
+  const model    = document.getElementById('eq-add-model')?.value.trim() || '';
   const si       = document.getElementById('eq-add-site')?.value || (S?.siteId === 'all' ? '' : S?.siteId);
   const proj     = document.getElementById('eq-add-proj')?.value || '';
   if (!no)   { toast('장비번호를 입력하세요', 'err'); return; }
@@ -5311,6 +5341,7 @@ async function _equipMasterAdd() {
       exists.outDate = null;
       if (proj) exists.project = proj;
       if (serialNo) exists.serialNo = serialNo;
+      if (model) exists.model = model;
       exists.synced  = false;
       await saveEquipMaster(arr);
       toast(`${no} 재반입 처리됨`, 'ok');
@@ -5322,7 +5353,7 @@ async function _equipMasterAdd() {
     const _needsApproval = S?.role !== 'aj';
     arr.push({
       id: 'eq-' + Date.now().toString(36),
-      equipNo: no, serialNo, siteId: si,
+      equipNo: no, serialNo, model, siteId: si,
       siteName: getSites().find(s=>s.id===si)?.name || si,
       company: co, spec: spec, project: proj, specs: [], transitId: null,
       status: 'active', inDate: inDate, outDate: null, synced: false,
