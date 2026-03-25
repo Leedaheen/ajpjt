@@ -696,26 +696,26 @@ async function doGoogleProfileSubmit(){
     kakao_id: window._gpfKakaoId||member?.kakao_id||'',
     joinedAt: member?.joinedAt||Date.now(), synced:false
   };
-  // Supabase 서버 먼저 저장
+  // Supabase 서버 먼저 저장 — sbBatchUpsert로 교체하여 미존재 컬럼 자동 스트리핑
   try {
-    await sbReq('members','POST',[{
+    await sbBatchUpsert('members',[{
       record_id:record.id, name:record.name, company:record.company,
       site_id:record.siteId, site_name:record.siteName, phone:record.phone,
       title:record.title, team:record.team||'',
       google_email:email, kakao_id:record.kakao_id||'',
       status:record.status, role:record.role,
       joined_at:new Date(record.joinedAt).toISOString()
-    }],'?on_conflict=record_id');
+    }],'record_id');
     record.synced=true;
   } catch(e){
     const _em = e?.message||'';
-    // 23505: 이미 등록된 계정 (앱캐시 삭제 후 재가입 시도) → 정상 케이스, 그대로 진행
+    // 23505: 이미 등록된 계정 → 정상 케이스, 그대로 진행
     if(_em.includes('23505')){ record.synced=true; console.log('[doGoogleProfileSubmit] 기존 계정 — 로그인 계속'); }
     else {
-      console.warn('[doGoogleProfileSubmit] SB 저장 실패:',e);
-      if(_em==='NO_SB_URL') toast('서버 연결 정보가 없습니다. 관리자에게 문의하세요.','err',4000);
-      else toast(`가입 신청 실패: ${_em.slice(0,80)||'서버 오류'}`,'err',4000);
-      return;
+      console.warn('[doGoogleProfileSubmit] SB 저장 실패 (로컬 저장 후 로그인 계속):', _em);
+      // return 제거 — 서버 저장 실패해도 로컬 저장 후 로그인 계속 (네트워크 오류·컬럼 미존재 무관)
+      if(_em==='NO_SB_URL') toast('서버 미연결 — 로컬에 저장됩니다', 'warn', 3000);
+      else toast(`서버 저장 실패(로컬 임시 저장): ${_em.slice(0,60)||'네트워크 오류'}`, 'warn', 3500);
     }
   }
   // 로컬 저장
@@ -1725,15 +1725,15 @@ async function doLogin(role){
         team,joinedAt:Date.now(),synced:false};
       _techMbrs.push(_newTech);
       saveMembers(_techMbrs);
-      // 즉시 Supabase 저장 (fire-and-forget)
+      // 즉시 Supabase 저장 (fire-and-forget) — sbBatchUpsert로 미존재 컬럼 자동 처리
       const _sm=Object.fromEntries(getSites().map(s=>[s.id,s.name]));
-      sbReq('members','POST',[{
+      sbBatchUpsert('members',[{
         record_id:_newTech.id,name:_newTech.name,company:_newTech.company,
         site_id:_newTech.siteId,site_name:_sm[_newTech.siteId]||_newTech.siteId||'',
         phone:_newTech.phone,title:_newTech.title,role:'tech',status:'approved',google_email:'',
         team:_newTech.team||'',
         joined_at:new Date(_newTech.joinedAt).toISOString()
-      }],'?on_conflict=record_id').then(()=>{
+      }],'record_id').then(()=>{
         _newTech.synced=true; saveMembers(getMembers());
       }).catch(()=>{});
     }
@@ -1747,8 +1747,9 @@ async function doLogin(role){
     // 서버에서 먼저 조회 — 로컬 캐시는 fallback
     let existing=null;
     try {
+      // role 컬럼 미존재 시 PGRST204 방지 — 이름+회사+현장만으로 조회
       const rows=await sbReq('members','GET',null,
-        `?name=eq.${encodeURIComponent(name)}&company=eq.${encodeURIComponent(co)}&site_id=eq.${encodeURIComponent(site)}&role=neq.tech&limit=5`);
+        `?name=eq.${encodeURIComponent(name)}&company=eq.${encodeURIComponent(co)}&site_id=eq.${encodeURIComponent(site)}&limit=5`);
       if(Array.isArray(rows)&&rows.length){
         const r=rows[0];
         existing={id:r.record_id,name:r.name,company:r.company,siteId:r.site_id,
@@ -1776,27 +1777,28 @@ async function doLogin(role){
         name,company:co,siteId:site,siteName:getSites().find(s=>s.id===site)?.name||site,
         phone:subPhone,title:subTitle,role:'sub',status:'pending',google_email:'',
         joinedAt:Date.now(),synced:false};
-      // 서버 우선 저장 — 성공 후 로컬 캐시 갱신
+      // 서버 저장 — sbBatchUpsert로 미존재 컬럼 자동 스트리핑
+      const _sm=Object.fromEntries(getSites().map(s=>[s.id,s.name]));
+      const _all=getMembers(); _all.push(_newMbr); saveMembers(_all); // 로컬 먼저 저장
       try {
-        const _sm=Object.fromEntries(getSites().map(s=>[s.id,s.name]));
-        await sbReq('members','POST',[{
+        await sbBatchUpsert('members',[{
           record_id:_newMbr.id,name:_newMbr.name,company:_newMbr.company,
           site_id:_newMbr.siteId,site_name:_sm[_newMbr.siteId]||'',
           phone:_newMbr.phone,title:_newMbr.title,
           role:'sub',status:'pending',google_email:'',
           joined_at:new Date(_newMbr.joinedAt).toISOString()
-        }],'?on_conflict=record_id');
-        _newMbr.synced=true;
-        const _all=getMembers(); _all.push(_newMbr); saveMembers(_all);
-        addNotif({icon:'',title:`신규 관리자 가입신청: ${co}`,
-          desc:`${co} ${name}님이 가입을 신청했습니다. 승인이 필요합니다.`});
-        pushSBNotif({target_aj_type:'관리자', type:'signup_request', title:`신규 가입신청: ${co}`, body:`${co} ${name}님이 가입을 신청했습니다. 승인이 필요합니다.`, ref_id:_newMbr.id}).catch(()=>{});
-        toast('가입 신청 완료! AJ관리자 승인 후 로그인 가능합니다 ✓','ok',4000);
+        }],'record_id');
+        _newMbr.synced=true; saveMembers(getMembers());
       } catch(e){
         const _em=e?.message||'';
-        if(_em==='NO_SB_URL') toast('서버 연결 정보가 없습니다. 관리자에게 문의하세요.','err',4000);
-        else toast(`가입 신청 실패: ${_em.slice(0,80)||'서버 오류'}`,'err',4000);
+        console.warn('[sub 신규가입] SB 저장 실패 (로컬 저장됨):', _em);
+        if(_em==='NO_SB_URL') toast('서버 미연결 — 로컬 저장됩니다','warn',3000);
+        // 로컬 저장은 완료됐으므로 가입신청은 계속 진행
       }
+      addNotif({icon:'',title:`신규 관리자 가입신청: ${co}`,
+        desc:`${co} ${name}님이 가입을 신청했습니다. 승인이 필요합니다.`});
+      pushSBNotif({target_aj_type:'관리자', type:'signup_request', title:`신규 가입신청: ${co}`, body:`${co} ${name}님이 가입을 신청했습니다. 승인이 필요합니다.`, ref_id:_newMbr.id}).catch(()=>{});
+      toast('가입 신청 완료! AJ관리자 승인 후 로그인 가능합니다 ✓','ok',4000);
       return;
     }
     S={role:'sub',name,title:subTitle||existing?.title||'',phone:subPhone||existing?.phone||'',company:co,siteId:site,siteName:getSites().find(s=>s.id===site)?.name||site,loginAt:Date.now(),memberId:existing?.id||''};
