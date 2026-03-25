@@ -655,9 +655,19 @@ async function loadEquipFromSupabase() {
       outDate:   row.out_date || null,
       synced:    true,
     }));
-    await saveEquipMaster(arr);
+    // 장비번호+현장 기준 중복 제거 (SB에 중복 행 있을 때 최신 1건만 유지)
+    const _seenEq = new Map();
+    const deduped = [];
+    for (const e of arr) {
+      const key = `${e.equipNo}__${e.siteId}`;
+      if (!_seenEq.has(key)) { _seenEq.set(key, true); deduped.push(e); }
+      // 이미 있으면 skip (order=created_at.desc 이므로 첫 번째가 최신)
+    }
+    if (deduped.length < arr.length)
+      console.log(`[loadEquip] SB 중복 ${arr.length - deduped.length}건 제거`);
+    await saveEquipMaster(deduped);
     _cache.equipment = null; // 캐시 무효화
-    return arr.length;
+    return deduped.length;
   } catch(e) {
     console.warn('[loadEquip] 실패:', e);
   }

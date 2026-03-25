@@ -392,7 +392,26 @@ async function _syncToSupabase(){
   }
 
   // 5. EQUIPMENT MASTER (transit 업서트 완료 후 순차 처리)
-  const allEquip = getEquipMaster();
+  let allEquip = getEquipMaster();
+  // 장비번호+현장 기준 로컬 중복 제거 (active 우선, 동점이면 inDate 최신)
+  (function(){
+    const seen = new Map();
+    for (const e of allEquip) {
+      const key = `${e.equipNo}__${e.siteId}`;
+      if (!seen.has(key)) { seen.set(key, e); continue; }
+      const prev = seen.get(key);
+      const betterStatus = e.status === 'active' && prev.status !== 'active';
+      const sameStatus   = e.status === prev.status;
+      const newerDate    = sameStatus && (e.inDate||'') > (prev.inDate||'');
+      if (betterStatus || newerDate) seen.set(key, e);
+    }
+    const deduped = [...seen.values()];
+    if (deduped.length < allEquip.length) {
+      console.log(`[equip dedup] 로컬 중복 ${allEquip.length - deduped.length}건 제거`);
+      allEquip = deduped;
+      saveEquipMaster(deduped).catch(()=>{});
+    }
+  })();
   const unsyncEq = allEquip.filter(e => !e.synced);
   if(unsyncEq.length){
     const rows = unsyncEq.map(e=>({
