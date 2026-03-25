@@ -214,7 +214,18 @@ function onGoogleLibraryLoad(){
 html{height:100%;}
 body{height:100%;height:100dvh;background:var(--bg);color:var(--tx);font-family:'Noto Sans KR',sans-serif;overflow:hidden;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;}
 input,select,button,textarea{font-family:inherit;}
-::-webkit-scrollbar{width:0;height:0;}
+/* ── 스크롤바: 얇고 반투명, 스크롤 중에만 표시 후 페이드아웃 ── */
+::-webkit-scrollbar{width:3px;height:3px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:transparent;border-radius:99px;transition:background .6s ease;}
+/* 스크롤 중인 컨테이너에만 thumb 표시 */
+.is-scrolling::-webkit-scrollbar-thumb{background:rgba(148,163,184,.35);}
+.is-scrolling::-webkit-scrollbar-thumb:hover{background:rgba(148,163,184,.6);}
+/* 수평 칩은 스크롤바 완전 숨김 */
+.fchips::-webkit-scrollbar{height:0;}
+/* Firefox */
+*{scrollbar-width:thin;scrollbar-color:transparent transparent;}
+.is-scrolling{scrollbar-color:rgba(148,163,184,.35) transparent;}
 
 /* ═══════════════════════════════════════════
    KEYFRAMES
