@@ -4587,15 +4587,18 @@ async function _askAI(type, targetId='ai-query-result'){
   const rate7d  = logs7.length ? Math.round(logs7.filter(l=>l.status==='end').length/logs7.length*100) : 0;
   const hrs     = logDone.reduce((s,l)=>s+(+l.duration||0),0);
 
-  // 업체별 집계
+  // 업체별 집계 (최근 7일 기준 — 리포트 정확도)
   const coMap = {};
-  allLogs.forEach(l=>{ if(!l.company) return; if(!coMap[l.company]) coMap[l.company]={tot:0,done:0,hrs:0}; coMap[l.company].tot++; if(l.status==='end'){coMap[l.company].done++;coMap[l.company].hrs+=(+l.duration||0);} });
+  logs7.forEach(l=>{ if(!l.company) return; if(!coMap[l.company]) coMap[l.company]={tot:0,done:0,hrs:0}; coMap[l.company].tot++; if(l.status==='end'){coMap[l.company].done++;coMap[l.company].hrs+=(+l.duration||0);} });
   const coEntries = Object.entries(coMap).sort((a,b)=>b[1].done-a[1].done);
 
-  // 장비별 집계
+  // 장비별 집계 (최근 7일 기준)
   const eqMap = {};
-  allLogs.forEach(l=>{ if(!l.equip) return; if(!eqMap[l.equip]) eqMap[l.equip]={tot:0,done:0,hrs:0,company:l.company}; eqMap[l.equip].tot++; if(l.status==='end'){eqMap[l.equip].done++;eqMap[l.equip].hrs+=(+l.duration||0);} });
+  logs7.forEach(l=>{ if(!l.equip) return; if(!eqMap[l.equip]) eqMap[l.equip]={tot:0,done:0,hrs:0,company:l.company}; eqMap[l.equip].tot++; if(l.status==='end'){eqMap[l.equip].done++;eqMap[l.equip].hrs+=(+l.duration||0);} });
   const eqEntries = Object.entries(eqMap).sort((a,b)=>b[1].hrs-a[1].hrs);
+
+  // 7일 가동시간 (weekly 리포트 수치 일관성)
+  const hrs7 = logs7.filter(l=>l.status==='end').reduce((s,l)=>s+(+l.duration||0),0);
 
   // 반입반출
   const trIn  = allTr.filter(r=>r.type==='in');
@@ -4614,8 +4617,9 @@ async function _askAI(type, targetId='ai-query-result'){
       const wr=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=precipitation_sum,wind_speed_10m_max,weathercode&timezone=Asia%2FSeoul&past_days=7&forecast_days=1`);
       const wd=await wr.json();
       if(wd.daily){
-        const rainDays=wd.daily.precipitation_sum.filter(r=>r>1).length;
-        const windDays=wd.daily.wind_speed_10m_max.filter(w=>w>10).length;
+        // past_days=7 → index 0~6이 과거 7일, index 7이 오늘 — 오늘 제외하고 7일만 사용
+        const rainDays=wd.daily.precipitation_sum.slice(0,7).filter(r=>r>1).length;
+        const windDays=wd.daily.wind_speed_10m_max.slice(0,7).filter(w=>w>10).length;
         if(rainDays>2) weatherLines.push(`🌧 최근 7일 중 <b>${rainDays}일 우천</b> — 날씨 영향으로 가동 저조 가능성`);
         if(windDays>1) weatherLines.push(`💨 최근 7일 중 <b>${windDays}일 강풍</b>(10m/s↑) — 고소작업 제한 요인`);
       }
@@ -4629,7 +4633,7 @@ async function _askAI(type, targetId='ai-query-result'){
   if(type==='weekly'){
     lines.push(`📋 <b>${site}</b> 주간 운영 리포트`);
     lines.push(`• 최근 7일 가동률 <b>${rate7d}%</b> ${rate7d>=70?'— 목표 달성 ✓':'— 목표(70%) 미달 ⚠'}`);
-    lines.push(`• 누적 가동시간 <b>${fH2(hrs)}</b> · 총 기록 <b>${allLogs.length}건</b>`);
+    lines.push(`• 최근 7일 가동시간 <b>${fH2(hrs7)}</b> · 7일 기록 <b>${logs7.length}건</b>`);
     if(coEntries.length) lines.push(`• 최다 가동 업체: <b>${coEntries[0][0]}</b> ${coEntries[0][1].done}건 완료`);
     if(eqEntries.length) lines.push(`• 최다 사용 장비: <b>${eqEntries[0][0]}</b> ${fH2(eqEntries[0][1].hrs)}`);
     if(indoorLogs2.length>0||outdoorLogs2.length>0){
@@ -4714,9 +4718,8 @@ async function _askAI(type, targetId='ai-query-result'){
       if(!coEquipMap[e.company]) coEquipMap[e.company] = new Set();
       coEquipMap[e.company].add(e.equipNo);
     });
-    // 회사 목록: 장비마스터 보유사 + 등록된 협력사 (합집합)
-    const coNames = new Set([...Object.keys(coEquipMap)]);
-    for(const s of sites2) for(const co of getCos(s.id)) coNames.add(co.name);
+    // 회사 목록: 장비마스터에 active 장비 1대 이상 보유한 업체만
+    const coNames = new Set(Object.keys(coEquipMap));
     const now = new Date();
     const hhmm = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
     lines.push(`📊 <b>${site}</b> 금일 장비 사용현황 <span style="color:var(--tx3);font-size:10px">(${tdStr} ${hhmm} 기준)</span>`);
