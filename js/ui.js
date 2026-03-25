@@ -5419,7 +5419,8 @@ async function _equipExcelImport(input) {
         .filter(r => r.some(c => String(c).trim()))
         .map(r => r.slice(0, 7).map(c => {
           // 날짜: Excel 시리얼 숫자 → YYYY-MM-DD (epoch: 1899-12-30)
-          if (typeof c === 'number' && c > 40000) {
+          // 날짜 시리얼 범위: 40000(≈2009) ~ 80000(≈2118) — 장비번호 같은 큰 숫자 오인식 방지
+          if (typeof c === 'number' && c > 40000 && c < 80000) {
             const dt = new Date(Math.round((c - 25569) * 86400000));
             const y = dt.getUTCFullYear();
             const mo = String(dt.getUTCMonth()+1).padStart(2,'0');
