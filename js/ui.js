@@ -5359,10 +5359,13 @@ async function _equipExcelImport(input) {
       const csv = dataRows
         .filter(r => r.some(c => String(c).trim()))
         .map(r => r.slice(0, 7).map(c => {
-          // 날짜: Excel 숫자 → YYYY-MM-DD
+          // 날짜: Excel 시리얼 숫자 → YYYY-MM-DD (epoch: 1899-12-30)
           if (typeof c === 'number' && c > 40000) {
-            const d = XLSX.SSF.parse_date_code(c);
-            return `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`;
+            const dt = new Date(Math.round((c - 25569) * 86400000));
+            const y = dt.getUTCFullYear();
+            const mo = String(dt.getUTCMonth()+1).padStart(2,'0');
+            const d  = String(dt.getUTCDate()).padStart(2,'0');
+            return `${y}-${mo}-${d}`;
           }
           return String(c).trim();
         }).join(','))
