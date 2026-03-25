@@ -1433,10 +1433,7 @@ function _asCard(r, canAct){
     }
     if(parts.length){
       const materialTag = r.materialAt ? `<span style="font-size:9px;color:#f59e0b;margin-left:6px;background:rgba(245,158,11,.12);padding:1px 6px;border-radius:4px;border:1px solid rgba(245,158,11,.25)">(자재수급-처리)</span>` : '';
-      const noteHtml = r.resolvedNote
-        ? `<div style="font-size:12px;font-weight:800;color:var(--as-note-col);background:var(--as-note-bg);padding:6px 10px;margin-top:5px;border-radius:6px;border-left:3px solid var(--as-note-col);line-height:1.5">${esc(r.resolvedNote)}</div>`
-        : '';
-      resolvedBlock = `<div style="font-size:10px;color:#4ade80;margin-bottom:6px;padding:5px 8px;background:rgba(74,222,128,.08);border-radius:6px;border-left:2px solid rgba(74,222,128,.5)"><div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">✓ ${parts.join('<span style="color:var(--tx3);margin:0 4px">·</span>')}${materialTag}</div>${noteHtml}</div>`;
+      resolvedBlock = `<div style="font-size:10px;color:#4ade80;margin-bottom:6px;padding:5px 8px;background:rgba(74,222,128,.08);border-radius:6px;border-left:2px solid rgba(74,222,128,.5)"><div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">✓ ${parts.join('<span style="color:var(--tx3);margin:0 4px">·</span>')}${materialTag}</div></div>`;
     }
   }
 
@@ -1533,11 +1530,8 @@ function _showASCompletePopup(id){
   pop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:3000;display:flex;align-items:flex-end;justify-content:center;padding-bottom:env(safe-area-inset-bottom,0px)';
   pop.innerHTML = `
     <div style="width:100%;max-width:500px;background:var(--bg1);border-radius:16px 16px 0 0;padding:20px 16px 24px;box-sizing:border-box">
-      <div style="font-size:14px;font-weight:800;margin-bottom:4px;color:var(--tx)">✅ 처리완료</div>
-      <div style="font-size:11px;color:var(--tx3);margin-bottom:14px">처리 내용을 입력하면 카드에 표시됩니다 (선택)</div>
-      <textarea id="_as-note-input" rows="4" placeholder="처리 내용을 입력하세요&#10;예) 배터리 교체 완료, 모터 교체 후 정상 작동 확인 등"
-        style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:13px;background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);color:var(--tx);resize:none;font-family:inherit;line-height:1.5"></textarea>
-      <div style="display:flex;gap:8px;margin-top:12px">
+      <div style="font-size:14px;font-weight:800;margin-bottom:12px;color:var(--tx)">✅ 처리완료</div>
+      <div style="display:flex;gap:8px">
         <button onclick="document.getElementById('_as-complete-pop').remove()"
           style="flex:1;padding:11px;font-size:13px;font-weight:700;background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);color:var(--tx2);cursor:pointer">취소</button>
         <button id="_as-complete-confirm"
@@ -1545,9 +1539,8 @@ function _showASCompletePopup(id){
       </div>
     </div>`;
   pop.querySelector('#_as-complete-confirm').addEventListener('click', ()=>{
-    const note = pop.querySelector('#_as-note-input').value.trim();
     pop.remove();
-    updateASStatus(id, '처리완료', note);
+    updateASStatus(id, '처리완료');
   });
   pop.addEventListener('click', e=>{ if(e.target===pop) pop.remove(); });
   document.body.appendChild(pop);
@@ -2407,18 +2400,18 @@ function _trCard(r, seqNo, canEdit, canMsg){
     </div>
     <div onclick="toggleTrCard('${r.id}')" style="padding:10px 12px;cursor:pointer;display:flex;align-items:flex-start;gap:8px;${headerBg}">
       <div style="flex:1;min-width:0">
-        <!-- 1행: 반입/반출 뱃지 + 완료뱃지 + 업체명 -->
+        <!-- 1행: 반입/반출 뱃지 + 완료뱃지 + 업체명 + 현장명 + 프로젝트 -->
         <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
           <span style="font-size:10px;font-weight:800;padding:2px 7px;border-radius:6px;background:rgba(${isIn?'96,165,250':'251,146,60'},.2);color:${typeColor};flex-shrink:0">${typeLabel}</span>
           ${doneBadge}
           <span style="font-weight:800;font-size:12px">${r.company||'—'}</span>
-        </div>
-        <!-- 2행: 현장 + 제원×수량 + 장비번호 + 프로젝트 -->
-        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:3px">
           ${r.siteName?`<span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(245,158,11,.12);color:#f59e0b;font-weight:700">${r.siteName}</span>`:''}
+          ${r.project?`<span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(20,184,166,.12);color:#14b8a6;font-weight:700">${r.project}</span>`:''}
+        </div>
+        <!-- 2행: 제원×수량 + 장비번호 -->
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:3px">
           <div style="font-size:11px;line-height:1.4;color:var(--tx2)">${specSummary}</div>
           ${equipShort!=='—'?`<span style="font-family:monospace;font-size:11px;color:#60a5fa">${equipShort}</span>`:''}
-          ${r.project?`<span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(20,184,166,.12);color:#14b8a6;font-weight:700">${r.project}</span>`:''}
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
@@ -5278,6 +5271,7 @@ async function _equipMasterBulkAdd() {
     }
   }
   await saveEquipMaster(arr);
+  if(added > 0) _syncToSupabase().catch(e=>console.warn('[equip csv sync]',e));
   // M7: 오류 행 상세 안내
   if(errLines.length){
     const errMsg = `오류 ${errLines.length}행 (업체명·장비번호 필수):\n` + errLines.slice(0,5).join('\n') + (errLines.length>5?`\n외 ${errLines.length-5}행`:'');
