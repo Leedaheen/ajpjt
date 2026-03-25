@@ -201,8 +201,16 @@ function queueSync(){
 }
 
 async function syncNow(){
-  // syncNow 레벨 락 — UI 업데이트 중복도 방지
+  // syncNow 레벨 락 — 탭 내 중복 방지
   if(_syncLock){ console.log('[syncNow] 이미 동기화 중 — 건너뜀'); return; }
+  // 다중 탭 락 — localStorage 기반 (60초 타임아웃으로 데드락 방지)
+  const _LS_LOCK_KEY = '_sync_lock_ts';
+  const prevLock = Number(localStorage.getItem(_LS_LOCK_KEY)||0);
+  if(prevLock && Date.now() - prevLock < 60000){
+    console.log('[syncNow] 다른 탭 동기화 중 — 건너뜀');
+    return;
+  }
+  localStorage.setItem(_LS_LOCK_KEY, Date.now());
   _syncLock = true;
   const dot=document.getElementById('sdot');
   const txt=document.getElementById('stxt');
@@ -240,6 +248,7 @@ async function syncNow(){
     console.error('[Sync 실패]', errMsg);
   } finally {
     _syncLock = false;
+    localStorage.removeItem('_sync_lock_ts'); // 다중 탭 락 해제
   }
 }
 
@@ -256,8 +265,10 @@ async function _syncToSupabase(){
   const siteMap = Object.fromEntries(getSites().map(s=>[s.id,s.name]));
   const idbReady = !!(window._IDB_READY);
 
-  // 미동기화 항목 병렬 수집 (오프라인 장기 후 mega-batch 방지 — 테이블당 1,000건 상한)
-  const _UNSYNCED_CAP = 1000;
+  // 미동기화 항목 병렬 수집
+  // 오프라인 3일(1000명×2건×3일=6000건) 커버하려면 5000건 이상 필요
+  // 메모리: 5000 × 300bytes = 1.5MB — 허용 범위
+  const _UNSYNCED_CAP = 5000;
   const [unsyncLogs, unsyncTr, unsyncAS, unsyncM] = (await Promise.all([
     idbReady ? IDB.getUnsynced('logs').catch(()=>[]) : Promise.resolve(getLogs().filter(l=>!l.synced)),
     idbReady ? IDB.getUnsynced('transit').catch(()=>[]) : Promise.resolve(getTransit().filter(t=>!t.synced)),
@@ -886,6 +897,7 @@ async function pushToGS(entry){
 let _rtWs = null;
 let _rtReconnTimer = null;
 let _rtHbTimer = null;
+let _rtReconnAttempts = 0; // 지수 백오프 카운터
 // 테이블별 디바운스 타이머 — 짧은 시간 내 같은 테이블 이벤트 중복 방지
 const _rtDebounceTimers = {};
 function _rtDebounced(tbl, fn, ms=300){
@@ -903,6 +915,7 @@ function _initRealtime(){
   try {
     _rtWs = new WebSocket(wsUrl);
     _rtWs.onopen = ()=>{
+      _rtReconnAttempts = 0; // 연결 성공 시 재시도 카운터 초기화
       console.log('[Realtime] 연결됨 — 변경사항 즉시 수신 활성화');
       _rtWs.send(JSON.stringify({
         topic:'realtime:public', event:'phx_join',
@@ -943,10 +956,16 @@ function _initRealtime(){
       }catch(_){}
     };
     _rtWs.onclose = ()=>{
-      console.log('[Realtime] 연결 끊김 — 5초 후 재연결 시도');
       if(_rtHbTimer){ clearInterval(_rtHbTimer); _rtHbTimer=null; }
       if(_rtReconnTimer) clearTimeout(_rtReconnTimer);
-      _rtReconnTimer = setTimeout(_initRealtime, 5000);
+      // 지수 백오프 + jitter: 5s→10s→20s→40s→60s (최대) + 최대 5s 랜덤 지연
+      // 1000명 동시 재연결 폭주(Thundering Herd) 방지
+      const baseDelay = Math.min(60000, 5000 * Math.pow(2, _rtReconnAttempts));
+      const jitter = Math.random() * 5000;
+      const delay = baseDelay + jitter;
+      _rtReconnAttempts = Math.min(_rtReconnAttempts + 1, 6);
+      console.log(`[Realtime] 연결 끊김 — ${Math.round(delay/1000)}초 후 재연결 (시도 ${_rtReconnAttempts})`);
+      _rtReconnTimer = setTimeout(_initRealtime, delay);
     };
     _rtWs.onerror = ()=>{};
   }catch(e){ console.warn('[Realtime] 초기화 실패:', e.message); }
@@ -955,6 +974,7 @@ function _cleanupRealtime(){
   if(_rtHbTimer){ clearInterval(_rtHbTimer); _rtHbTimer=null; }
   if(_rtReconnTimer){ clearTimeout(_rtReconnTimer); _rtReconnTimer=null; }
   if(_rtWs){ _rtWs.onclose=null; try{_rtWs.close();}catch(_){} _rtWs=null; }
+  _rtReconnAttempts = 0;
 }
 
 let _retrySyncTimer = null;
