@@ -5321,6 +5321,9 @@ async function _equipSyncToSB() {
   toast(`장비 ${arr.length}대 Supabase 저장 완료`, 'ok');
 }
 
+// 날짜 문자열 정규화: YYYY.MM.DD / YYYY/MM/DD → YYYY-MM-DD
+const _normDate = s => (s||'').replace(/^(\d{4})[./](\d{1,2})[./](\d{1,2})$/, (_,y,m,d)=>`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`);
+
 async function _equipMasterBulkAdd() {
   const raw = document.getElementById('eq-csv-input')?.value.trim();
   if (!raw) { toast('CSV 내용을 입력하세요', 'err'); return; }
@@ -5330,8 +5333,9 @@ async function _equipMasterBulkAdd() {
   const siteName = getSites().find(s => s.id === siteId)?.name || siteId;
   const arr = getEquipMaster();
   const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  let added = 0, duped = 0;
+  let added = 0;
   const errLines = []; // {line, raw, equipNo, reason}
+  const dupedLines = []; // 이미 active로 존재하는 항목
   for (let li = 0; li < lines.length; li++) {
     const line = lines[li];
     const parts = line.split(/,|\t/).map(p => p.trim());
@@ -5346,18 +5350,18 @@ async function _equipMasterBulkAdd() {
       effectiveSiteId   = _csvSite?.id   || siteId;
       effectiveSiteName = _csvSite?.name || siteName;
       project = parts[1]; company = parts[2]; spec = parts[3]; model = _nh(parts[4]);
-      equipNo = _nh((parts[5]||'').toUpperCase()); inDate = parts[6] || today();
+      equipNo = _nh((parts[5]||'').toUpperCase()); inDate = _normDate(parts[6]) || today();
     } else if (parts.length >= 5 && !/^\d{4}-/.test(parts[3]) && /^\d{4}-/.test(parts[5]||'x')) {
       // 6열 구형식: 현장명,프로젝트명,업체명,장비제원,장비번호,반입일
       const _csvSite = getSites().find(s=>s.name===parts[0]||s.id===parts[0]);
       effectiveSiteId   = _csvSite?.id   || siteId;
       effectiveSiteName = _csvSite?.name || siteName;
       project = parts[1]; company = parts[2]; spec = parts[3];
-      equipNo = _nh((parts[4]||'').toUpperCase()); inDate = parts[5] || today();
+      equipNo = _nh((parts[4]||'').toUpperCase()); inDate = _normDate(parts[5]) || today();
     } else if (parts.length >= 3 && parts[2] && !/^\d{4}-/.test(parts[1])) {
       // 구형식1: 업체명,장비제원,장비번호[,반입일,프로젝트]
       company = parts[0]; spec = parts[1]; equipNo = _nh((parts[2]||'').toUpperCase());
-      inDate  = parts[3] || today(); project = parts[4] || '';
+      inDate  = _normDate(parts[3]) || today(); project = parts[4] || '';
       effectiveSiteId = siteId; effectiveSiteName = siteName;
     } else {
       // 구형식2: 업체명,장비번호
@@ -5375,7 +5379,7 @@ async function _equipMasterBulkAdd() {
         exists.status = 'active'; exists.inDate = inDate; exists.outDate = null;
         if (spec) exists.spec = spec; if (project) exists.project = project; if (model) exists.model = model;
         exists.synced = false; added++;
-      } else { duped++; }
+      } else { dupedLines.push({equipNo, company, line: li+1}); }
     } else {
       arr.push({
         id: 'eq-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,5),
@@ -5387,18 +5391,23 @@ async function _equipMasterBulkAdd() {
   }
   await saveEquipMaster(arr);
   if(added > 0) _syncToSupabase().catch(e=>console.warn('[equip csv sync]',e));
-  _showEquipImportResult(added, duped, errLines);
+  _showEquipImportResult(added, dupedLines, errLines);
   const sh = document.getElementById('sh-equip-master');
   if (sh) _renderEquipMasterSheet(sh);
 }
 
-function _showEquipImportResult(added, duped, errLines){
-  // 오류 없고 전부 성공이면 토스트만
-  if(!errLines.length){
-    toast(`${added}대 등록 완료${duped?' · '+duped+'대 이미 존재':''}`, added>0?'ok':'warn');
+function _showEquipImportResult(added, dupedLines, errLines){
+  const duped = dupedLines.length;
+  // 오류/중복 없고 전부 성공이면 토스트만
+  if(!errLines.length && !duped){
+    toast(`${added}대 등록 완료`, added>0?'ok':'warn');
     return;
   }
-  // 오류 있으면 팝업
+  if(!errLines.length && duped && added>0){
+    toast(`${added}대 등록 완료 · ${duped}대 이미 존재 (생략)`, 'ok');
+    return;
+  }
+  // 오류 또는 중복 있으면 팝업
   const existing = document.getElementById('_equip-import-result-pop');
   if(existing) existing.remove();
   const pop = document.createElement('div');
@@ -5406,28 +5415,40 @@ function _showEquipImportResult(added, duped, errLines){
   pop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:3000;display:flex;align-items:flex-end;justify-content:center;padding-bottom:env(safe-area-inset-bottom,0px)';
   const errRows = errLines.map(e=>`
     <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--br);font-size:11px">
-      <span style="flex-shrink:0;font-size:10px;color:var(--tx3);min-width:32px">${e.line}행</span>
-      <span style="flex-shrink:0;font-family:monospace;font-weight:700;color:#f87171;min-width:80px">${esc(e.equipNo||'—')}</span>
-      <span style="flex:1;color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(e.raw)}</span>
-      <span style="flex-shrink:0;font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(248,113,113,.12);color:#f87171">${esc(e.reason)}</span>
+      <span style="flex-shrink:0;font-size:10px;color:var(--tx3);min-width:28px">${e.line}행</span>
+      <span style="flex-shrink:0;font-family:monospace;font-weight:700;color:#f87171;min-width:70px">${esc(e.equipNo||'—')}</span>
+      <span style="flex:1;color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px">${esc(e.raw)}</span>
+      <span style="flex-shrink:0;font-size:9px;padding:1px 5px;border-radius:4px;background:rgba(248,113,113,.12);color:#f87171">${esc(e.reason)}</span>
+    </div>`).join('');
+  const dupedRows = dupedLines.map(d=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:5px 10px;border-bottom:1px solid var(--br);font-size:11px">
+      <span style="flex-shrink:0;font-size:10px;color:var(--tx3);min-width:28px">${d.line}행</span>
+      <span style="font-family:monospace;font-weight:700;color:#f59e0b;min-width:70px">${esc(d.equipNo)}</span>
+      <span style="flex:1;color:var(--tx3);font-size:10px">${esc(d.company)}</span>
+      <span style="font-size:9px;padding:1px 5px;border-radius:4px;background:rgba(245,158,11,.12);color:#f59e0b">이미 active</span>
     </div>`).join('');
   pop.innerHTML = `
-    <div style="width:100%;max-width:520px;background:var(--bg1);border-radius:16px 16px 0 0;padding:16px 14px 20px;box-sizing:border-box;max-height:70vh;display:flex;flex-direction:column">
-      <div style="font-size:13px;font-weight:800;margin-bottom:4px;color:var(--tx)">📋 등록 결과</div>
-      <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+    <div style="width:100%;max-width:520px;background:var(--bg1);border-radius:16px 16px 0 0;padding:16px 14px 20px;box-sizing:border-box;max-height:75vh;display:flex;flex-direction:column">
+      <div style="font-size:13px;font-weight:800;margin-bottom:8px;color:var(--tx)">📋 등록 결과</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
         ${added>0?`<span style="font-size:11px;padding:3px 10px;border-radius:20px;background:rgba(74,222,128,.12);color:#4ade80;border:1px solid rgba(74,222,128,.3)">✅ 등록 ${added}대</span>`:''}
         ${duped>0?`<span style="font-size:11px;padding:3px 10px;border-radius:20px;background:rgba(245,158,11,.12);color:#f59e0b;border:1px solid rgba(245,158,11,.3)">⏭ 이미 존재 ${duped}대</span>`:''}
         ${errLines.length>0?`<span style="font-size:11px;padding:3px 10px;border-radius:20px;background:rgba(248,113,113,.12);color:#f87171;border:1px solid rgba(248,113,113,.3)">❌ 오류 ${errLines.length}행</span>`:''}
       </div>
-      <div style="font-size:11px;font-weight:700;color:#f87171;margin-bottom:6px">오류 행 목록 (업체명 또는 장비번호 없음)</div>
-      <div style="overflow-y:auto;flex:1;border:1px solid var(--br);border-radius:8px;background:var(--bg2)">
-        <div style="display:flex;gap:8px;padding:5px 10px;background:var(--bg3);font-size:10px;font-weight:700;color:var(--tx3);border-bottom:1px solid var(--br)">
-          <span style="min-width:32px">행</span>
-          <span style="min-width:80px">장비번호</span>
-          <span style="flex:1">원본 내용</span>
-          <span>오류</span>
-        </div>
-        ${errRows}
+      <div style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:10px">
+        ${dupedRows?`<div>
+          <div style="font-size:11px;font-weight:700;color:#f59e0b;margin-bottom:4px">⏭ 이미 등록된 장비 (스킵)</div>
+          <div style="border:1px solid rgba(245,158,11,.2);border-radius:8px;background:var(--bg2)">${dupedRows}</div>
+        </div>`:''}
+        ${errRows?`<div>
+          <div style="font-size:11px;font-weight:700;color:#f87171;margin-bottom:4px">❌ 오류 행 (업체명·장비번호 필수)</div>
+          <div style="border:1px solid rgba(248,113,113,.2);border-radius:8px;background:var(--bg2)">
+            <div style="display:flex;gap:8px;padding:4px 10px;background:var(--bg3);font-size:10px;font-weight:700;color:var(--tx3);border-radius:8px 8px 0 0">
+              <span style="min-width:28px">행</span><span style="min-width:70px">장비번호</span><span style="flex:1">원본</span><span>사유</span>
+            </div>
+            ${errRows}
+          </div>
+        </div>`:''}
       </div>
       <button onclick="document.getElementById('_equip-import-result-pop').remove()"
         style="margin-top:12px;width:100%;padding:11px;font-size:13px;font-weight:700;background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);color:var(--tx2);cursor:pointer">확인</button>
