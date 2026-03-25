@@ -5111,16 +5111,21 @@ function _renderEquipMasterSheet(sh) {
         const _approveBtn = (e.pendingApproval && isAJ)
           ? `<button onclick="_approveEquipEntry('${e.id}')" style="font-size:9px;padding:2px 8px;border-radius:4px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);color:#4ade80;cursor:pointer">✅승인</button>`
           : '';
+        const _eModels = EQUIP_MODELS[e.spec] || [];
+        const _allModels = (e.model && !_eModels.includes(e.model)) ? [..._eModels, e.model] : _eModels;
+        const _modelEl = `<select style="font-size:9px;padding:2px 5px;max-width:72px;border-radius:4px;border:1px solid var(--br);background:var(--bg2);color:${e.model?'#a78bfa':'var(--tx3)'}" onchange="_equipSetModel('${e.id}',this.value)"><option value="">모델(선택)</option>${_allModels.map(m=>`<option value="${m}"${e.model===m?' selected':''}>${m}</option>`).join('')}</select>`;
         return `<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid var(--br)">
           <div style="flex:1;min-width:0">
             <span style="font-family:monospace;font-weight:700;font-size:12px;color:#60a5fa">${e.equipNo}</span>
-            ${e.spec?`<span style="font-size:10px;color:var(--tx3);margin-left:5px">${e.spec}${e.model?' ('+e.model+')':''}</span>`:''}
+            ${e.spec?`<span style="font-size:10px;color:var(--tx3);margin-left:5px">${e.spec}</span>`:''}
             ${e.serialNo?`<span style="font-size:9px;color:var(--tx3);margin-left:5px;font-family:monospace">S/N:${e.serialNo}</span>`:''}
             ${_pendingBadge}
           </div>
+          ${_modelEl}
           ${_projEl}
           <span style="font-size:10px;color:var(--tx3)">${e.inDate||''}</span>
           ${_approveBtn}
+          <button onclick="_equipMasterEdit('${e.id}')" style="font-size:9px;padding:2px 8px;border-radius:4px;background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.3);color:#a78bfa;cursor:pointer">수정</button>
           <button onclick="_equipMasterOut('${e.id}')" style="font-size:9px;padding:2px 8px;border-radius:4px;background:rgba(251,146,60,.12);border:1px solid rgba(251,146,60,.3);color:#fb923c;cursor:pointer">반출처리</button>
           <button onclick="_equipMasterDel('${e.id}')" style="font-size:9px;padding:2px 8px;border-radius:4px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.2);color:#f87171;cursor:pointer">삭제</button>
         </div>`;
@@ -5266,7 +5271,7 @@ async function _equipMasterBulkAdd() {
     // 구형식1: 업체명,장비제원,장비번호,반입일[,프로젝트]
     // 구형식2: 업체명,장비번호
     let company, spec, equipNo, inDate, project, model, effectiveSiteId, effectiveSiteName;
-    if (parts.length >= 7 && /^\d{4}-/.test(parts[6]||'')) {
+    if (parts.length >= 7) {
       // 7열 신규: 현장명,프로젝트명,업체명,장비제원,모델명,장비번호,반입일
       const _csvSite = getSites().find(s=>s.name===parts[0]||s.id===parts[0]);
       effectiveSiteId   = _csvSite?.id   || siteId;
@@ -5391,6 +5396,81 @@ async function _equipSetProject(id, project) {
   e.project = project;
   await saveEquipMaster(arr);
   toast(e.equipNo + ' 프로젝트: ' + (project || '없음'), 'ok');
+}
+
+async function _equipSetModel(id, model) {
+  const arr = getEquipMaster();
+  const e = arr.find(x => x.id === id);
+  if (!e) return;
+  e.model = model; e.synced = false;
+  await saveEquipMaster(arr);
+  toast(e.equipNo + ' 모델: ' + (model || '없음'), 'ok');
+}
+
+function _equipMasterEdit(id) {
+  const arr = getEquipMaster();
+  const e = arr.find(x => x.id === id);
+  if (!e) return;
+  const existing = document.getElementById('_equip-edit-pop');
+  if (existing) existing.remove();
+  const sites = getSites();
+  const pop = document.createElement('div');
+  pop.id = '_equip-edit-pop';
+  pop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:3000;display:flex;align-items:flex-end;justify-content:center;padding-bottom:env(safe-area-inset-bottom,0px)';
+  const _models = EQUIP_MODELS[e.spec] || [];
+  const _allM = (e.model && !_models.includes(e.model)) ? [..._models, e.model] : _models;
+  const _siteProjs = sites.find(s=>s.id===e.siteId)?.projects || [];
+  const _allP = (e.project && !_siteProjs.includes(e.project)) ? [..._siteProjs, e.project] : _siteProjs;
+  pop.innerHTML = `
+    <div style="width:100%;max-width:500px;background:var(--bg1);border-radius:16px 16px 0 0;padding:20px 16px 24px;box-sizing:border-box">
+      <div style="font-size:13px;font-weight:800;margin-bottom:14px;color:var(--tx)">✏️ 장비 수정 — ${e.equipNo}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div><div style="font-size:10px;color:var(--tx3);margin-bottom:3px">장비번호</div>
+          <input id="_ee-no" value="${e.equipNo||''}" style="width:100%;box-sizing:border-box;text-transform:uppercase;padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)"></div>
+        <div><div style="font-size:10px;color:var(--tx3);margin-bottom:3px">업체명</div>
+          <input id="_ee-co" value="${esc(e.company||'')}" style="width:100%;box-sizing:border-box;padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div><div style="font-size:10px;color:var(--tx3);margin-bottom:3px">장비제원</div>
+          <select id="_ee-spec" style="width:100%;padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)" onchange="(()=>{const m=document.getElementById('_ee-model');const ms=EQUIP_MODELS[this.value]||[];m.innerHTML='<option value=\\'\\'>모델(선택)</option>'+ms.map(x=>'<option value=\\''+x+'\\'>' +x+'</option>').join('')})()">
+            <option value="">제원 선택</option>${TR_SPECS.map(s=>`<option value="${s}"${e.spec===s?' selected':''}>${s}</option>`).join('')}</select></div>
+        <div><div style="font-size:10px;color:var(--tx3);margin-bottom:3px">모델명</div>
+          <select id="_ee-model" style="width:100%;padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)">
+            <option value="">모델(선택)</option>${_allM.map(m=>`<option value="${m}"${e.model===m?' selected':''}>${m}</option>`).join('')}</select></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div><div style="font-size:10px;color:var(--tx3);margin-bottom:3px">반입일</div>
+          <input id="_ee-indate" type="date" value="${e.inDate||today()}" style="width:100%;box-sizing:border-box;padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)"></div>
+        <div><div style="font-size:10px;color:var(--tx3);margin-bottom:3px">프로젝트</div>
+          <select id="_ee-proj" style="width:100%;padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx)">
+            <option value="">구분없음</option>${_allP.map(p=>`<option value="${p}"${e.project===p?' selected':''}>${p}</option>`).join('')}</select></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button onclick="document.getElementById('_equip-edit-pop').remove()"
+          style="flex:1;padding:10px;font-size:13px;font-weight:700;background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);color:var(--tx2);cursor:pointer">취소</button>
+        <button id="_ee-save"
+          style="flex:2;padding:10px;font-size:13px;font-weight:800;background:rgba(167,139,250,.18);border:1px solid rgba(167,139,250,.4);border-radius:var(--rs);color:#a78bfa;cursor:pointer">저장</button>
+      </div>
+    </div>`;
+  pop.querySelector('#_ee-save').addEventListener('click', async () => {
+    const arr2 = getEquipMaster();
+    const e2 = arr2.find(x => x.id === id);
+    if (!e2) return;
+    e2.equipNo  = _nh(pop.querySelector('#_ee-no').value.toUpperCase()) || e2.equipNo;
+    e2.company  = pop.querySelector('#_ee-co').value.trim() || e2.company;
+    e2.spec     = pop.querySelector('#_ee-spec').value || e2.spec;
+    e2.model    = _nh(pop.querySelector('#_ee-model').value);
+    e2.inDate   = pop.querySelector('#_ee-indate').value || e2.inDate;
+    e2.project  = pop.querySelector('#_ee-proj').value;
+    e2.synced   = false;
+    await saveEquipMaster(arr2);
+    pop.remove();
+    toast(e2.equipNo + ' 수정 완료', 'ok');
+    const sh = document.getElementById('sh-equip-master');
+    if (sh) _renderEquipMasterSheet(sh);
+  });
+  pop.addEventListener('click', ev => { if (ev.target === pop) pop.remove(); });
+  document.body.appendChild(pop);
 }
 
 async function _equipMasterOut(id) {
