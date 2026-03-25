@@ -114,7 +114,7 @@ async function sbBatchUpsert(table, rows, conflictCol=''){
   for(let i=0; i<rows.length; i+=SB_BATCH){
     let batch = rows.slice(i, i+SB_BATCH);
     let lastErr = null;
-    for(let attempt=0; attempt<5; attempt++){
+    for(let attempt=0; attempt<12; attempt++){  // 최대 12회: 나쁜 컬럼 최대 11개 제거 + 마지막 성공 시도 보장
       try {
         await sbReq(table,'POST', batch, _q);
         lastErr = null;

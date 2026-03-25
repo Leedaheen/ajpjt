@@ -5822,6 +5822,17 @@ async function pasteUrl(){ try{const t=await navigator.clipboard.readText();docu
 function saveSupabaseConfig(){
   const url = document.getElementById('sb-url-input').value.trim().replace(/\/+$/,'');
   const key = document.getElementById('sb-key-input').value.trim();
+  const kakaoKey = document.getElementById('kakao-key-input')?.value.trim()||'';
+
+  // 카카오 키는 URL/Key 없이도 독립 저장 — 먼저 처리
+  if(kakaoKey){ DB.s('kakao_js_key', kakaoKey); if(typeof _kakaoInit==='function') _kakaoInit(); }
+
+  // URL+Key 미입력 시: 카카오 키만 저장하고 리턴
+  if(!url && !key){
+    if(kakaoKey){ toast('카카오 키 저장됨 ✓','ok'); closeSheet('sh-supabase'); }
+    else { toast('URL과 Key를 모두 입력하세요','err'); }
+    return;
+  }
   if(!url || !key){ toast('URL과 Key를 모두 입력하세요','err'); return; }
   if(!url.startsWith('https://')){ toast('URL은 https://로 시작해야 합니다','err'); return; }
   // localStorage에 저장 (기기별 커스텀 유지)
@@ -5832,9 +5843,6 @@ function saveSupabaseConfig(){
     localStorage.removeItem(K.SB_URL);
     localStorage.removeItem(K.SB_KEY);
   }
-  // 카카오 JS 키 저장 (같은 폼에 있는 경우)
-  const kakaoKey = document.getElementById('kakao-key-input')?.value.trim();
-  if(kakaoKey){ DB.s('kakao_js_key', kakaoKey); if(typeof _kakaoInit==='function') _kakaoInit(); }
   toast('Supabase 연동 저장됨. 동기화 시도...','ok');
   closeSheet('sh-supabase');
   renderAdmin();

@@ -302,9 +302,12 @@ function _saveServerSetup(){
   const url   = document.getElementById('setup-sb-url').value.trim();
   const key   = document.getElementById('setup-sb-key').value.trim();
   const kakao = document.getElementById('setup-kakao-key').value.trim();
-  if(!url || !key){ toast('URL과 Anon Key는 필수입니다','err'); return; }
-  DB.s(K.SB_URL, url);
-  DB.s(K.SB_KEY, key);
+  // 입력이 비어 있으면 기존 localStorage 값으로 대체 (카카오 키만 추가하는 경우 대응)
+  const effectiveUrl = url || DB.g(K.SB_URL,'');
+  const effectiveKey = key || DB.g(K.SB_KEY,'');
+  if(!effectiveUrl || !effectiveKey){ toast('URL과 Anon Key는 필수입니다','err'); return; }
+  DB.s(K.SB_URL, effectiveUrl);
+  DB.s(K.SB_KEY, effectiveKey);
   if(kakao) DB.s('kakao_js_key', kakao);
   document.getElementById('modal-server-setup').style.display='none';
   toast('저장됨. 페이지를 새로고침합니다...','ok',1500);
