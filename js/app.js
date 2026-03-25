@@ -761,6 +761,11 @@ async function doGoogleProfileSubmit(){
 /* ── Google 이메일로 AJ 멤버 조회 후 로그인 ── */
 async function _doGoogleAjLogin(email, googleName){
   toast('Google 계정 확인 중...','ok',2000);
+  // AJ 로그인은 서버 필수 — SB 미설정 시 서버 설정으로 안내
+  if(!DB.g(K.SB_URL,'')){
+    toast('서버 연결 설정이 필요합니다. Supabase URL/Key를 입력해 주세요.','warn',5000);
+    _openServerSetup(); return;
+  }
   // SB에서 최신 멤버 목록 풀링 (google_email 컬럼 포함)
   await _pullAjMembersFromSB().catch(()=>{});
   const list = _getAjMembers();
@@ -948,6 +953,10 @@ async function _doKakaoSubLogin(kakaoId, nickname, email){
 
 async function _doKakaoAjLogin(kakaoId, nickname, email){
   toast('카카오 계정 확인 중...','ok',2000);
+  if(!DB.g(K.SB_URL,'')){
+    toast('서버 연결 설정이 필요합니다. Supabase URL/Key를 입력해 주세요.','warn',5000);
+    _openServerSetup(); return;
+  }
   await _pullAjMembersFromSB().catch(()=>{});
   const list = _getAjMembers();
   const byKakao = list.filter(m=>m.kakao_id===kakaoId);
@@ -1211,8 +1220,14 @@ async function doGoogleAjRegister(){
     await sbBatchUpsert('aj_members', [member]);
     toast('가입 신청 완료! AJ 관리자 승인 후 로그인 가능합니다 ✓','ok',4000);
   } catch(e) {
-    console.error('[Google/Kakao Register] SB 저장 실패:', e?.message);
-    toast(`가입 신청 완료(로컬 저장). 단, 서버 저장 실패: ${e?.message||'네트워크 오류'}`, 'warn', 5000);
+    const _em = e?.message||'';
+    console.warn('[Google/Kakao Register] SB 저장 실패:', _em);
+    if(_em === 'NO_SB_URL'){
+      // SB 미연결 — 로컬 저장 완료, 관리자가 서버 설정 후 sync 필요
+      toast('가입 신청 완료(로컬 저장) ✓ — 서버 연결 설정 후 동기화됩니다','warn',5000);
+    } else {
+      toast('가입 신청 완료(로컬 저장) ✓ — 서버 저장은 네트워크 복구 후 자동 재시도됩니다','warn',5000);
+    }
   }
 }
 
