@@ -5142,6 +5142,8 @@ function openEquipMasterSheet() {
 function _renderEquipMasterSheet(sh) {
   const isAJ     = S?.role === 'aj';
   const siteId   = S?.siteId === 'all' ? null : S?.siteId;
+  // 잘못된 데이터(inDate에 제원값 저장) 자동 정리
+  _cleanupInvalidEquipLocal(true).then(n => { if (n > 0) _renderEquipMasterSheet(sh); });
   const allEquip = getEquipMaster();
   const active   = allEquip.filter(e => e.status === 'active' && (!siteId || e.siteId === siteId));
   const outed    = allEquip.filter(e => e.status === 'out'    && (!siteId || e.siteId === siteId));
@@ -5369,6 +5371,11 @@ async function _equipMasterBulkAdd() {
       inDate  = today(); project = '';
       effectiveSiteId = siteId; effectiveSiteName = siteName;
     }
+    // 반입일 자리에 제원값이 들어온 경우 (예: '6M', '14M') — 열 순서 오류
+    if (/^\d+M$/i.test(inDate)) {
+      errLines.push({line: li+1, raw: line.slice(0,40), equipNo: equipNo||'', reason: `반입일 오류: '${inDate}'은 장비제원입니다 (열 순서 확인)`});
+      continue;
+    }
     if (!company || !equipNo) {
       errLines.push({line: li+1, raw: line.slice(0,40), equipNo: equipNo||'', reason: !company?'업체명 없음':'장비번호 없음'});
       continue;
@@ -5394,6 +5401,24 @@ async function _equipMasterBulkAdd() {
   _showEquipImportResult(added, dupedLines, errLines);
   const sh = document.getElementById('sh-equip-master');
   if (sh) _renderEquipMasterSheet(sh);
+}
+
+// 반입일 자리에 제원값(예: '6M')이 저장된 잘못된 로컬 데이터 자동 정리
+async function _cleanupInvalidEquipLocal(silent = false) {
+  const arr = getEquipMaster();
+  const invalid = arr.filter(e => /^\d+M$/i.test(e.inDate));
+  if (!invalid.length) {
+    if (!silent) toast('정리할 잘못된 장비 데이터 없음', 'ok');
+    return 0;
+  }
+  const cleaned = arr.filter(e => !/^\d+M$/i.test(e.inDate));
+  await saveEquipMaster(cleaned);
+  _syncToSupabase().catch(e => console.warn('[equip cleanup sync]', e));
+  if (!silent) {
+    toast(`잘못된 장비 데이터 ${invalid.length}건 정리 완료`, 'ok');
+    console.warn('[equip cleanup] 삭제된 항목:', invalid.map(e => `${e.equipNo||'?'} inDate=${e.inDate}`));
+  }
+  return invalid.length;
 }
 
 function _showEquipImportResult(added, dupedLines, errLines){
