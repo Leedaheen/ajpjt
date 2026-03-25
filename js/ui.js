@@ -1089,7 +1089,7 @@ function _showPhotoPopup(reqId){
 
 /* ═══ AS 검색 상태 ═══ */
 let _asSearchQ = '';
-let _asFilter  = '대기'; // all / 대기 / 자재수급중 / 처리완료
+let _asFilter  = '대기'; // all / 대기 / 자재수급중 / 처리완료 / 취소
 let _asTypeFilter = 'all'; // all / 작동불량 / 충전불량 / 누유의심 / 파손 / 자재요청 / 오류코드 / 기타
 let _asLocFilter  = 'all'; // all / 모듈동 / 1F외곽 / 1F~9F / 기타
 let _asSort = 'desc'; // desc=최신순 / asc=오래된순
@@ -1150,6 +1150,7 @@ function renderASPage(){
     );
   }
   if(_asFilter !== 'all') reqs = reqs.filter(r=>r.status===_asFilter);
+  else reqs = reqs.filter(r=>r.status!=='취소'); // 전체보기에서도 취소는 기본 제외
   if(_asTypeFilter !== 'all') reqs = reqs.filter(r=>(r.type||r.faultType||'')===_asTypeFilter);
   if(_asLocFilter !== 'all') reqs = reqs.filter(r=>(r.location||'').startsWith(_asLocFilter));
   // 정렬
@@ -1216,9 +1217,9 @@ function renderASPage(){
         <option value="대기"${_asFilter==='대기'?' selected':''}>대기</option>
         <option value="자재수급중"${_asFilter==='자재수급중'?' selected':''}>자재수급중</option>
         <option value="처리완료"${_asFilter==='처리완료'?' selected':''}>처리완료</option>
+        <option value="취소"${_asFilter==='취소'?' selected':''}>취소</option>
       </select>
     </div>
-    <button onclick="_asSort=_asSort==='desc'?'asc':'desc';renderASPage()" style="flex-shrink:0;padding:0 10px;font-size:11px;font-weight:700;background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);color:var(--tx2);cursor:pointer;white-space:nowrap">${_asSort==='desc'?'최신순↓':'오래된순↑'}</button>
     <div class="site-select-wrap" style="flex:1">
       <select class="fg-select" style="width:100%;font-size:11px" onchange="_asTypeFilter=this.value;renderASPage()">
         <option value="all"${_asTypeFilter==='all'?' selected':''}>전체 유형</option>
@@ -1248,6 +1249,7 @@ function renderASPage(){
         <option value="기타"${_asLocFilter==='기타'?' selected':''}>기타</option>
       </select>
     </div>
+    <button onclick="_asSort=_asSort==='desc'?'asc':'desc';renderASPage()" style="flex-shrink:0;padding:0 10px;font-size:11px;font-weight:700;background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);color:var(--tx2);cursor:pointer;white-space:nowrap">${_asSort==='desc'?'최신순↓':'오래된순↑'}</button>
   </div>
 
 
@@ -1406,8 +1408,12 @@ function _asCard(r, canAct){
   const isAJ = S?.role==='aj';
   const isEngineer = isAJ && S?.ajType==='정비기사';
   // 상태 색상
-  const stCol = r.status==='처리완료'?'#4ade80':r.status==='자재수급중'?'#f59e0b':'#f87171';
-  const stBg  = r.status==='처리완료'?'rgba(74,222,128,.15)':r.status==='자재수급중'?'rgba(245,158,11,.15)':'rgba(248,113,113,.15)';
+  const isCancelled = r.status==='취소';
+  const stCol = r.status==='처리완료'?'#4ade80':r.status==='자재수급중'?'#f59e0b':isCancelled?'#94a3b8':'#f87171';
+  const stBg  = r.status==='처리완료'?'rgba(74,222,128,.15)':r.status==='자재수급중'?'rgba(245,158,11,.15)':isCancelled?'rgba(148,163,184,.15)':'rgba(248,113,113,.15)';
+  // 취소 가능 여부: AJ(정비기사 포함) 또는 AS 글쓴이(sub)
+  const isMyAS = S?.memberId && r.submitterMemberId === S.memberId;
+  const canCancel = (canAct || isMyAS) && !isCancelled && r.status !== '처리완료';
 
   // 처리완료 정보 블록
   let resolvedBlock = '';
@@ -1444,7 +1450,7 @@ function _asCard(r, canAct){
     <button onclick="_retryASPush('${r.id}')" style="font-size:10px;font-weight:700;padding:3px 8px;background:rgba(248,113,113,.2);border:1px solid rgba(248,113,113,.4);border-radius:5px;color:#f87171;cursor:pointer">재등록</button>
   </div>` : '';
 
-  return `<div class="lcard" style="margin-bottom:10px">
+  return `<div class="lcard" style="margin-bottom:10px${isCancelled?';opacity:0.45':''}">
     <!-- 헤더: 업체 + 상태 + 날짜 -->
     <div class="lc-top">
       <div class="lc-co">
@@ -1510,6 +1516,11 @@ function _asCard(r, canAct){
           style="flex:1;padding:5px 8px;font-size:11px;background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);color:var(--tx)">
         <button onclick="_addASComment('${r.id}')" style="padding:5px 12px;font-size:11px;background:rgba(74,222,128,.15);border:1px solid rgba(74,222,128,.35);border-radius:var(--rs);color:#4ade80;cursor:pointer;font-weight:700;flex-shrink:0">등록</button>
       </div>`:''}
+      <!-- 접수취소 버튼 — AS 글쓴이 또는 AJ -->
+      ${canCancel?`<div style="margin-bottom:${canAct?'6px':'0'}">
+        <button class="btn-ghost" style="width:100%;font-size:10px;padding:5px;color:#94a3b8;border-color:rgba(148,163,184,.4)"
+          onclick="_showASCancelPopup('${r.id}')">접수취소</button>
+      </div>`:''}
       <!-- AJ 처리 버튼 — AJ만 표시 -->
       ${canAct&&r.status!=='처리완료'?`<div style="display:flex;gap:6px">
         <button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:#f59e0b;border-color:rgba(245,158,11,.4)"
@@ -1549,6 +1560,54 @@ function _showASCompletePopup(id){
   pop.addEventListener('click', e=>{ if(e.target===pop) pop.remove(); });
   document.body.appendChild(pop);
   setTimeout(()=>pop.querySelector('#_as-note-input')?.focus(), 100);
+}
+
+function _showASCancelPopup(id){
+  const existing = document.getElementById('_as-cancel-pop');
+  if(existing) existing.remove();
+  const pop = document.createElement('div');
+  pop.id = '_as-cancel-pop';
+  pop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:3000;display:flex;align-items:flex-end;justify-content:center;padding-bottom:env(safe-area-inset-bottom,0px)';
+  pop.innerHTML = `
+    <div style="width:100%;max-width:500px;background:var(--bg1);border-radius:16px 16px 0 0;padding:20px 16px 24px;box-sizing:border-box">
+      <div style="font-size:14px;font-weight:800;margin-bottom:4px;color:var(--tx)">❌ 접수취소</div>
+      <div style="font-size:11px;color:var(--tx3);margin-bottom:14px">취소 사유를 입력하면 댓글로 자동 등록됩니다</div>
+      <textarea id="_as-cancel-reason" rows="3" placeholder="취소 사유 입력 (필수)"
+        style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:13px;background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);color:var(--tx);resize:none;font-family:inherit;line-height:1.5"></textarea>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button onclick="document.getElementById('_as-cancel-pop').remove()"
+          style="flex:1;padding:11px;font-size:13px;font-weight:700;background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);color:var(--tx2);cursor:pointer">닫기</button>
+        <button id="_as-cancel-confirm"
+          style="flex:2;padding:11px;font-size:13px;font-weight:800;background:rgba(148,163,184,.15);border:1px solid rgba(148,163,184,.4);border-radius:var(--rs);color:#94a3b8;cursor:pointer">접수취소 확정</button>
+      </div>
+    </div>`;
+  pop.querySelector('#_as-cancel-confirm').addEventListener('click', ()=>{
+    const reason = pop.querySelector('#_as-cancel-reason').value.trim();
+    if(!reason){ pop.querySelector('#_as-cancel-reason').style.borderColor='#f87171'; return; }
+    pop.remove();
+    cancelASRequest(id, reason);
+  });
+  pop.addEventListener('click', e=>{ if(e.target===pop) pop.remove(); });
+  document.body.appendChild(pop);
+  setTimeout(()=>pop.querySelector('#_as-cancel-reason')?.focus(), 100);
+}
+
+function cancelASRequest(id, reason){
+  const reqs = getAsReqs();
+  const idx = reqs.findIndex(r=>r.id===id);
+  if(idx<0) return;
+  const r = reqs[idx];
+  r.status = '취소';
+  r.cancelledAt = Date.now();
+  r.cancelledBy = S?.name || '';
+  if(!Array.isArray(r.comments)) r.comments = [];
+  r.comments.push({text:'[접수취소] '+reason, author:S?.name||'', company:S?.company||'', role:S?.role||'', ts:Date.now()});
+  r.synced = false;
+  reqs[idx] = r;
+  saveAsReqs(reqs);
+  _syncToSupabase().catch(e=>console.warn('[as cancel sync]',e));
+  toast('접수취소 처리되었습니다','ok');
+  renderASPage();
 }
 
 function updateASStatus(id, status, resolvedNote){
