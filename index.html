@@ -1707,29 +1707,44 @@ create index if not exists idx_equip_company on equipment(company, status);
 create index if not exists idx_equip_no      on equipment(equip_no);
 alter table equipment disable row level security;
 
--- 5. members 테이블 Google 로그인 / 승인 시스템 컬럼 추가
+-- 5. members 테이블 소셜 로그인 / 승인 시스템 컬럼 추가
 alter table members add column if not exists google_email text;
-alter table members add column if not exists status text default 'approved';
-alter table members add column if not exists role text default 'sub';
+alter table members add column if not exists kakao_id     text;
+alter table members add column if not exists status       text default 'approved';
+alter table members add column if not exists role         text default 'sub';
+alter table members add column if not exists team         text default '';
 create index if not exists idx_members_google on members(google_email) where google_email is not null;
+create index if not exists idx_members_kakao  on members(kakao_id)     where kakao_id is not null;
 create index if not exists idx_members_status on members(status);
 
--- 6. AJ 관리자 테이블 (Supabase에 없을 경우 생성)
+-- 6. as_requests 누락 컬럼 추가
+alter table as_requests add column if not exists tech_phone    text;
+alter table as_requests add column if not exists requested_at  timestamptz;
+alter table as_requests add column if not exists material_at   timestamptz;
+
+-- 7. AJ 관리자 테이블 (Supabase에 없을 경우 생성)
 create table if not exists aj_members (
   emp_no     text primary key,
   name       text not null,
   phone      text default '',
   pw_hash    text not null,
   aj_type    text default '관리자',
-  google_email text,            -- Google 로그인 연동용 (선택)
+  google_email text,
+  kakao_id   text,
+  status     text default 'approved',
+  record_id  text,
   created_at timestamptz default now()
 );
 alter table aj_members disable row level security;
 -- 이미 aj_members 테이블이 있는 경우 컬럼 추가
 alter table aj_members add column if not exists google_email text;
-alter table aj_members add column if not exists status text default 'approved';
+alter table aj_members add column if not exists kakao_id     text;
+alter table aj_members add column if not exists status       text default 'approved';
+alter table aj_members add column if not exists record_id    text;
 create index if not exists idx_aj_google on aj_members(google_email)
   where google_email is not null;
+create index if not exists idx_aj_kakao  on aj_members(kakao_id)
+  where kakao_id is not null;
 create index if not exists idx_aj_status on aj_members(status);</pre>
           <button onclick="navigator.clipboard?.writeText(document.getElementById('sb-sql-pre').textContent).then(()=>toast('SQL 복사됨','ok'))"
             style="position:absolute;top:6px;right:6px;padding:3px 8px;font-size:9px;background:rgba(34,197,94,.2);border:1px solid rgba(34,197,94,.3);border-radius:4px;color:#4ade80;cursor:pointer">복사</button>
