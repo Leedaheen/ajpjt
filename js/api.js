@@ -682,11 +682,17 @@ async function _pullRecentFromSupabase(){
     ? new Date(Date.now() - 90*24*60*60*1000).toISOString()
     : new Date(new Date(lastSync).getTime() - 60000).toISOString();
 
-  // transit pull
-  const trRows = await sbReq('transit','GET',null,
+  // transit pull — updated_at 없으면 created_at으로 폴백
+  let trRows = await sbReq('transit','GET',null,
     `?updated_at=gte.${encodeURIComponent(since)}&order=updated_at.desc&limit=500`
-  ).catch(()=>[]);
-  if(Array.isArray(trRows) && trRows.length){
+  ).catch(()=>null);
+  if(trRows === null){
+    trRows = await sbReq('transit','GET',null,
+      `?created_at=gte.${encodeURIComponent(since)}&order=created_at.desc&limit=500`
+    ).catch(()=>[]);
+  }
+  if(!Array.isArray(trRows)) trRows = [];
+  if(trRows.length){
     const localTr = getTransit();
     let changed = false;
     for(const sr of trRows){
@@ -734,11 +740,17 @@ async function _pullRecentFromSupabase(){
     if(changed){ await saveTransit(localTr); _cache.transit=null; _cache.transitBySite=null; }
   }
 
-  // AS pull (기존 로직 유지 + fullPull 추가)
-  const asRows = await sbReq('as_requests','GET',null,
+  // AS pull — updated_at 없으면 created_at으로 폴백
+  let asRows = await sbReq('as_requests','GET',null,
     `?updated_at=gte.${encodeURIComponent(since)}&order=updated_at.desc&limit=200`
-  ).catch(()=>[]);
-  if(Array.isArray(asRows) && asRows.length){
+  ).catch(()=>null);
+  if(asRows === null){
+    asRows = await sbReq('as_requests','GET',null,
+      `?created_at=gte.${encodeURIComponent(since)}&order=created_at.desc&limit=200`
+    ).catch(()=>[]);
+  }
+  if(!Array.isArray(asRows)) asRows = [];
+  if(asRows.length){
     const localAs = getAsReqs();
     let changed = false;
     for(const sr of asRows){

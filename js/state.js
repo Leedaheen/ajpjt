@@ -125,9 +125,8 @@ async function getTodayLogs() {
 async function getLogsByRange(from, to, siteId=null, limit=200) {
   const sbUrl = DB.g(K.SB_URL,'');
   if(sbUrl){
-    // Supabase 서버사이드 쿼리 — select=* 대신 필요 컬럼만 지정 (payload 절감)
-    const LOG_COLS = 'record_id,id,date,site_id,company,floor,location_detail,equip,recorder,team,project,status,start_time,end_time,used_hours,meter_start,meter_end,off_reason,created_at';
-    let q = `?select=${LOG_COLS}&date=gte.${from}&date=lte.${to}&order=created_at.desc&limit=${limit}`;
+    // Supabase 서버사이드 쿼리 — select=* 사용 (컬럼 추가 시에도 안전)
+    let q = `?select=*&date=gte.${from}&date=lte.${to}&order=created_at.desc&limit=${limit}`;
     if(siteId) q += `&site_id=eq.${siteId}`;
     try {
       const rows = await sbReq('logs','GET',null,q);
