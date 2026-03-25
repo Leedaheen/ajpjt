@@ -757,7 +757,18 @@ async function _kakaoGenPKCE(){
 
 async function _doKakaoLogin(role){
   const key = KAKAO_DEFAULT_JS_KEY || DB.g('kakao_js_key','');
-  if(!key){ toast('카카오 JS 키 미설정 — 관리자가 연동 설정에서 입력해야 합니다','warn',4000); openSheet('sh-supabase'); return; }
+  if(!key){
+    // 로그인 전: 서버 설정 모달에서 카카오 키 입력
+    // 로그인 후: 연동설정 시트로 이동
+    if(typeof S === 'undefined' || !S){
+      toast('카카오 JS 키가 없습니다. 서버 연결 설정에서 카카오 JS 키를 입력해 주세요.','warn',4000);
+      if(typeof _openServerSetup === 'function') _openServerSetup();
+    } else {
+      toast('카카오 JS 키 미설정 — 연동 설정에서 입력해 주세요','warn',3000);
+      openSheet('sh-supabase');
+    }
+    return;
+  }
   // PKCE Authorization Code Flow (response_type=token은 신규앱 차단 KOE202)
   const { verifier, challenge } = await _kakaoGenPKCE();
   sessionStorage.setItem('_kakaoRole', role);
