@@ -574,12 +574,14 @@ async function _pushSettingsToSB(){
   const s  = DB.g(K.SETTINGS,{});
   const ca = DB.g('custom_alerts',[]);
   const row = {
-    site_id:S?.siteId||'global',
+    site_id:'global',  // 전역 설정은 항상 'global' 키로 단일 행 upsert
     alert_time:s.alertTime||'15:00',
     custom_alerts:JSON.stringify(ca),
+    kakao_js_key:DB.g('kakao_js_key','')||'',  // 카카오 키 서버 영구 저장
     updated_at:new Date().toISOString()
   };
-  await sbReq('app_settings','POST',[row],'').catch(()=>{});
+  // on_conflict=site_id → upsert (중복 INSERT 방지)
+  await sbBatchUpsert('app_settings',[row],'site_id').catch(()=>{});
 }
 
 async function _pushInviteCodeToSB(siteId, code){
@@ -632,13 +634,22 @@ async function _pullNoticesFromSB(){
 }
 
 async function _pullSettingsFromSB(){
+  // 전역 설정(global) 우선, 없으면 현장 설정도 조회
   const siteId = S?.siteId||'global';
-  const rows = await sbReq('app_settings','GET',null,`?site_id=eq.${encodeURIComponent(siteId)}`).catch(()=>null);
+  const query = siteId === 'global'
+    ? '?site_id=eq.global'
+    : `?site_id=in.(global,${encodeURIComponent(siteId)})&order=site_id.desc&limit=2`;
+  const rows = await sbReq('app_settings','GET',null,query).catch(()=>null);
   if(!Array.isArray(rows)||!rows.length) return;
   const r = rows[0];
   const s = DB.g(K.SETTINGS,{}); s.alertTime = r.alert_time||'15:00';
   DB.s(K.SETTINGS, s);
   try{ DB.s('custom_alerts', JSON.parse(r.custom_alerts||'[]')); }catch(_e){}
+  // 카카오 JS 키 서버에서 복원 (캐시 삭제해도 자동 복구)
+  if(r.kakao_js_key && !DB.g('kakao_js_key','')){
+    DB.s('kakao_js_key', r.kakao_js_key);
+    if(typeof _kakaoInit==='function') _kakaoInit();
+  }
 }
 
 async function _pullInviteCodesFromSB(){

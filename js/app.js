@@ -534,19 +534,25 @@ async function onGoogleSignIn(response){
 async function _doGoogleTechLogin(email, googleName){
   toast('Google 계정 확인 중...','ok',2000);
   const allMembers = getMembers();
-  // google_email 기준으로 기술인 레코드 검색 (role='tech' 또는 title='기술인')
-  let member = allMembers.find(m=>m.google_email===email && (m.role==='tech'||m.title==='기술인'));
-  if(!member){
-    try {
-      const rows = await sbReq('members','GET',null,
-        `?google_email=eq.${encodeURIComponent(email)}&role=eq.tech&limit=1`);
-      if(rows?.length){
-        member=rows[0];
-        allMembers.push(member);
-        saveMembers(allMembers);
-      }
-    } catch (_e) {}
-  }
+  let member = null;
+  // 서버 우선 조회 — 항상 SB에서 최신 데이터 사용 (status 변경 즉시 반영)
+  try {
+    const rows = await sbReq('members','GET',null,
+      `?google_email=eq.${encodeURIComponent(email)}&limit=1`);
+    if(rows?.length){
+      const sr = rows[0];
+      // 서버→로컬 형식 변환 및 캐시 갱신
+      member = {id:sr.record_id||sr.id,name:sr.name,company:sr.company,siteId:sr.site_id,
+        siteName:sr.site_name,phone:sr.phone,title:sr.title,role:sr.role||'tech',
+        status:sr.status||'approved',google_email:sr.google_email||email,
+        kakao_id:sr.kakao_id||'',joinedAt:new Date(sr.joined_at||Date.now()).getTime(),synced:true};
+      const idx=allMembers.findIndex(m=>m.id===member.id);
+      if(idx>=0) allMembers[idx]=member; else allMembers.push(member);
+      saveMembers(allMembers);
+    }
+  } catch (_e) {}
+  // SB 조회 실패 시 로컬 폴백
+  if(!member) member = allMembers.find(m=>m.google_email===email && (m.role==='tech'||m.title==='기술인'));
   // 프로필 입력 모달 열기 (신규 또는 재확인)
   _showGoogleProfileModal('tech',{
     email, googleName,
@@ -562,19 +568,24 @@ async function _doGoogleTechLogin(email, googleName){
 async function _doGoogleSubLogin(email, googleName){
   toast('Google 계정 확인 중...','ok',2000);
   const allMembers = getMembers();
-  let member = allMembers.find(m=>m.google_email===email && m.role!=='tech' && m.title!=='기술인');
-  if(!member){
-    try {
-      const rows = await sbReq('members','GET',null,
-        `?google_email=eq.${encodeURIComponent(email)}&role=eq.sub&limit=1`);
-      if(rows?.length){
-        member=rows[0];
-        const idx=allMembers.findIndex(m=>m.id===member.id);
-        if(idx>=0) allMembers[idx]=member; else allMembers.push(member);
-        saveMembers(allMembers);
-      }
-    } catch (_e) {}
-  }
+  let member = null;
+  // 서버 우선 조회 — 승인 상태(status) 최신 반영 위해 항상 SB 먼저
+  try {
+    const rows = await sbReq('members','GET',null,
+      `?google_email=eq.${encodeURIComponent(email)}&limit=1`);
+    if(rows?.length){
+      const sr = rows[0];
+      member = {id:sr.record_id||sr.id,name:sr.name,company:sr.company,siteId:sr.site_id,
+        siteName:sr.site_name,phone:sr.phone,title:sr.title,role:sr.role||'sub',
+        status:sr.status||'pending',google_email:sr.google_email||email,
+        kakao_id:sr.kakao_id||'',joinedAt:new Date(sr.joined_at||Date.now()).getTime(),synced:true};
+      const idx=allMembers.findIndex(m=>m.id===member.id);
+      if(idx>=0) allMembers[idx]=member; else allMembers.push(member);
+      saveMembers(allMembers);
+    }
+  } catch (_e) {}
+  // SB 조회 실패 시 로컬 폴백
+  if(!member) member = allMembers.find(m=>m.google_email===email && m.role!=='tech' && m.title!=='기술인');
   if(member){
     const st = member.status||'approved';
     if(st==='approved'){
@@ -870,13 +881,22 @@ async function _checkKakaoToken(){
 async function _doKakaoTechLogin(kakaoId, nickname, email){
   toast('카카오 계정 확인 중...','ok',2000);
   const allMembers = getMembers();
-  let member = allMembers.find(m=>m.kakao_id===kakaoId && (m.role==='tech'||m.title==='기술인'));
-  if(!member){
-    try {
-      const rows = await sbReq('members','GET',null,`?kakao_id=eq.${encodeURIComponent(kakaoId)}&role=eq.tech&limit=1`);
-      if(rows?.length){ member=rows[0]; allMembers.push(member); saveMembers(allMembers); }
-    } catch(_e){}
-  }
+  let member = null;
+  // 서버 우선 조회
+  try {
+    const rows = await sbReq('members','GET',null,`?kakao_id=eq.${encodeURIComponent(kakaoId)}&limit=1`);
+    if(rows?.length){
+      const sr=rows[0];
+      member={id:sr.record_id||sr.id,name:sr.name,company:sr.company,siteId:sr.site_id,
+        siteName:sr.site_name,phone:sr.phone,title:sr.title,role:sr.role||'tech',
+        status:sr.status||'approved',google_email:sr.google_email||'',
+        kakao_id:kakaoId,joinedAt:new Date(sr.joined_at||Date.now()).getTime(),synced:true};
+      const idx=allMembers.findIndex(m=>m.id===member.id);
+      if(idx>=0) allMembers[idx]=member; else allMembers.push(member);
+      saveMembers(allMembers);
+    }
+  } catch(_e){}
+  if(!member) member = allMembers.find(m=>m.kakao_id===kakaoId && (m.role==='tech'||m.title==='기술인'));
   _showGoogleProfileModal('tech',{
     email: email||`kakao:${kakaoId}`, googleName: nickname,
     name: member?.name||nickname||'',
@@ -891,18 +911,22 @@ async function _doKakaoTechLogin(kakaoId, nickname, email){
 async function _doKakaoSubLogin(kakaoId, nickname, email){
   toast('카카오 계정 확인 중...','ok',2000);
   const allMembers = getMembers();
-  let member = allMembers.find(m=>m.kakao_id===kakaoId && m.role!=='tech' && m.title!=='기술인');
-  if(!member){
-    try {
-      const rows = await sbReq('members','GET',null,`?kakao_id=eq.${encodeURIComponent(kakaoId)}&role=eq.sub&limit=1`);
-      if(rows?.length){
-        member=rows[0];
-        const idx=allMembers.findIndex(m=>m.id===member.id);
-        if(idx>=0) allMembers[idx]=member; else allMembers.push(member);
-        saveMembers(allMembers);
-      }
-    } catch(_e){}
-  }
+  let member = null;
+  // 서버 우선 조회 — 승인 상태 최신 반영
+  try {
+    const rows = await sbReq('members','GET',null,`?kakao_id=eq.${encodeURIComponent(kakaoId)}&limit=1`);
+    if(rows?.length){
+      const sr=rows[0];
+      member={id:sr.record_id||sr.id,name:sr.name,company:sr.company,siteId:sr.site_id,
+        siteName:sr.site_name,phone:sr.phone,title:sr.title,role:sr.role||'sub',
+        status:sr.status||'pending',google_email:sr.google_email||'',
+        kakao_id:kakaoId,joinedAt:new Date(sr.joined_at||Date.now()).getTime(),synced:true};
+      const idx=allMembers.findIndex(m=>m.id===member.id);
+      if(idx>=0) allMembers[idx]=member; else allMembers.push(member);
+      saveMembers(allMembers);
+    }
+  } catch(_e){}
+  if(!member) member = allMembers.find(m=>m.kakao_id===kakaoId && m.role!=='tech' && m.title!=='기술인');
   if(member){
     const st=member.status||'approved';
     if(st==='approved'){
@@ -1085,6 +1109,8 @@ function saveKakaoConfig(){
   if(!key){ toast('카카오 키를 입력하세요','err'); return; }
   DB.s('kakao_js_key', key);
   _kakaoInit();
+  // 서버에도 즉시 저장 → 캐시 삭제해도 자동 복구
+  if(typeof _pushSettingsToSB==='function') _pushSettingsToSB().catch(()=>{});
   toast('카카오 설정 저장됨 ✓','ok');
 }
 
