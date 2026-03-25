@@ -5141,13 +5141,20 @@ function _renderEquipMasterSheet(sh) {
     </div>
     <div style="padding:0 4px 8px">
 
-      <!-- 일괄 CSV 등록 -->
+      <!-- 일괄 CSV/엑셀 등록 -->
       <details style="margin-bottom:12px">
-        <summary style="font-size:11px;font-weight:700;color:var(--tx3);cursor:pointer;padding:6px 8px;background:var(--bg2);border-radius:6px;user-select:none">📋 CSV 일괄 등록 (현장명,프로젝트명,업체명,장비제원,모델명,장비번호,반입일 형식)</summary>
+        <summary style="font-size:11px;font-weight:700;color:var(--tx3);cursor:pointer;padding:6px 8px;background:var(--bg2);border-radius:6px;user-select:none">📋 CSV / 엑셀 일괄 등록</summary>
         <div style="padding:8px 4px 4px">
-          <div style="font-size:10px;color:var(--tx3);margin-bottom:6px">한 줄에 하나씩: <code style="background:rgba(59,130,246,.1);padding:1px 5px;border-radius:3px">현장명,프로젝트명,업체명,장비제원,모델명,장비번호,반입일</code> 형식<br>예) P4복합동,Ph2,AJ네트웍스,10M,GS2636,GF123,2026-03-01</div>
-          <textarea id="eq-csv-input" rows="5" placeholder="P4복합동,Ph2,AJ네트웍스,10M,GS2636,GF123,2026-03-01" style="width:100%;padding:8px;font-size:12px;font-family:monospace;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx);resize:vertical;box-sizing:border-box"></textarea>
-          <button onclick="_equipMasterBulkAdd()" style="width:100%;margin-top:6px;padding:7px;font-size:12px;font-weight:700;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);border-radius:6px;color:#60a5fa;cursor:pointer">일괄 등록</button>
+          <div style="display:flex;gap:6px;margin-bottom:8px">
+            <button onclick="_equipExcelDownload()" style="flex:1;padding:6px 8px;font-size:11px;font-weight:700;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);border-radius:6px;color:#4ade80;cursor:pointer">📥 양식 다운</button>
+            <label style="flex:1;display:flex;align-items:center;justify-content:center;padding:6px 8px;font-size:11px;font-weight:700;background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.3);border-radius:6px;color:#a78bfa;cursor:pointer">
+              📊 엑셀 파일로 등록
+              <input type="file" accept=".xlsx,.xls" style="display:none" onchange="_equipExcelImport(this)">
+            </label>
+          </div>
+          <div style="font-size:10px;color:var(--tx3);margin-bottom:6px">CSV 직접 입력: <code style="background:rgba(59,130,246,.1);padding:1px 5px;border-radius:3px">현장명,프로젝트명,업체명,장비제원,모델명,장비번호,반입일</code><br>예) P4복합동,Ph2,AJ네트웍스,10M,GS2636,GF123,2026-03-01</div>
+          <textarea id="eq-csv-input" rows="4" placeholder="P4복합동,Ph2,AJ네트웍스,10M,GS2636,GF123,2026-03-01" style="width:100%;padding:8px;font-size:12px;font-family:monospace;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx);resize:vertical;box-sizing:border-box"></textarea>
+          <button onclick="_equipMasterBulkAdd()" style="width:100%;margin-top:6px;padding:7px;font-size:12px;font-weight:700;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);border-radius:6px;color:#60a5fa;cursor:pointer">CSV 일괄 등록</button>
         </div>
       </details>
 
@@ -5323,6 +5330,51 @@ async function _equipMasterBulkAdd() {
   toast(`${added}대 등록 완료${duped ? ' · ' + duped + '대 이미 존재' : ''}${errLines.length ? ' · ' + errLines.length + '행 오류' : ''}`, added > 0 ? 'ok' : 'warn');
   const sh = document.getElementById('sh-equip-master');
   if (sh) _renderEquipMasterSheet(sh);
+}
+
+function _equipExcelDownload() {
+  if (typeof XLSX === 'undefined') { toast('엑셀 라이브러리 로딩 중... 잠시 후 다시 시도하세요', 'warn'); return; }
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['현장명','프로젝트명','업체명','장비제원','모델명','장비번호','반입일'],
+    ['P4복합동','Ph2','AJ네트웍스','10M','GS2636','GF123', today()],
+  ]);
+  ws['!cols'] = [{wch:14},{wch:10},{wch:16},{wch:8},{wch:10},{wch:10},{wch:12}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '장비목록');
+  XLSX.writeFile(wb, '장비등록양식.xlsx');
+}
+
+async function _equipExcelImport(input) {
+  if (typeof XLSX === 'undefined') { toast('엑셀 라이브러리 로딩 중... 잠시 후 다시 시도하세요', 'warn'); input.value=''; return; }
+  const file = input.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'binary' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      // 첫 행이 헤더("현장명")이면 제외
+      const dataRows = String(rows[0]?.[0]).trim() === '현장명' ? rows.slice(1) : rows;
+      const csv = dataRows
+        .filter(r => r.some(c => String(c).trim()))
+        .map(r => r.slice(0, 7).map(c => {
+          // 날짜: Excel 숫자 → YYYY-MM-DD
+          if (typeof c === 'number' && c > 40000) {
+            const d = XLSX.SSF.parse_date_code(c);
+            return `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`;
+          }
+          return String(c).trim();
+        }).join(','))
+        .join('\n');
+      const ta = document.getElementById('eq-csv-input');
+      if (ta) { ta.value = csv; await _equipMasterBulkAdd(); }
+    } catch(err) {
+      toast('엑셀 파일 읽기 오류: ' + err.message, 'err');
+    }
+    input.value = '';
+  };
+  reader.readAsBinaryString(file);
 }
 
 async function _equipMasterAdd() {
