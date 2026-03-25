@@ -1640,12 +1640,13 @@ const EQUIP_MODELS = {
   '8M':     ['GS1930','OPTIMUM8'],
   '10M':    ['GS2632','GS2646'],
   '12M':    ['GS3246','MS10.4'],
-  '14M':    ['GS-4047'],
-  '16M':    ['GS-4655'],
-  '18M':    ['GS-5069'],
-  '16M굴절':['SIGMA16','Z45_25J','E450AJ'],
+  '14M':    ['GS4047'],
+  '16M':    ['GS4655'],
+  '18M':    ['GS5069'],
+  '16M굴절':['SIGMA16','Z4525J','E450AJ'],
   '기타':   [],
 };
+const _nh = s => (s||'').replace(/-/g,'').trim();
 function _equipUpdateModelOptions(spec){
   const sel = document.getElementById('eq-add-model');
   if(!sel) return;
@@ -5270,23 +5271,23 @@ async function _equipMasterBulkAdd() {
       const _csvSite = getSites().find(s=>s.name===parts[0]||s.id===parts[0]);
       effectiveSiteId   = _csvSite?.id   || siteId;
       effectiveSiteName = _csvSite?.name || siteName;
-      project = parts[1]; company = parts[2]; spec = parts[3]; model = parts[4];
-      equipNo = (parts[5]||'').toUpperCase(); inDate = parts[6] || today();
+      project = parts[1]; company = parts[2]; spec = parts[3]; model = _nh(parts[4]);
+      equipNo = _nh((parts[5]||'').toUpperCase()); inDate = parts[6] || today();
     } else if (parts.length >= 5 && !/^\d{4}-/.test(parts[3]) && /^\d{4}-/.test(parts[5]||'x')) {
       // 6열 구형식: 현장명,프로젝트명,업체명,장비제원,장비번호,반입일
       const _csvSite = getSites().find(s=>s.name===parts[0]||s.id===parts[0]);
       effectiveSiteId   = _csvSite?.id   || siteId;
       effectiveSiteName = _csvSite?.name || siteName;
       project = parts[1]; company = parts[2]; spec = parts[3];
-      equipNo = (parts[4]||'').toUpperCase(); inDate = parts[5] || today();
+      equipNo = _nh((parts[4]||'').toUpperCase()); inDate = parts[5] || today();
     } else if (parts.length >= 3 && parts[2] && !/^\d{4}-/.test(parts[1])) {
       // 구형식1: 업체명,장비제원,장비번호[,반입일,프로젝트]
-      company = parts[0]; spec = parts[1]; equipNo = (parts[2]||'').toUpperCase();
+      company = parts[0]; spec = parts[1]; equipNo = _nh((parts[2]||'').toUpperCase());
       inDate  = parts[3] || today(); project = parts[4] || '';
       effectiveSiteId = siteId; effectiveSiteName = siteName;
     } else {
       // 구형식2: 업체명,장비번호
-      company = parts[0]; spec = ''; equipNo = (parts[1]||'').toUpperCase();
+      company = parts[0]; spec = ''; equipNo = _nh((parts[1]||'').toUpperCase());
       inDate  = today(); project = '';
       effectiveSiteId = siteId; effectiveSiteName = siteName;
     }
@@ -5320,12 +5321,12 @@ async function _equipMasterBulkAdd() {
 }
 
 async function _equipMasterAdd() {
-  const no       = document.getElementById('eq-add-no')?.value.toUpperCase().trim();
+  const no       = _nh(document.getElementById('eq-add-no')?.value.toUpperCase());
   const co       = document.getElementById('eq-add-co')?.value.trim();
   const spec     = document.getElementById('eq-add-spec')?.value.trim();
   const inDate   = document.getElementById('eq-add-indate')?.value || today();
   const serialNo = document.getElementById('eq-add-serial')?.value.trim() || '';
-  const model    = document.getElementById('eq-add-model')?.value.trim() || '';
+  const model    = _nh(document.getElementById('eq-add-model')?.value);
   const si       = document.getElementById('eq-add-site')?.value || (S?.siteId === 'all' ? '' : S?.siteId);
   const proj     = document.getElementById('eq-add-proj')?.value || '';
   if (!no)   { toast('장비번호를 입력하세요', 'err'); return; }
@@ -5418,7 +5419,7 @@ async function _equipMasterOut(id) {
 
 // 반출 처리 폼 — 장비번호 검색으로 반출 처리
 async function _equipMasterOutByNo() {
-  const no      = document.getElementById('eq-out-no')?.value.toUpperCase().trim();
+  const no      = _nh(document.getElementById('eq-out-no')?.value.toUpperCase());
   const outDate = document.getElementById('eq-out-date')?.value || today();
   if (!no) { toast('장비번호를 입력하세요', 'err'); return; }
   const siteId = S?.siteId === 'all' ? null : S?.siteId;
