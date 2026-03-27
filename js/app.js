@@ -1482,9 +1482,9 @@ function renderAcctSubList(){
         <span style="font-weight:800;font-size:13px">${m.name}</span>${m.title?`<span style="font-size:10px;color:var(--tx3);margin-left:5px;font-weight:500">${m.title}</span>`:''}
         <div style="display:flex;gap:4px;flex-shrink:0">
           ${isPending?`
-            <button onclick="approveMember('${m.id}')" style="font-size:10px;padding:3px 8px;background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.4);border-radius:5px;color:#4ade80;cursor:pointer;font-weight:700">승인</button>
-            <button onclick="rejectMember('${m.id}')" style="font-size:10px;padding:3px 8px;background:transparent;border:1px solid rgba(239,68,68,.3);border-radius:5px;color:#f87171;cursor:pointer">거절</button>
-          `:`<button onclick="deleteAcctSubMemberId('${m.id}')" style="font-size:9px;padding:2px 6px;background:transparent;border:1px solid rgba(248,113,113,.3);border-radius:5px;color:#f87171;cursor:pointer">탈퇴처리</button>`}
+            <button onclick="approveMember('${esc(m.id)}')" style="font-size:10px;padding:3px 8px;background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.4);border-radius:5px;color:#4ade80;cursor:pointer;font-weight:700">승인</button>
+            <button onclick="rejectMember('${esc(m.id)}')" style="font-size:10px;padding:3px 8px;background:transparent;border:1px solid rgba(239,68,68,.3);border-radius:5px;color:#f87171;cursor:pointer">거절</button>
+          `:`<button onclick="deleteAcctSubMemberId('${esc(m.id)}')" style="font-size:9px;padding:2px 6px;background:transparent;border:1px solid rgba(248,113,113,.3);border-radius:5px;color:#f87171;cursor:pointer">탈퇴처리</button>`}
         </div>
       </div>
       <div style="font-size:11px;color:var(--tx2);margin-top:4px">${m.company} · ${getSites().find(s=>s.id===m.siteId)?.name||m.siteId}</div>
@@ -1497,6 +1497,7 @@ function renderAcctSubList(){
 }
 
 function approveMember(id){
+  if(S?.role !== 'aj'){ toast('권한이 없습니다','err'); return; }
   const all=getMembers();
   const m=all.find(a=>a.id===id); if(!m) return;
   m.status='approved'; m.synced=false;
@@ -1508,6 +1509,7 @@ function approveMember(id){
   renderAcctSubList();
 }
 function rejectMember(id){
+  if(S?.role !== 'aj'){ toast('권한이 없습니다','err'); return; }
   const all=getMembers();
   const m=all.find(a=>a.id===id); if(!m) return;
   if(!confirm(`[${m.name}] 가입 신청을 거절하시겠습니까?`)) return;
@@ -1518,6 +1520,7 @@ function rejectMember(id){
   renderAcctSubList();
 }
 function deleteAcctSubMemberId(id){
+  if(S?.role !== 'aj'){ toast('권한이 없습니다','err'); return; }
   const all=getMembers();
   const m=all.find(a=>a.id===id); if(!m) return;
   if(!confirm(`[${m.name}] 협력사 관리자를 탈퇴 처리하시겠습니까?`)) return;
@@ -1609,6 +1612,7 @@ async function resetAcctAjPw(idx){
   toast(`[${m.name}] 비밀번호가 초기화되었습니다`,'ok');
 }
 function deleteAcctAjMember(idx){
+  if(S?.role !== 'aj'){ toast('권한이 없습니다','err'); return; }
   const members=_getAjMembers(); const m=members[idx]; if(!m) return;
   if(m.emp_no==='admin'){ toast('admin 계정은 삭제할 수 없습니다','err'); return; }
   if(!confirm(`[${m.name}] 계정을 삭제하시겠습니까?`)) return;

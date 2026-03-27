@@ -855,10 +855,10 @@ function setupEquipAutocomplete(inputId, opts = {}) {
 
     _updateDDPos();
     dd.innerHTML = candidates.slice(0, 10).map(e => {
-      const badge = e.company ? `<span style="font-size:10px;color:var(--tx3);margin-left:6px">${e.company}</span>` : '';
-      return `<div class="equip-ac-item" data-equip="${e.equipNo}">
-        <span style="font-family:monospace;font-weight:700;color:var(--blue)">${e.equipNo}</span>${badge}
-        ${e.floor ? `<span style="font-size:10px;color:var(--tx3);margin-left:4px">${e.floor}</span>` : ''}
+      const badge = e.company ? `<span style="font-size:10px;color:var(--tx3);margin-left:6px">${esc(e.company)}</span>` : '';
+      return `<div class="equip-ac-item" data-equip="${esc(e.equipNo)}">
+        <span style="font-family:monospace;font-weight:700;color:var(--blue)">${esc(e.equipNo)}</span>${badge}
+        ${e.floor ? `<span style="font-size:10px;color:var(--tx3);margin-left:4px">${esc(e.floor)}</span>` : ''}
       </div>`;
     }).join('');
 

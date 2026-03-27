@@ -5649,9 +5649,9 @@ async function openMemberMgr(){
             <div style="font-size:10px;color:var(--tx3);margin-top:2px">가입: ${new Date(m.joinedAt).toLocaleDateString('ko-KR')}</div>
           </div>
           <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
-            ${isPending?`<button onclick="approveMember('${m.id}');openMemberMgr()" style="font-size:10px;padding:3px 8px;background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.4);border-radius:5px;color:#4ade80;cursor:pointer;font-weight:700">승인</button>`:''}
+            ${isPending?`<button onclick="approveMember('${esc(m.id)}');openMemberMgr()" style="font-size:10px;padding:3px 8px;background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.4);border-radius:5px;color:#4ade80;cursor:pointer;font-weight:700">승인</button>`:''}
             <button class="btn-ghost" style="font-size:10px;padding:4px 8px;color:#f87171;border-color:rgba(239,68,68,.3)"
-              onclick="deleteAcctSubMemberId('${m.id}');openMemberMgr()">탈퇴처리</button>
+              onclick="deleteAcctSubMemberId('${esc(m.id)}');openMemberMgr()">탈퇴처리</button>
           </div>
         </div>
       </div>`;}).join('')
