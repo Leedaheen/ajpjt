@@ -14,7 +14,7 @@ function _toggleHomeAcc(key){
 }
 function renderHome(){
   if(!S) return;
-  _renderHomeAsync().catch(e=>console.warn('[renderHome]',e));
+  _renderHomeAsync().catch(e=> {};
 }
 
 async function _renderHomeAsync(){
@@ -523,7 +523,6 @@ async function submitStart(){
     document.querySelectorAll('#ops-project-chips .chip.on').forEach(c=>c.classList.remove('on'));
   } catch(e) {
     // 서버 저장 실패 → 로컬 저장 후 재시도 예약
-    console.warn('[submitStart]', e.message);
     entry.synced=false;
     try{ await saveLog(entry); }catch(_){}
     scheduleRetrySync();
@@ -586,7 +585,6 @@ async function submitEnd(){
     document.getElementById('f-meter-end').value='';
     populateOpenSessions();
   } catch(e) {
-    console.warn('[submitEnd]', e.message);
     entry.synced=false;
     try{ await saveLog(entry); }catch(_){}
     scheduleRetrySync();
@@ -628,7 +626,6 @@ async function submitIdle(){
     document.getElementById('f-idle-note').value='';
     document.querySelectorAll('#idle-reason-chips .chip.on').forEach(c=>c.classList.remove('on'));
   } catch(e) {
-    console.warn('[submitIdle]', e.message);
     for(const e2 of entries){ e2.synced=false; try{ await saveLog(e2); }catch(_){} }
     scheduleRetrySync();
     toast('로컬 저장됨 — 네트워크 복구 시 자동 재시도 (최대 5회)', 'warn', 3500);
@@ -968,7 +965,6 @@ async function _onAsPhotoSelected(input){
     if(preview && thumbEl){ thumbEl.src = thumb; preview.style.display = 'flex'; }
     if(labelEl) labelEl.style.display = 'none';
   } catch(e) {
-    console.warn('[photo] 압축 실패:', e);
     toast('사진 처리 중 오류가 발생했습니다','err');
   }
 }
@@ -1336,7 +1332,7 @@ function _addASComment(id){
   reqs[idx] = r;
   saveAsReqs(reqs);
   // 즉시 서버 동기화 (AJ 정비기사에게 알람)
-  _directPushAS(r).catch(e=>{ console.warn('[ASComment push]',e); scheduleRetrySync(); });
+  _directPushAS(r).catch(()=>{ scheduleRetrySync(); });
   addNotif({icon:'💬', title:`AS 댓글 [${r.equip||''}]`, desc:`${S?.name||''}(${S?.company||''}) — ${text.slice(0,40)}`});
   // 댓글 알림: 신청인에게 (내가 AJ인 경우) 또는 AJ에게 (내가 sub인 경우)
   if(S?.role === 'aj'){
@@ -2629,7 +2625,7 @@ async function saveDispatch(id){
   await saveTransit(recs);
   document.getElementById('dispatch-popup')?.remove();
   // 즉시 서버 연동
-  _directPushTransit(rec).catch(e => { console.warn('[saveDispatch push]', e); scheduleRetrySync(); });
+  _directPushTransit(rec).catch(()=>{ scheduleRetrySync(); });
   // 알림: 배차정보 저장 시 AJ관리자 + 신청인
   if(list.length){
     const _dpBody = `${rec.date} · ${list.length}대`;
@@ -2771,7 +2767,7 @@ async function _addTransitMsg(id){
   renderTransit();
   // 서버 즉시 push
   try { await _directPushTransit(rec); toast('메시지 추가됨','ok'); }
-  catch(e){ console.warn('[addTransitMsg push]',e); scheduleRetrySync(); toast('로컬 저장됨 — 자동 재시도','warn',2500); }
+  catch(e){ scheduleRetrySync(); toast('로컬 저장됨 — 자동 재시도','warn',2500); }
   // 댓글 알림: AJ가 쓴 경우 → 신청인, 협력사가 쓴 경우 → AJ관리자
   const _trNotifBody = `${S?.name||''}(${S?.company||''}) — ${text.slice(0,50)}`;
   if(S?.role === 'aj'){
@@ -2813,7 +2809,7 @@ async function _delTransitMsg(id, idx){
   renderTransit();
   // 서버 즉시 push
   try { await _directPushTransit(rec); toast('삭제됨','ok'); }
-  catch(e){ console.warn('[delTransitMsg push]',e); scheduleRetrySync(); toast('로컬 삭제됨 — 자동 재시도','warn',2500); }
+  catch(e){ scheduleRetrySync(); toast('로컬 삭제됨 — 자동 재시도','warn',2500); }
   _fetchFromSB().catch(()=>{}).then(()=>renderTransit());
 }
 
@@ -2995,7 +2991,7 @@ async function _saveAllSpecEquip(recordId) {
   await saveTransit(recs);
 
   // ── 즉시 서버 연동 (다른 이용자가 바로 확인 가능) ──────────
-  _directPushTransit(rec).catch(e => { console.warn('[_saveAllSpecEquip push]', e); scheduleRetrySync(); });
+  _directPushTransit(rec).catch(()=>{ scheduleRetrySync(); });
   // 알림: 장비번호 저장 시 AJ관리자 + 신청인
   if(rec.ajEquip){
     pushSBNotif({target_aj_type:'관리자', type:'equip_saved', title:`🏷 장비번호: ${rec.company}`, body:rec.ajEquip, ref_id:rec.id, site_id:rec.siteId}).catch(()=>{});
@@ -3035,7 +3031,7 @@ async function _saveSpecEquip(recordId, specIdx) {
   await saveTransit(recs);
 
   // 즉시 서버 연동
-  _directPushTransit(rec).catch(e => { console.warn('[_saveSpecEquip push]', e); scheduleRetrySync(); });
+  _directPushTransit(rec).catch(()=>{ scheduleRetrySync(); });
   // 반입완료면 마스터 등록
   if (rec.type === 'in' && rec.status === '반입완료' && equipNos.length) {
     await registerEquipFromTransit(rec);
@@ -3058,7 +3054,7 @@ async function _saveInlineEquip(id) {
   // 편집모드 플래그 해제
   if (window._specEditMode) window._specEditMode.delete(id);
   // 즉시 서버 연동
-  _directPushTransit(rec).catch(e => { console.warn('[_saveInlineEquip push]', e); scheduleRetrySync(); });
+  _directPushTransit(rec).catch(()=>{ scheduleRetrySync(); });
   // 반입완료 상태라면 마스터도 즉시 갱신
   if (rec.type === 'in' && rec.status === '반입완료' && equip) {
     await registerEquipFromTransit(rec);
@@ -3170,7 +3166,7 @@ async function _completeTransitInner(id) {
   rec.synced   = false;
   await saveTransit(recs);
   // 단건 즉시 서버 업서트 — 다른 이용자가 완료 상태 바로 확인 가능
-  _directPushTransit(rec).catch(e => { console.warn('[completeTransit push]', e); scheduleRetrySync(); });
+  _directPushTransit(rec).catch(()=>{ scheduleRetrySync(); });
   // 알림: AJ관리자 + 신청인
   const _trVerbBody = `${rec.date} · ${(rec.specs||[]).map(s=>s.spec+'×'+s.qty).join(', ')}`;
   pushSBNotif({target_aj_type:'관리자', type:'transit_done', title:`📦 ${verb}: ${rec.company}`, body:_trVerbBody, ref_id:rec.id, site_id:rec.siteId}).catch(()=>{});
@@ -3181,7 +3177,7 @@ async function _completeTransitInner(id) {
     const changed = await registerEquipFromTransit(rec);
     if (changed) {
       toast(`${verb} · 장비 마스터 등록 완료`, 'ok');
-      _syncToSupabase().catch(e=>console.warn('[completeTransit equip sync]',e));
+      _syncToSupabase().catch(e=> {};
     } else {
       toast(verb + ' 처리 완료' + (rec.ajEquip ? '' : ' (장비번호 미입력)'), rec.ajEquip ? 'ok' : 'warn');
     }
@@ -3193,7 +3189,7 @@ async function _completeTransitInner(id) {
     const changed = await deregisterEquipFromTransit(rec);
     if (changed) {
       toast(`${verb} · ${outNos.size}대 마스터 반출처리 완료`, 'ok');
-      _syncToSupabase().catch(e=>console.warn('[completeTransit equip sync]',e));
+      _syncToSupabase().catch(e=> {};
     } else if (outNos.size === 0) toast(verb + ' 처리 완료 (장비번호 미입력)', 'warn');
     else toast(`${verb} · 마스터에서 장비를 찾을 수 없습니다 (이미 반출 또는 미등록)`, 'warn');
   }
@@ -3473,7 +3469,6 @@ async function _submitHandover(date) {
     await _directPushTransit(rec);
     toast('인수인계 등록 완료 ✓', 'ok');
   } catch(e) {
-    console.warn('[submitHandover]', e.message);
     scheduleRetrySync();
     toast('로컬 저장됨 — 네트워크 복구 시 자동 재시도 (최대 5회)', 'warn', 3500);
   } finally {
@@ -3649,7 +3644,7 @@ async function cancelTransit(id){
   if(!rec){ toast('레코드를 찾을 수 없습니다','err'); return; }
   rec.status='취소'; rec.synced=false;
   await saveTransit(recs);
-  _directPushTransit(rec).catch(e => { console.warn('[cancelTransit push]', e); scheduleRetrySync(); });
+  _directPushTransit(rec).catch(()=>{ scheduleRetrySync(); });
   // 알림: AJ관리자 + 신청인
   const _cnBody = `${rec.date} · ${rec.type==='in'?'반입':'반출'}`;
   pushSBNotif({target_aj_type:'관리자', type:'transit_cancel', title:`❌ 취소: ${rec.company}`, body:_cnBody, ref_id:rec.id, site_id:rec.siteId}).catch(()=>{});
@@ -3855,7 +3850,6 @@ async function submitTransit(){
     await _directPushTransit(rec);
     toast(typeChip.textContent + ' 신청이 등록되었습니다 ✓', 'ok');
   } catch(e) {
-    console.warn('[submitTransit push]', e);
     scheduleRetrySync();
     toast('로컬 저장됨 — 네트워크 복구 시 자동 재시도 (최대 5회)', 'warn', 3500);
   } finally {
@@ -3981,7 +3975,6 @@ async function submitAS(){
     await _directPushAS(req);
     toast('AS 신청이 등록되었습니다 ✓', 'ok');
   } catch(e) {
-    console.warn('[submitAS push]', e);
     scheduleRetrySync();
     toast('로컬 저장됨 — 네트워크 복구 시 자동 재시도 (최대 5회)', 'warn', 3500);
   } finally {
@@ -5049,12 +5042,11 @@ async function clearAppCache(){
       const req = indexedDB.deleteDatabase('aj_v3');
       req.onsuccess = () => res();
       req.onerror   = () => rej(req.error);
-      req.onblocked = () => { console.warn('[clearCache] IDB delete blocked'); res(); };
+      req.onblocked = () => { res(); };
     });
     // 4. localStorage 전체 삭제
     localStorage.clear();
   } catch(e) {
-    console.warn('[clearAppCache]', e);
     // 오류가 있어도 LS는 확실히 삭제 후 reload
     try { localStorage.clear(); } catch(_) {}
   } finally {
@@ -5314,7 +5306,7 @@ async function _equipMasterBulkAdd() {
     }
   }
   await saveEquipMaster(arr);
-  if(added > 0) _syncToSupabase().catch(e=>console.warn('[equip csv sync]',e));
+  if(added > 0) _syncToSupabase().catch(e=> {};
   // M7: 오류 행 상세 안내
   if(errLines.length){
     const errMsg = `오류 ${errLines.length}행 (업체명·장비번호 필수):\n` + errLines.slice(0,5).join('\n') + (errLines.length>5?`\n외 ${errLines.length-5}행`:'');
@@ -5624,7 +5616,7 @@ async function openMemberMgr(){
         saveMembers([...allMap.values()]);
       }
     }
-  } catch(e){ console.warn('[openMemberMgr] SB pull 실패:',e); }
+  } catch(e){}
 
   const siteId=S?.siteId==='all'?null:S?.siteId;
   const subMembers=getMembers().filter(m=>
@@ -6165,7 +6157,6 @@ function migrateFromV1(){
   if(!v1Logs?.length && !v1Cos?.length){
     localStorage.setItem('migrated_v1_to_v3','1'); return;
   }
-  console.log(`[v1→v3] 로그 ${v1Logs?.length||0}건, 업체 ${v1Cos?.length||0}개`);
 
   // 업체 마이그레이션: v1 [{name,color,equip,total,active}] → v3 {p4:[...]}
   if(v1Cos?.length){
@@ -6192,7 +6183,7 @@ function migrateFromV1(){
       v1Legacy:{status:l.status,count:l.count,total:l.total,active:l.active},
       ts:l.ts||Date.now(), synced:l.synced!==false, migratedFrom:'v1',
     }));
-    if(conv.length){ saveLogs([...conv,...ex]); console.log(`[v1→v3] ${conv.length}건 완료`); }
+    if(conv.length){ saveLogs([...conv,...ex]); }
   }
 
   // v1 GS URL 마이그레이션
@@ -6210,7 +6201,6 @@ function migrateFromV2(){
   if(!v2Logs.length && !v2Cos){
     localStorage.setItem('migrated_v2_to_v3','1'); return;
   }
-  console.log(`[v2→v3] 로그 ${v2Logs.length}건, 업체 ${v2Cos?.length||0}개`);
 
   // 업체 마이그레이션: v2 [{name,color,equip}] → v3 {p4:[...]}
   if(v2Cos?.length){
@@ -6234,7 +6224,7 @@ function migrateFromV2(){
     v2Legacy:{active:l.active,mode:l.mode,count:l.count,total:l.total},
     ts:l.ts||Date.now(), synced:l.synced!==false, migratedFrom:'v2',
   }));
-  if(conv.length){ saveLogs([...conv,...ex]); console.log(`[v2→v3] ${conv.length}건 완료`); }
+  if(conv.length){ saveLogs([...conv,...ex]); }
 
   // v2 관리자 비밀번호 마이그레이션
   const v2creds = _safeLS('admin_credentials');

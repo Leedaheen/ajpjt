@@ -92,7 +92,6 @@ function _runMemoryGuard(){
     const mem = performance?.memory;
     const heapMB = Math.round(mem.usedJSHeapSize / 1048576);
     if(heapMB > 300){
-      console.warn('[MemGuard] 힙 초과 — 캐시 축소:', heapMB+'MB');
       // 전체 무효화 대신 단계적 축소 (사용 중인 페이지 캐시는 유지)
       if(_cache.logs   && _cache.logs.length   > 200) _cache.logs   = _cache.logs.slice(0, 200);
       if(_cache.transit&& _cache.transit.length> 100) _cache.transit= _cache.transit.slice(0, 100);
@@ -102,7 +101,6 @@ function _runMemoryGuard(){
       _memGuardLastClean = now;
       if(heapMB > 400){ // 400MB 초과 시 전체 해제
         _invalidateAll();
-        console.warn('[MemGuard] 400MB 초과 — 전체 캐시 해제');
       }
     }
   } catch (_e) {}
@@ -172,7 +170,7 @@ function getLogsByDate(date){
 // 새 로그 저장 (IDB + 로컬스토리지 동시)
 async function saveLog(entry) {
   entry.updatedAt = Date.now();
-  try { await IDB.put('logs', entry); } catch(e){ console.warn('[IDB] put 실패:', e); }
+  try { await IDB.put('logs', entry); } catch(e){}
   // 캐시 업데이트
   if(_cache.todayLogs && entry.date === today()) {
     _cache.todayLogs = _cache.todayLogs.filter(l=>l.id!==entry.id);
@@ -409,7 +407,6 @@ async function _fetchFromSB(){
         return await sbReq(table, 'GET', null, q);
       } catch(e) {
         if(e?.message?.includes('column') || e?.message?.includes('PGRST')){
-          console.warn(`[_fetchFromSB] ${table} 컬럼 오류 — select=* fallback:`, e.message);
           return sbReq(table, 'GET', null, fallbackQ);
         }
         throw e;
@@ -581,13 +578,13 @@ async function _fetchFromSB(){
       if(curPg==='pg-acct') renderAcctSubList?.();
     }
     return changed;
-  }catch(e){ console.warn('[_fetchFromSB]',e); return false; }
+  }catch(e){ return false; }
 }
 
 // ── localStorage 용량 모니터링 ─────────────────────────────
 function _checkStorageHealth(){
   const kb = DB.sizeKB();
-  if(kb > 1000) console.warn('[LS] 캐시 용량:', kb+'KB — 주 저장소는 IDB/Supabase');
+  if(kb > 1000){}
   return { totalKB: kb };
 }
 
@@ -658,9 +655,7 @@ async function loadEquipFromSupabase() {
     await saveEquipMaster(arr);
     _cache.equipment = null; // 캐시 무효화
     return arr.length;
-  } catch(e) {
-    console.warn('[loadEquip] 실패:', e);
-  }
+  } catch(e) {}
 }
 
 // 특정 현장+업체의 현재 반입 장비 목록 (자동완성용)
@@ -1008,13 +1003,12 @@ async function _purgeOldLogs(){
     });
     if(kept.length < logs.length){
       saveLogs(kept);
-      console.log(`[purgeOldLogs] ${logs.length-kept.length}건 180일 초과 로그 삭제`);
     }
     // IDB도 정리 (synced 항목만 — 미동기화 항목은 유지)
     if(window._IDB_READY){
       await IDB.deleteOlderThan?.('logs', cutTs).catch(()=>{});
     }
-  } catch(e){ console.warn('[purgeOldLogs]', e); }
+  } catch(e){}
 }
 
 /* 기존 seed 더미 데이터 일회성 정리 */
@@ -1025,7 +1019,6 @@ function _purgeSeedLogs(){
   const clean = logs.filter(l => !_seedNames.has(l.name) && !_seedNames.has(l.recorder));
   if(clean.length < logs.length){
     saveLogs(clean);
-    console.log(`[purgeSeed] 더미 로그 ${logs.length - clean.length}건 삭제됨`);
   }
   DB.s('_seedPurged','1');
 }

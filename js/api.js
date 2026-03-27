@@ -129,7 +129,6 @@ async function sbBatchUpsert(table, rows, conflictCol=''){
           (e.message.includes('Could not find') && e.message.includes('column'))
         );
         if(_isColErr){
-          console.warn('[SB] 컬럼 불일치 재시도:', e.message);
           // PostgREST 컬럼 에러 형식 (다양한 버전 대응):
           // "Column 'colname' of relation ..." (PGRST204)
           // "'colname' column ..."  / "column "colname" ..."
@@ -146,7 +145,6 @@ async function sbBatchUpsert(table, rows, conflictCol=''){
         // 23502: 파티션 테이블 id 자동생성 미적용 → 클라이언트 생성 bigint 로 재시도
         const _is23502 = e.message && e.message.includes('23502');
         if(_is23502 && batch[0]?.id === undefined){
-          console.warn('[SB] id 자동생성 실패(23502) — 클라이언트 생성 id 재시도');
           const _base = Date.now();
           batch = batch.map((r, idx) => ({id: _base * 1000 + idx, ...r}));
           lastErr = e;
@@ -176,9 +174,7 @@ async function pushSBNotif(notif){
       ref_id:         notif.ref_id         || null,
       sender_phone:   S?.phone             || null,
     });
-  } catch(e){
-    console.warn('[pushSBNotif]',e);
-  }
+  } catch(e){}
 }
 
 /* GS(Google Sheets) 폴백 — 기존 방식 유지 */
@@ -203,12 +199,11 @@ function queueSync(){
 
 async function syncNow(){
   // syncNow 레벨 락 — 탭 내 중복 방지
-  if(_syncLock){ console.log('[syncNow] 이미 동기화 중 — 건너뜀'); return; }
+  if(_syncLock){ return; }
   // 다중 탭 락 — localStorage 기반 (60초 타임아웃으로 데드락 방지)
   const _LS_LOCK_KEY = '_sync_lock_ts';
   const prevLock = Number(localStorage.getItem(_LS_LOCK_KEY)||0);
   if(prevLock && Date.now() - prevLock < 60000){
-    console.log('[syncNow] 다른 탭 동기화 중 — 건너뜀');
     return;
   }
   localStorage.setItem(_LS_LOCK_KEY, Date.now());
@@ -387,7 +382,7 @@ async function _syncToSupabase(){
   // 부분 실패 테이블 로깅 (성공한 테이블은 이미 synced:true 처리됨)
   const _syncFailed = _syncResults.filter(r => r.status === 'rejected');
   if(_syncFailed.length){
-    _syncFailed.forEach(f => console.warn('[sync] 테이블 동기화 실패:', f.reason?.message));
+    _syncFailed.forEach(f => {};
     if(_syncFailed.length === _syncResults.length) throw new Error('전체 테이블 동기화 실패');
   }
 
@@ -414,9 +409,7 @@ async function _syncToSupabase(){
       await sbBatchUpsert('equipment', rows, 'record_id');
       unsyncEq.forEach(e => e.synced = true);
       await saveEquipMaster(allEquip);
-    } catch(err) {
-      console.warn('[sync] equipment 동기화 실패:', err);
-    }
+    } catch(err) {}
   }
 
   // 6. AJ 멤버 push 제거 — status 등 서버 변경값 덮어쓰기 방지
@@ -424,12 +417,12 @@ async function _syncToSupabase(){
   //    pull은 아래 _pullConfigFromSB() 내 _pullAjMembersFromSB()에서 수행
 
   // ── 설정 데이터 pull (sites/companies/notices/settings/invite/idle/aj_members) ──
-  await _pullConfigFromSB().catch(e => console.warn('[config pull] 실패:', e));
+  await _pullConfigFromSB().catch(e => {};
 
   // ── 다른 기기 변경사항 pull (충돌 방지) ─────────────────
   // 마지막 동기화 이후 서버에서 변경된 transit / AS 데이터를 내려받아 로컬 병합
   // updated_at 기준 비교: 서버 버전이 더 새로우면 로컬을 덮어씀
-  await _pullRecentFromSupabase().catch(e => console.warn('[pull] 실패:', e));
+  await _pullRecentFromSupabase().catch(e => {};
   } catch(e) { throw e; }
 }
 
@@ -484,7 +477,6 @@ async function _directPushTransit(rec){
     await IDB.markSynced('transit',[rec.id]).catch(()=>{});
     _syncPillOk();
   }catch(e){
-    console.warn('[직접업로드] transit 실패 (로컬 저장됨):', e.message);
     throw e; // 호출자(submitTransit)가 로컬 저장 + 재시도 처리
   }
 }
@@ -528,7 +520,6 @@ async function _directPushAS(req){
     await IDB.markSynced('as_requests',[req.id]).catch(()=>{});
     _syncPillOk();
   }catch(e){
-    console.warn('[직접업로드] as_requests 실패 (로컬 저장됨):', e.message);
     throw e; // 호출자(submitAS)가 로컬 저장 + 재시도 처리
   }
 }
@@ -928,7 +919,6 @@ function _initRealtime(){
     _rtWs = new WebSocket(wsUrl);
     _rtWs.onopen = ()=>{
       _rtReconnAttempts = 0; // 연결 성공 시 재시도 카운터 초기화
-      console.log('[Realtime] 연결됨 — 변경사항 즉시 수신 활성화');
       _rtWs.send(JSON.stringify({
         topic:'realtime:public', event:'phx_join',
         payload:{ config:{ postgres_changes:[
@@ -952,7 +942,6 @@ function _initRealtime(){
         const msg = JSON.parse(e.data);
         if(msg.event==='postgres_changes' && msg.payload?.data){
           const tbl = msg.payload.data.table;
-          console.log('[Realtime] 변경 감지:', tbl);
           // 1500ms 디바운스 — 연속 이벤트 중복 fetch 및 화면 깜빡임 방지
           _rtDebounced(tbl, ()=>{
             // notifications/members: 알림·가입신청만 조용히 fetch
@@ -976,11 +965,10 @@ function _initRealtime(){
       const jitter = Math.random() * 5000;
       const delay = baseDelay + jitter;
       _rtReconnAttempts = Math.min(_rtReconnAttempts + 1, 6);
-      console.log(`[Realtime] 연결 끊김 — ${Math.round(delay/1000)}초 후 재연결 (시도 ${_rtReconnAttempts})`);
       _rtReconnTimer = setTimeout(_initRealtime, delay);
     };
     _rtWs.onerror = ()=>{};
-  }catch(e){ console.warn('[Realtime] 초기화 실패:', e.message); }
+  }catch(e){}
 }
 function _cleanupRealtime(){
   if(_rtHbTimer){ clearInterval(_rtHbTimer); _rtHbTimer=null; }
@@ -1003,7 +991,6 @@ function _setRetryStatus(msg, cls){
 function scheduleRetrySync(){
   if(_retrySyncTimer) return; // 이미 예약 중
   if(_retrySyncCount >= _RETRY_DELAYS.length){
-    console.warn('[Sync] 재시도 한도 초과 — 중단');
     _retrySyncCount = 0;
     _setRetryStatus('동기화 실패','err');
     setTimeout(()=>{ try{ toast('서버 동기화 실패 (5회). 네트워크를 확인해주세요','err',6000); }catch(_e){} },0);
