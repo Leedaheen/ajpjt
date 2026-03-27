@@ -1059,23 +1059,29 @@ function _setAppBadge(count){
 
 async function _checkPendingNotif(){
   if(S?.role !== 'aj') return;
-  const pending = getMembers().filter(m => (m.status||'pending') === 'pending' && m.role !== 'tech');
+  // 협력사 대기 + AJ 멤버 대기 모두 포함
+  const subPending = getMembers().filter(m => (m.status||'pending') === 'pending' && m.role !== 'tech');
+  const ajPending  = _getAjMembers().filter(m => (m.status||'approved') === 'pending');
+  const pending = [
+    ...subPending.map(m=>({...m, _notifId: m.record_id||m.id,    _label:`${m.company||''} ${m.name||''}`.trim()})),
+    ...ajPending .map(m=>({...m, _notifId: 'aj_'+m.emp_no,       _label:`[AJ] ${m.name||''}`.trim()})),
+  ];
   const count = pending.length;
   _setAppBadge(count);
   if(count === 0) return;
   // 이미 알림을 보낸 ID는 중복 발송하지 않음
   const notifiedSet = new Set(JSON.parse(DB.g('_notif_pend_ids','[]')));
-  const newOnes = pending.filter(m => !notifiedSet.has(m.record_id||m.id));
+  const newOnes = pending.filter(m => !notifiedSet.has(m._notifId));
   if(!newOnes.length) return;
   const granted = await _requestNotifPermission();
   if(!granted) return;
-  const names = newOnes.map(m=>`${m.company||''} ${m.name||''}`.trim()).join(', ');
+  const names = newOnes.map(m=>m._label).join(', ');
   await _showOSNotif(
     `가입 승인 요청 ${count}건`,
     `${names}님의 가입 승인이 필요합니다.`,
     'pending-approval'
   );
-  newOnes.forEach(m => notifiedSet.add(m.record_id||m.id));
+  newOnes.forEach(m => notifiedSet.add(m._notifId));
   DB.s('_notif_pend_ids', JSON.stringify([...notifiedSet]));
 }
 
@@ -1218,6 +1224,11 @@ async function doGoogleAjRegister(){
   document.getElementById('modal-glink').style.display='none';
   try {
     await sbBatchUpsert('aj_members', [member]);
+    // AJ 관리자 전체에게 가입승인 알림 push
+    pushSBNotif({target_aj_type:'관리자', type:'aj_signup_request',
+      title:`[AJ멤버 가입신청] ${name}`,
+      body:`${name}님(${ajType})이 AJ 멤버 가입을 신청했습니다. 승인이 필요합니다.`,
+      ref_id: empNo}).catch(()=>{});
     toast('가입 신청 완료! AJ 관리자 승인 후 로그인 가능합니다 ✓','ok',4000);
   } catch(e) {
     const _em = e?.message||'';
@@ -1352,6 +1363,8 @@ function openAcctMgr(tab){
   tab = tab||'aj';
   openSheet('sh-acct-mgr');
   setTimeout(()=>switchAcctTab(tab),30);
+  // SB에서 최신 AJ 멤버 pull (백그라운드 — 신규 가입 대기자 반영)
+  _pullAjMembersFromSB().then(()=>{ renderAcctAjList(); }).catch(()=>{});
 }
 function switchAcctTab(tab){
   ['aj','sub','invite'].forEach(t=>{
@@ -1376,10 +1389,11 @@ function renderAcctAjList(){
     const sb=(b.status||'approved')==='pending'?0:1;
     return sa-sb;
   });
-  // AJ 대기 중 배지 업데이트
+  // AJ 대기 중 배지 업데이트 + OS 알림 트리거
   const ajPendingCnt=members.filter(m=>(m.status||'approved')==='pending').length;
   const ajCntEl=document.getElementById('aj-pending-cnt');
   if(ajCntEl){ ajCntEl.textContent=ajPendingCnt; ajCntEl.style.display=ajPendingCnt>0?'inline':'none'; }
+  if(ajPendingCnt > 0) _checkPendingNotif();
   if(!members.length){ el.innerHTML='<div style="text-align:center;color:var(--tx3);padding:20px;font-size:12px">등록된 계정이 없습니다</div>'; return; }
   const statusLabel={pending:'대기중',approved:'',rejected:'거절됨'};
   el.innerHTML=members.map((m,i)=>{

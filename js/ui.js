@@ -5137,6 +5137,10 @@ function openEquipMasterSheet() {
   }
   _renderEquipMasterSheet(sh);
   openSheet('sh-equip-master');
+  // 열 때마다 SB에서 최신 데이터 자동 pull (백그라운드)
+  loadEquipFromSupabase().then(n => {
+    if(n != null){ _cache.equipment = null; _renderEquipMasterSheet(sh); }
+  }).catch(()=>{});
 }
 
 function _renderEquipMasterSheet(sh) {
@@ -5985,7 +5989,33 @@ function saveProjects(siteId){
   sites[idx].projects=projects;
   saveSites(sites);
   renderSiteMgr();
+  _refreshProjectChipsForSite(siteId, projects);
   toast('프로젝트 저장됨','ok');
+}
+// 저장 즉시 열려있는 폼의 프로젝트 칩 동기화
+function _refreshProjectChipsForSite(siteId, projects){
+  const ph='<span style="font-size:10px;color:var(--tx3)">설정된 프로젝트 없음</span>';
+  // 운영 입력 폼
+  if(!S || S.siteId==='all' || S.siteId===siteId){
+    const el=document.getElementById('ops-project-chips');
+    const row=document.getElementById('fg-ops-project');
+    if(el && row){
+      row.style.display=projects.length?'':'none';
+      el.innerHTML=projects.map(p=>`<div class="chip" onclick="selectOne(this,'ops-project-chips')">${p}</div>`).join('');
+    }
+  }
+  // 반입/반출 폼 칩
+  const fromEl=document.getElementById('tr-from-proj-chips');
+  const toEl  =document.getElementById('tr-to-proj-chips');
+  const trEl  =document.getElementById('tr-project-chips');
+  if(fromEl) fromEl.innerHTML=projects.length?projects.map(p=>`<div class="chip" onclick="selectOne(this,'tr-from-proj-chips');_updateHandoverEquipList()">${p}</div>`).join(''):ph;
+  if(toEl)   toEl.innerHTML  =projects.length?projects.map(p=>`<div class="chip" onclick="selectOne(this,'tr-to-proj-chips')">${p}</div>`).join(''):ph;
+  if(trEl){
+    trEl.innerHTML=projects.length?projects.map(p=>`<div class="chip" onclick="selectOne(this,'tr-project-chips')">${p}</div>`).join(''):ph;
+    const row=document.getElementById('tr-project-row');
+    const isIn=document.querySelector('#tr-type-chips .chip.on')?.textContent==='반입';
+    if(row) row.style.display=(projects.length&&isIn)?'':'none';
+  }
 }
 function addSite(){
   const name=document.getElementById('new-site-name').value.trim();
