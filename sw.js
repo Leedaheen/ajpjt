@@ -3,7 +3,7 @@
    - 정적 자산 캐시 (오프라인 지원)
    - 외부 API (Supabase, Anthropic, Google) 제외
 ═══════════════════════════════════════ */
-const CACHE_NAME = 'ajpjt-v6'; // 2026-03-26 equip dedup + cleanup 캐시 강제 갱신
+const CACHE_NAME = 'ajpjt-v7'; // 2026-03-27 프로젝트 즉시반영 / 장비현황 pull / AJ가입알람
 const SHELL = [
   '/', '/index.html', '/manifest.json', '/sw.js',
   '/js/db.js', '/js/state.js', '/js/api.js',
