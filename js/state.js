@@ -415,7 +415,7 @@ async function _fetchFromSB(){
 
     // transit: 최근 30일 생성 OR 아직 예정 상태(지연 포함) — 날짜 필터로 누락 방지
     const trOrFilter = encodeURIComponent('예정');
-    const [trRows, asRows] = await Promise.all([
+    const [trRows, asRows, logRows] = await Promise.all([
       _sbGetWithFallback(
         'transit',
         `?select=${TR_COLS}${siteFilter}&or=(created_at.gte.${sinceStr},status.eq.${trOrFilter})&order=created_at.desc&limit=300`,
@@ -426,6 +426,8 @@ async function _fetchFromSB(){
         `?select=${AS_COLS}${siteFilter}&created_at=gte.${asSinceStr}&order=created_at.desc&limit=200`,
         `?select=*${siteFilter}&created_at=gte.${asSinceStr}&order=created_at.desc&limit=200`
       ),
+      // 오늘 가동내역 — 홈화면·분석 캐시 실시간 갱신용
+      sbReq('logs','GET',null,`?select=*${siteFilter}&date=eq.${today()}&order=created_at.desc&limit=500`).catch(()=>null),
     ]);
     let changed=false;
     if(Array.isArray(trRows)&&trRows.length){
@@ -515,6 +517,20 @@ async function _fetchFromSB(){
         }
       }
       if(asChanged){ changed=true; await saveAsReqs(localAs); }
+    }
+    // ── 오늘 가동내역 — 서버에서 직접 pull하여 캐시 갱신 ────────────────
+    if(Array.isArray(logRows) && logRows.length){
+      const td = today();
+      const mapped = logRows.map(_sbLogToLocal);
+      _cache.todayLogs = mapped;
+      _cache.todayDate = td;
+      if(_cache.logs){
+        const todayIds = new Set(mapped.map(l=>l.id));
+        const rest = _cache.logs.filter(l=>l.date!==td||!todayIds.has(l.id));
+        _cache.logs = [...mapped, ...rest].slice(0,1000);
+        _buildLogIndex(_cache.logs);
+      }
+      changed = true;
     }
     // ── AJ관리자: members 테이블 동기화 (신규 가입 신청 반영) ────────────
     if(S?.role === 'aj'){

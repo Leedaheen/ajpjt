@@ -950,7 +950,7 @@ function _initRealtime(){
               if(!changed) return; // 변경 없으면 렌더 건너뜀 (깜빡임 방지)
               if(tbl==='transit'||tbl==='equipment') { renderTransit?.(); }
               else if(tbl==='as_requests') { renderASPage?.(); updateASBadge?.(); }
-              else if(tbl==='logs') { _renderHomeAsync?.(); }
+              else if(tbl==='logs') { _renderHomeAsync?.(); if(typeof curOpsTab!=='undefined'&&curOpsTab==='log') renderLog?.(); }
             });
           }, 1500);
         }

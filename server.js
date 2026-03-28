@@ -8,9 +8,9 @@ const PORT        = process.env.PORT || 3000;
 // ① gzip 압축 — 모든 응답에 적용
 app.use(compression());
 
-// Google Sign-In postMessage 차단 방지 (COOP 정책)
+// Google/Kakao OAuth 팝업 postMessage 허용 (COOP 제한 해제)
 app.use((req, res, next) => {
-  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+  res.setHeader('Cross-Origin-Opener-Policy', 'unsafe-none');
   next();
 });
 

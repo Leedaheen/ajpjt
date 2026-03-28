@@ -4563,14 +4563,17 @@ async function _askAI(type, targetId='ai-query-result'){
 
   const siteId  = S?.siteId==='all' ? null : S?.siteId;
   const site    = S?.siteName || '현장';
-  const allLogs = getLogs().filter(l => siteId ? l.siteId===siteId : true);
-  const allTr   = getTransit().filter(r => siteId ? r.siteId===siteId : true);
   const now     = new Date();
+  const cut7    = new Date(now); cut7.setDate(cut7.getDate()-7);
+  const cut7S   = cut7.toISOString().split('T')[0];
+  const cut90   = new Date(now); cut90.setDate(cut90.getDate()-90);
+  const cut90S  = cut90.toISOString().split('T')[0];
+  // 서버에서 직접 최근 90일 데이터 조회
+  const allLogs = await getLogsByRange(cut90S, today(), siteId, 20000);
+  const allTr   = getTransit().filter(r => siteId ? r.siteId===siteId : true);
 
   // 공통 통계
   const logDone = allLogs.filter(l=>l.status==='end');
-  const cut7    = new Date(now); cut7.setDate(cut7.getDate()-7);
-  const cut7S   = cut7.toISOString().split('T')[0];
   const logs7   = allLogs.filter(l=>l.date>=cut7S);
   // 실내/실외 분리
   const OUTDOOR_FLOORS=['모듈동','1F외곽'];
@@ -4766,7 +4769,6 @@ async function _askAI(type, targetId='ai-query-result'){
 async function runAI(){
   const el=document.getElementById('unused-equip-panel'); if(!el) return;
   const siteId=S.siteId==='all'?null:S.siteId;
-  const allLogs=getLogs().filter(l=>siteId?l.siteId===siteId:true);
 
   // ── 최근 1개월 내 1주일 미사용 장비 ──
   const now7=new Date();
@@ -4774,7 +4776,9 @@ async function runAI(){
   const cut1m=new Date(now7); cut1m.setMonth(cut1m.getMonth()-1);
   const cut7Str=cut7.toISOString().split('T')[0];
   const cut1mStr=cut1m.toISOString().split('T')[0];
-  const recentLogs=allLogs.filter(l=>l.date>=cut1mStr);
+  // 서버에서 직접 최근 1개월 데이터 조회
+  const allLogs=await getLogsByRange(cut1mStr, today(), siteId, 10000);
+  const recentLogs=allLogs;
   const lastUsed=new Map();
   for(const l of recentLogs){
     if(!l.equip) continue;
