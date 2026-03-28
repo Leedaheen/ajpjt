@@ -2482,7 +2482,7 @@ function _trCard(r, seqNo, canEdit, canMsg){
           <span style="font-size:10px;font-weight:800;padding:2px 7px;border-radius:6px;background:rgba(${isIn?'96,165,250':'251,146,60'},.2);color:${typeColor};flex-shrink:0">${typeLabel}</span>
           ${doneBadge}
           <span style="font-weight:800;font-size:12px">${r.company||'—'}</span>
-          ${r.siteName?`<span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(245,158,11,.12);color:#f59e0b;font-weight:700">${r.siteName}</span>`:''}
+          <span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(245,158,11,.12);color:#f59e0b;font-weight:700">${r.siteName||r.siteId||'—'}</span>
           ${r.project?`<span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(20,184,166,.12);color:#14b8a6;font-weight:700">${r.project}</span>`:''}
         </div>
         <!-- 2행: 제원×수량 + 장비번호 -->
@@ -5154,20 +5154,18 @@ function _renderEquipMasterSheet(sh) {
     <div style="margin-bottom:10px">
       <div style="font-size:11px;font-weight:800;color:var(--blue);margin-bottom:4px;padding:4px 8px;background:rgba(59,130,246,.08);border-radius:6px">${co} (${list.length}대)</div>
       ${list.map(e => {
-        const _eProjs = getSites().find(s=>s.id===e.siteId)?.projects||[];
-        const _allProjs = (e.project && !_eProjs.includes(e.project)) ? [..._eProjs, e.project] : _eProjs;
-        const _projEl = _allProjs.length
-          ? `<select style="font-size:9px;padding:2px 5px;max-width:72px;border-radius:4px;border:1px solid var(--br);background:var(--bg2);color:${e.project?'#14b8a6':'var(--tx3)'}" onchange="_equipSetProject('${e.id}',this.value)"><option value="">구분없음</option>${_allProjs.map(p=>`<option value="${p}"${e.project===p?' selected':''}>${p}</option>`).join('')}</select>`
-          : (e.project?`<span style="font-size:9px;padding:2px 5px;background:rgba(20,184,166,.1);border-radius:4px;color:#14b8a6">${e.project}</span>`:'');
+        const _projEl = e.project
+          ? `<span style="font-size:9px;padding:2px 5px;background:rgba(20,184,166,.1);border-radius:4px;color:#14b8a6">${e.project}</span>`
+          : '';
         const _pendingBadge = e.pendingApproval
           ? `<span style="font-size:9px;padding:1px 5px;border-radius:4px;background:rgba(245,158,11,.15);color:#f59e0b;border:1px solid rgba(245,158,11,.3);margin-left:4px">⏳승인대기</span>`
           : '';
         const _approveBtn = (e.pendingApproval && isAJ)
           ? `<button onclick="_approveEquipEntry('${e.id}')" style="font-size:9px;padding:2px 8px;border-radius:4px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);color:#4ade80;cursor:pointer">✅승인</button>`
           : '';
-        const _eModels = EQUIP_MODELS[e.spec] || [];
-        const _allModels = (e.model && !_eModels.includes(e.model)) ? [..._eModels, e.model] : _eModels;
-        const _modelEl = `<select style="font-size:9px;padding:2px 5px;max-width:72px;border-radius:4px;border:1px solid var(--br);background:var(--bg2);color:${e.model?'#a78bfa':'var(--tx3)'}" onchange="_equipSetModel('${e.id}',this.value)"><option value="">모델(선택)</option>${_allModels.map(m=>`<option value="${m}"${e.model===m?' selected':''}>${m}</option>`).join('')}</select>`;
+        const _modelEl = e.model
+          ? `<span style="font-size:9px;padding:2px 5px;background:rgba(167,139,250,.1);border-radius:4px;color:#a78bfa;font-family:monospace">${e.model}</span>`
+          : '';
         return `<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid var(--br)">
           <div style="flex:1;min-width:0">
             <span style="font-family:monospace;font-weight:700;font-size:12px;color:#60a5fa">${e.equipNo}</span>
