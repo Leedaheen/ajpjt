@@ -85,9 +85,17 @@ function _setupAllSheetSwipe(){
     sheet.dataset.swipeSetup = '1';
     let _sy = 0, _cy = 0, _dragging = false;
     const _getScrollParent = el => {
-      // 스크롤 가능한 부모가 최상단(sheet 자신)인 경우만 swipe 허용
+      // 스크롤 가능한 부모가 있고 최하단이 아니면 swipe 차단
+      // 최하단 도달 시: 아래로 드래그 → 팝업 닫기 허용
       let p = el;
-      while(p && p !== sheet){ if(p.scrollTop > 0) return p; p = p.parentElement; }
+      while(p && p !== sheet){
+        if(p.scrollTop > 0){
+          const atBottom = p.scrollTop + p.clientHeight >= p.scrollHeight - 2;
+          if(!atBottom) return p; // 중간 위치 → 스와이프 차단
+          // 최하단 도달 → 스와이프 허용 (fall through)
+        }
+        p = p.parentElement;
+      }
       return null;
     };
     sheet.addEventListener('touchstart', e => {
@@ -351,19 +359,28 @@ function switchAjTab(tab){
   });
   if(tab==='login') setTimeout(()=>_renderGsiBtn('aj'), 50);
 }
-/* ── 홈화면 업체 현황 자동 갱신 (07:00~16:00 매 시간) ── */
+/* ── 매 정시 서버 데이터 자동 갱신 ────────────────────────
+   - 매 정시마다 Supabase에서 가동내역·장비 목록 최신 데이터 pull
+   - 홈 탭이 열려 있으면 즉시 재렌더 (운영분석리포트 항상 최신 유지)
+   - 07:00~18:00 구간: 운영분석 AI 패널도 자동 갱신
+─────────────────────────────────────────────────────── */
 let _homeRefreshTimer = null;
 function _scheduleHourlyHomeRefresh(){
   if(_homeRefreshTimer) clearTimeout(_homeRefreshTimer);
   const now = new Date();
-  const h = now.getHours();
-  // 다음 정시까지 남은 ms
-  const msToNext = (60 - now.getMinutes()) * 60000 - now.getSeconds() * 1000 - now.getMilliseconds();
-  _homeRefreshTimer = setTimeout(()=>{
+  // 다음 정시까지 남은 ms (최소 1초 보장)
+  const msToNext = Math.max(1000,
+    (60 - now.getMinutes()) * 60000 - now.getSeconds() * 1000 - now.getMilliseconds()
+  );
+  _homeRefreshTimer = setTimeout(async ()=>{
+    // 서버에서 가동내역·장비 목록 최신 데이터 로드
+    try { await _fetchFromSB(); } catch(_e){}
+    // 홈 탭이 열려 있으면 즉시 재렌더
+    if(curPg === 'pg-home') renderHome();
+    // 07:00~18:00 구간: 운영분석 AI 자동 갱신
     const nh = new Date().getHours();
-    if(nh >= 7 && nh <= 16){
-      // 홈 탭이 보이는 경우 분석 패널 자동 갱신
-      if(typeof _askAIHome === 'function') _askAIHome('missing');
+    if(nh >= 7 && nh <= 18 && typeof _askAIHome === 'function'){
+      _askAIHome('missing');
     }
     _scheduleHourlyHomeRefresh(); // 다음 정시 예약
   }, msToNext);
