@@ -23,7 +23,6 @@
 // Google Identity Services 라이브러리 로드 완료 콜백
 // main script(line 2133+)보다 먼저 실행될 수 있으므로 _gsiInit 존재 여부 확인
 function onGoogleLibraryLoad(){
-  console.log('[GOOGLE INIT] GSI 라이브러리 로드 완료');
   if(typeof _gsiInit==='function'){
     _gsiInit();
   } else {

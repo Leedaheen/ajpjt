@@ -472,7 +472,11 @@ function _gsiInit(){
       client_id: clientId,
       callback: onGoogleSignIn,
       context: 'signin',
-      ux_mode: 'popup'
+      ux_mode: 'popup',
+      // FedCM 우선 사용 — 팝업 대신 브라우저 기본 계정 선택 UI 사용
+      // (Chrome 108+에서 COOP postMessage 경고 제거)
+      use_fedcm_for_prompt: true,
+      use_fedcm_for_button: true,
     });
     window._gsi_initialized = true;
   } catch(e){}
