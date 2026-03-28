@@ -6,7 +6,6 @@ window.onerror = function(msg, src, line, col, err){
 window.addEventListener('unhandledrejection', function(e){
   console.error('[Unhandled Promise Rejection]', e.reason);
 });
-console.log('[INIT APP] script 블록 시작');
 
 /* ── 전화번호 공통 유틸 ── */
 function fmtPhone(v){ return v.replace(/[^0-9]/g,''); }
@@ -94,7 +93,6 @@ const DB = {
       if(e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED'){
         _handleQuotaExceeded(k, v);
       } else {
-        console.warn('[DB] localStorage 저장 실패:', k, e.message);
       }
     }
   },
@@ -126,7 +124,7 @@ const IDB = (() => {
       req.onupgradeneeded = e => {
         const db = e.target.result;
         // 기존 트랜잭션이 남아있는 경우 안전하게 처리
-        try { e.target.transaction.onabort = ev => console.warn('[IDB] upgrade aborted:', ev); } catch (_e) {}
+        try { e.target.transaction.onabort = ev => {}; } catch (_e) {}
         // LOGS
         if (!db.objectStoreNames.contains('logs')) {
           const s = db.createObjectStore('logs', { keyPath: 'id' });
@@ -136,7 +134,7 @@ const IDB = (() => {
           s.createIndex('status',  'status',  { unique: false });
           s.createIndex('company', 'company', { unique: false });
           // 복합 인덱스: [siteId, date] — 현장별 날짜 조회 (미지원 환경에서 무시)
-          try { s.createIndex('siteDate', ['siteId', 'date'], { unique: false }); } catch(e) { console.warn('[IDB] siteDate 복합인덱스 미지원:', e); }
+          try { s.createIndex('siteDate', ['siteId', 'date'], { unique: false }); } catch(e) {}
         }
         // TRANSIT
         if (!db.objectStoreNames.contains('transit')) {
@@ -166,7 +164,7 @@ const IDB = (() => {
           const s = db.createObjectStore('equipment', { keyPath: 'id' });
           s.createIndex('siteId',  'siteId',  { unique: false });
           s.createIndex('company', 'company', { unique: false });
-          try { s.createIndex('siteComp', ['siteId', 'company'], { unique: false }); } catch(e) { console.warn('[IDB] siteComp 복합인덱스 미지원:', e); }
+          try { s.createIndex('siteComp', ['siteId', 'company'], { unique: false }); } catch(e) {}
           s.createIndex('status',  'status',  { unique: false });
         }
       };
@@ -176,7 +174,6 @@ const IDB = (() => {
         _db.onversionchange = () => {
           _db.close();
           _db = null;
-          console.warn('[IDB] 버전 변경 감지 — DB 닫음');
         };
         res(_db);
       };
@@ -190,7 +187,6 @@ const IDB = (() => {
         }
         // AbortError(upgradeneeded 충돌) 시 DB 삭제 후 재시도
         if (err?.name === 'AbortError' || err?.name === 'VersionError') {
-          console.warn('[IDB] 버전 충돌 — DB 삭제 후 재시도');
           indexedDB.deleteDatabase(DB_NAME);
           _db = null;
           // 재시도
@@ -200,7 +196,6 @@ const IDB = (() => {
         }
       };
       req.onblocked = () => {
-        console.warn('[IDB] blocked - 다른 탭 종료 후 새로고침 필요');
         // onblocked에서는 기다리지 않고 에러 처리
         rej(new Error('IDB blocked'));
       };
@@ -339,7 +334,6 @@ const IDB = (() => {
 ─────────────────────────────────────────────────────────── */
 const _BULK_KEYS_LS = ['logs_v3','transit_v3','as_requests_v3','sub_members_v3'];
 function _handleQuotaExceeded(k, v){
-  console.warn('[DB] localStorage 용량 초과 — 대용량 키 슬라이싱 시도');
   // 저장 대상 키 자신 제외한 대용량 키부터 50건으로 축소
   let freed = false;
   for(const bk of _BULK_KEYS_LS){
@@ -358,7 +352,6 @@ function _handleQuotaExceeded(k, v){
   if(freed){
     try {
       localStorage.setItem(k, JSON.stringify(v));
-      console.log('[DB] 용량 확보 후 재저장 성공:', k);
       return;
     } catch(_e){}
   }
@@ -366,7 +359,6 @@ function _handleQuotaExceeded(k, v){
   if(_BULK_KEYS_LS.includes(k) && Array.isArray(v)){
     try {
       localStorage.setItem(k, JSON.stringify(v.slice(-50)));
-      console.warn('[DB] 용량 부족 — 최근 50건만 LS 유지 (IDB 보존):', k);
       return;
     } catch(_e){}
   }
@@ -398,8 +390,6 @@ async function _migrateFromLocalStorage() {
       }
     }
     localStorage.setItem(migKey, '1');
-    if (total > 0) console.log(`[IDB] 마이그레이션 완료: ${total}건`);
-  } catch(e) {
-    console.warn('[IDB] 마이그레이션 실패:', e);
-  }
+    if (total > 0){}
+  } catch(e) {}
 }

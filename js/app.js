@@ -62,7 +62,6 @@ function spinner(on,txt='처리 중...'){
     // 30초 강제 해제 — 네트워크 hang 등으로 스피너가 영구 표시되는 현상 방지
     _spinnerTimer = setTimeout(()=>{
       document.getElementById('sp-ov').classList.remove('on');
-      console.warn('[spinner] 30s 강제 해제');
     }, 30000);
   }
 }
@@ -183,7 +182,6 @@ let curRole='tech';
 const priv={p1:true,p2:true,p3:false};
 
 function initLogin(){
-  console.log('[INIT APP] initLogin 진입');
   // ── 스피너 강제 종료 (이전 작업에서 남아있는 경우 pointer-events:all 차단 방지) ──
   try { spinner(false); } catch(e){}
   // ── loginScreen pointer-events 복원 (이전 enterApp 실패 시 none 상태 수정) ──
@@ -394,7 +392,6 @@ async function _autoCloseStuckLogs(){
     try{ await saveLog(l); }catch(_){}
   }
   const cnt = stuck.length;
-  console.warn(`[autoClose] ${cnt}건 6h+ 미종료 로그 자동 처리됨`);
   toast(`⚠ ${cnt}건의 장시간 미종료 기록이 자동 처리되었습니다`, 'warn', 4000);
   scheduleRetrySync();
 }
@@ -442,7 +439,7 @@ async function ensureAdminAccount(){
   _syncAjMemberSb(admin);
 }
 function _syncAjMemberSb(member){ // Supabase 백그라운드 upsert
-  sbBatchUpsert('aj_members',[member]).catch(e=>console.warn('[SB] aj_members upsert 실패:',e?.message));
+  sbBatchUpsert('aj_members',[member]).catch(e=> {};
 }
 function _patchAjMemberSb(empNo,patch){ // Supabase 백그라운드 패치 (실패 무시)
   sbReq('aj_members','PATCH',patch,`?emp_no=eq.${encodeURIComponent(empNo)}`).catch(()=>{});
@@ -458,7 +455,6 @@ function _deleteAjMemberSb(empNo){ // Supabase 백그라운드 삭제 (실패 �
    - 이후에는 Google 계정으로 바로 로그인
 ══════════════════════════════════════════════════════════ */
 function _gsiInit(){
-  console.log('[GOOGLE INIT] _gsiInit 호출');
   const clientId = GOOGLE_DEFAULT_CLIENT_ID;
   // 미설정 시 안내 표시만 하고 종료
   if(!clientId){ ['tech','sub','aj'].forEach(r=>_renderGsiBtn(r)); return; }
@@ -479,8 +475,7 @@ function _gsiInit(){
       ux_mode: 'popup'
     });
     window._gsi_initialized = true;
-    console.log('[GOOGLE INIT] google.accounts.id.initialize 완료');
-  } catch(e){ console.warn('[GSI] initialize 오류:',e); }
+  } catch(e){}
   // 현재 보이는 탭의 버튼 렌더링 (나머지는 탭 전환 시 렌더링)
   const curR = window._gsiActiveRole || 'tech';
   _renderGsiBtn(curR);
@@ -508,7 +503,7 @@ function _renderGsiBtn(role){
       type:'standard', theme:'filled_black', size:'large',
       text:'signin_with', shape:'rectangular', width:300, locale:'ko'
     });
-  } catch(e){ console.warn('[GSI] renderButton 오류:',e); }
+  } catch(e){}
 }
 
 /* JWT payload 디코딩 (서명 검증 없이 클라이언트 사이드 파싱) */
@@ -724,9 +719,8 @@ async function doGoogleProfileSubmit(){
   } catch(e){
     const _em = e?.message||'';
     // 23505: 이미 등록된 계정 → 정상 케이스, 그대로 진행
-    if(_em.includes('23505')){ record.synced=true; console.log('[doGoogleProfileSubmit] 기존 계정 — 로그인 계속'); }
+    if(_em.includes('23505')){ record.synced=true; }
     else {
-      console.warn('[doGoogleProfileSubmit] SB 저장 실패 (로컬 저장 후 로그인 계속):', _em);
       // return 제거 — 서버 저장 실패해도 로컬 저장 후 로그인 계속 (네트워크 오류·컬럼 미존재 무관)
       if(_em==='NO_SB_URL') toast('서버 미연결 — 로컬에 저장됩니다', 'warn', 3000);
       else toast(`서버 저장 실패(로컬 임시 저장): ${_em.slice(0,60)||'네트워크 오류'}`, 'warn', 3500);
@@ -878,7 +872,6 @@ async function _checkKakaoToken(){
     else if(role==='sub') await _doKakaoSubLogin(kakaoId, nickname, email);
     else await _doKakaoAjLogin(kakaoId, nickname, email);
   } catch(e){
-    console.warn('[Kakao] 로그인 처리 실패',e);
     toast('카카오 로그인 실패: '+e.message,'err',4000);
   }
 }
@@ -1048,7 +1041,7 @@ async function _showOSNotif(title, body, tag){
     } else {
       new Notification(title, opts);
     }
-  } catch(e){ console.warn('[Notif]', e); }
+  } catch(e){}
 }
 
 function _setAppBadge(count){
@@ -1190,7 +1183,7 @@ async function doGoogleAjRegister(){
       if(isKakao) matched.kakao_id = window._glKakaoId;
       else matched.google_email = window._glEmail;
       _saveAjMembers(localList);
-    } catch(e){ console.warn('[doGoogleAjRegister] PATCH 실패:', e?.message); }
+    } catch(e){}
     document.getElementById('modal-glink').style.display='none';
     if(_st==='approved'){
       DB.s(K.AJ_MEMBER, _safeAjMember(matched));
@@ -1221,7 +1214,6 @@ async function doGoogleAjRegister(){
     toast('가입 신청 완료! AJ 관리자 승인 후 로그인 가능합니다 ✓','ok',4000);
   } catch(e) {
     const _em = e?.message||'';
-    console.warn('[Google/Kakao Register] SB 저장 실패:', _em);
     if(_em === 'NO_SB_URL'){
       // SB 미연결 — 로컬 저장 완료, 관리자가 서버 설정 후 sync 필요
       toast('가입 신청 완료(로컬 저장) ✓ — 서버 연결 설정 후 동기화됩니다','warn',5000);
@@ -1482,9 +1474,9 @@ function renderAcctSubList(){
         <span style="font-weight:800;font-size:13px">${m.name}</span>${m.title?`<span style="font-size:10px;color:var(--tx3);margin-left:5px;font-weight:500">${m.title}</span>`:''}
         <div style="display:flex;gap:4px;flex-shrink:0">
           ${isPending?`
-            <button onclick="approveMember('${m.id}')" style="font-size:10px;padding:3px 8px;background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.4);border-radius:5px;color:#4ade80;cursor:pointer;font-weight:700">승인</button>
-            <button onclick="rejectMember('${m.id}')" style="font-size:10px;padding:3px 8px;background:transparent;border:1px solid rgba(239,68,68,.3);border-radius:5px;color:#f87171;cursor:pointer">거절</button>
-          `:`<button onclick="deleteAcctSubMemberId('${m.id}')" style="font-size:9px;padding:2px 6px;background:transparent;border:1px solid rgba(248,113,113,.3);border-radius:5px;color:#f87171;cursor:pointer">탈퇴처리</button>`}
+            <button onclick="approveMember('${esc(m.id)}')" style="font-size:10px;padding:3px 8px;background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.4);border-radius:5px;color:#4ade80;cursor:pointer;font-weight:700">승인</button>
+            <button onclick="rejectMember('${esc(m.id)}')" style="font-size:10px;padding:3px 8px;background:transparent;border:1px solid rgba(239,68,68,.3);border-radius:5px;color:#f87171;cursor:pointer">거절</button>
+          `:`<button onclick="deleteAcctSubMemberId('${esc(m.id)}')" style="font-size:9px;padding:2px 6px;background:transparent;border:1px solid rgba(248,113,113,.3);border-radius:5px;color:#f87171;cursor:pointer">탈퇴처리</button>`}
         </div>
       </div>
       <div style="font-size:11px;color:var(--tx2);margin-top:4px">${m.company} · ${getSites().find(s=>s.id===m.siteId)?.name||m.siteId}</div>
@@ -1497,6 +1489,7 @@ function renderAcctSubList(){
 }
 
 function approveMember(id){
+  if(S?.role !== 'aj'){ toast('권한이 없습니다','err'); return; }
   const all=getMembers();
   const m=all.find(a=>a.id===id); if(!m) return;
   m.status='approved'; m.synced=false;
@@ -1508,6 +1501,7 @@ function approveMember(id){
   renderAcctSubList();
 }
 function rejectMember(id){
+  if(S?.role !== 'aj'){ toast('권한이 없습니다','err'); return; }
   const all=getMembers();
   const m=all.find(a=>a.id===id); if(!m) return;
   if(!confirm(`[${m.name}] 가입 신청을 거절하시겠습니까?`)) return;
@@ -1518,6 +1512,7 @@ function rejectMember(id){
   renderAcctSubList();
 }
 function deleteAcctSubMemberId(id){
+  if(S?.role !== 'aj'){ toast('권한이 없습니다','err'); return; }
   const all=getMembers();
   const m=all.find(a=>a.id===id); if(!m) return;
   if(!confirm(`[${m.name}] 협력사 관리자를 탈퇴 처리하시겠습니까?`)) return;
@@ -1609,6 +1604,7 @@ async function resetAcctAjPw(idx){
   toast(`[${m.name}] 비밀번호가 초기화되었습니다`,'ok');
 }
 function deleteAcctAjMember(idx){
+  if(S?.role !== 'aj'){ toast('권한이 없습니다','err'); return; }
   const members=_getAjMembers(); const m=members[idx]; if(!m) return;
   if(m.emp_no==='admin'){ toast('admin 계정은 삭제할 수 없습니다','err'); return; }
   if(!confirm(`[${m.name}] 계정을 삭제하시겠습니까?`)) return;
@@ -1747,7 +1743,6 @@ function openASAnalysis(filterUpdate){
 }
 
 async function doLogin(role){
-  console.log('[LOGIN CLICK] doLogin 호출:', role);
   if(!_checkLoginLock()) return;
   if(role==='tech'){
     const site=document.getElementById('techSite').value;
@@ -1807,7 +1802,6 @@ async function doLogin(role){
         saveMembers(_all);
       }
     } catch(e){
-      console.warn('[sub login] SB 조회 실패, 로컬 fallback:',e?.message);
       existing=getMembers().find(m=>m.name===name&&m.company===co&&m.siteId===site&&m.role!=='tech'&&m.title!=='기술인')||null;
     }
     if(existing){
@@ -1835,7 +1829,6 @@ async function doLogin(role){
         _newMbr.synced=true; saveMembers(getMembers());
       } catch(e){
         const _em=e?.message||'';
-        console.warn('[sub 신규가입] SB 저장 실패 (로컬 저장됨):', _em);
         if(_em==='NO_SB_URL') toast('서버 미연결 — 로컬 저장됩니다','warn',3000);
         // 로컬 저장은 완료됐으므로 가입신청은 계속 진행
       }
@@ -1906,7 +1899,6 @@ function loadSession(){
 }
 
 function enterApp(){
-  console.log('[INIT APP] enterApp 호출');
   const _ls=document.getElementById('loginScreen');
   if(_ls){
     _ls.style.pointerEvents='none'; // ← 즉시 클릭 차단 해제 (투명 레이어 클릭 흡수 방지)
@@ -1967,7 +1959,6 @@ function enterApp(){
     })
     .then(() => queueSync())
     .catch(e => {
-      console.warn('[init] IDB 초기화 에러, localStorage 모드로 진행:', e.message);
       window._IDB_READY = false;
       queueSync();
     });
@@ -2074,7 +2065,6 @@ if('serviceWorker' in navigator && !_swSkip){
   window.addEventListener('load', ()=>{
     navigator.serviceWorker.register('./sw.js')
       .then(reg => {
-        console.log('[SW] 등록됨:', reg.scope);
         // 백그라운드 싱크 지원 시 등록
         if('sync' in reg) reg.sync.register('sync-logs').catch(()=>{});
         // SW 메시지 수신 (BG_SYNC)
@@ -2082,7 +2072,7 @@ if('serviceWorker' in navigator && !_swSkip){
           if(e.data?.type==='BG_SYNC') queueSync();
         });
       })
-      .catch(e => console.warn('[SW] 등록 실패:', e));
+      .catch(e => {};
   });
 }
 
@@ -2354,5 +2344,5 @@ migrateFromV2();
 // admin 계정 초기 생성 후 로그인 화면 진입
 // .catch() 추가: ensureAdminAccount 실패해도 initLogin은 반드시 호출
 ensureAdminAccount()
-  .then(()=>{ console.log('[INIT APP] ensureAdminAccount 완료 → initLogin 호출'); initLogin(); })
+  .then(()=>{ initLogin(); })
   .catch(e=>{ console.error('[INIT APP] ensureAdminAccount 오류, initLogin 강제 호출:', e); try{ initLogin(); }catch(e2){ console.error('[INIT APP] initLogin 오류:', e2); } });
