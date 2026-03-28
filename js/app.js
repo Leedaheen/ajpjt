@@ -85,15 +85,11 @@ function _setupAllSheetSwipe(){
     sheet.dataset.swipeSetup = '1';
     let _sy = 0, _cy = 0, _dragging = false;
     const _getScrollParent = el => {
-      // 스크롤 가능한 부모가 있고 최하단이 아니면 swipe 차단
-      // 최하단 도달 시: 아래로 드래그 → 팝업 닫기 허용
+      // scrollTop > 0 이면 위로 스크롤 가능 → 팝업 닫기 차단
+      // scrollTop === 0 이면 최상단 → 아래 드래그 시 팝업 닫기 허용
       let p = el;
       while(p && p !== sheet){
-        if(p.scrollTop > 0){
-          const atBottom = p.scrollTop + p.clientHeight >= p.scrollHeight - 2;
-          if(!atBottom) return p; // 중간 위치 → 스와이프 차단
-          // 최하단 도달 → 스와이프 허용 (fall through)
-        }
+        if(p.scrollHeight > p.clientHeight + 2 && p.scrollTop > 0) return p;
         p = p.parentElement;
       }
       return null;
