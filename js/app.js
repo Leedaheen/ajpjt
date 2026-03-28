@@ -2300,9 +2300,10 @@ function goTab(pgId){
     `<div style="padding:40px 20px;text-align:center;color:var(--tx3);font-size:12px"><div style="width:18px;height:18px;border:2px solid var(--br);border-top-color:${color};border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 8px"></div>서버 데이터 로드 중...</div>`;
 
   if(pgId==='pg-home'){
-    renderHome(); // 로컬 데이터로 즉시 렌더
-    // 서버 데이터가 실제로 변경된 경우에만 재렌더 (깜빡임 방지)
-    _fetchFromSB().then(changed=>{ if(changed && curPg==='pg-home') renderHome(); }).catch(()=>{});
+    // 서버 데이터 우선 로드 — 스피너 표시 후 서버 응답으로 렌더
+    const _hd = document.getElementById('home-dash');
+    if(_hd && !_hd.children.length) _hd.innerHTML = _spin('var(--blue)');
+    _fetchFromSB().catch(()=>{}).then(()=>{ if(curPg==='pg-home') renderHome(); });
   }
   if(pgId==='pg-ops'){
     const _oc=document.getElementById('ops-log-panel');

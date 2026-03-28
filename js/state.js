@@ -106,46 +106,71 @@ function _runMemoryGuard(){
   } catch (_e) {}
 }
 
-// ── LOGS: IDB 우선 접근자 ───────────────────────────────
-// 오늘 로그 (빠른 홈화면용)
+// ── LOGS: 서버 우선 접근자 ───────────────────────────────
+// 오늘 로그 — Supabase 직접 조회, IDB는 오프라인 폴백
 async function getTodayLogs() {
   const td = today();
+  // 캐시 유효성 확인 (같은 날 + _fetchFromSB에 의해 최근 갱신된 경우만 재사용)
+  if (_cache.todayLogs && _cache.todayDate === td && _cache.todayLogsFromSB) return _cache.todayLogs;
+  const sbUrl = DB.g(K.SB_URL,'');
+  if(sbUrl){
+    try {
+      const siteId = (typeof S !== 'undefined' && S?.siteId !== 'all') ? S?.siteId : null;
+      const siteFilter = siteId ? `&site_id=eq.${encodeURIComponent(siteId)}` : '';
+      const rows = await sbReq('logs','GET',null,
+        `?select=*&date=eq.${td}${siteFilter}&order=created_at.desc&limit=500`);
+      if(Array.isArray(rows)){
+        // 미동기화 로컬 항목 병합 (방금 저장하고 아직 서버에 없는 것)
+        let localOnly = [];
+        try {
+          const idbRows = await IDB.getByIndex('logs', 'date', td);
+          const sbIds = new Set(rows.map(r=>r.record_id||String(r.id)));
+          localOnly = idbRows.filter(r => !r.synced && !sbIds.has(r.id));
+        } catch(_e) {}
+        const mapped = rows.map(_sbLogToLocal);
+        const merged = [...mapped, ...localOnly].sort((a,b)=>(b.ts||0)-(a.ts||0));
+        _cache.todayLogs = merged;
+        _cache.todayDate = td;
+        _cache.todayLogsFromSB = true;
+        return merged;
+      }
+    } catch(_e) {}
+  }
+  // 오프라인 폴백: IDB
   if (_cache.todayLogs && _cache.todayDate === td) return _cache.todayLogs;
   try {
     const rows = await IDB.getByIndex('logs', 'date', td);
     _cache.todayLogs = rows;
     _cache.todayDate = td;
+    _cache.todayLogsFromSB = false;
     return rows;
   } catch (_e) { return []; }
 }
 
-// 날짜 범위 로그 조회 (이력 탭용)
+// 날짜 범위 로그 조회 (이력 탭용) — 서버 직접 조회 우선
 async function getLogsByRange(from, to, siteId=null, limit=200) {
   const sbUrl = DB.g(K.SB_URL,'');
   if(sbUrl){
-    // Supabase 서버사이드 쿼리 — select=* 사용 (컬럼 추가 시에도 안전)
     let q = `?select=*&date=gte.${from}&date=lte.${to}&order=created_at.desc&limit=${limit}`;
-    if(siteId) q += `&site_id=eq.${siteId}`;
+    if(siteId) q += `&site_id=eq.${encodeURIComponent(siteId)}`;
     try {
       const rows = await sbReq('logs','GET',null,q);
       const sbRows = Array.isArray(rows) ? rows.map(_sbLogToLocal) : [];
-      // IDB에서 미동기화 로컬 항목도 병합 (날짜 범위 내 synced=false인 것)
+      // 미동기화 로컬 항목만 병합 (IDB에서 synced=false인 것, 서버에 없는 것)
       try {
         const idbRange = IDBKeyRange.bound(from, to);
         let idbRows = await IDB.getRange('logs', 'date', idbRange);
         if(siteId) idbRows = idbRows.filter(l => l.siteId === siteId);
         const sbIds = new Set(sbRows.map(r => r.id));
-        const localOnly = idbRows.filter(r => !sbIds.has(r.id));
-        // SB 0건이어도 IDB 데이터 있으면 반환 (오프라인/신규 저장 직후 포함)
-        if(localOnly.length || sbRows.length === 0){
-          const merged = [...sbRows, ...localOnly].sort((a,b)=>(b.ts||0)-(a.ts||0));
-          if(merged.length) return merged.slice(0, limit);
+        const localOnly = idbRows.filter(r => !r.synced && !sbIds.has(r.id));
+        if(localOnly.length){
+          return [...sbRows, ...localOnly].sort((a,b)=>(b.ts||0)-(a.ts||0)).slice(0, limit);
         }
       } catch (_e) {}
       return sbRows;
     } catch (_e) {}
   }
-  // 폴백: IDB 로컬
+  // 오프라인 폴백: IDB 로컬
   try {
     const range = IDBKeyRange.bound(from, to);
     let rows = await IDB.getRange('logs', 'date', range);
@@ -519,11 +544,12 @@ async function _fetchFromSB(){
       if(asChanged){ changed=true; await saveAsReqs(localAs); }
     }
     // ── 오늘 가동내역 — 서버에서 직접 pull하여 캐시 갱신 ────────────────
-    if(Array.isArray(logRows) && logRows.length){
+    if(Array.isArray(logRows)){
       const td = today();
       const mapped = logRows.map(_sbLogToLocal);
       _cache.todayLogs = mapped;
       _cache.todayDate = td;
+      _cache.todayLogsFromSB = true;
       if(_cache.logs){
         const todayIds = new Set(mapped.map(l=>l.id));
         const rest = _cache.logs.filter(l=>l.date!==td||!todayIds.has(l.id));

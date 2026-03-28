@@ -22,12 +22,8 @@ async function _renderHomeAsync(){
   const siteId=S.siteId==='all'?null:S.siteId;
   const td=today();
 
-  // ── 데이터 수집 ──
-  let todayAll=await getTodayLogs();
-  // IDB 비어있으면 서버에서 오늘 로그 fetch (캐시 삭제 후 복구 대응)
-  if(!todayAll.length){
-    try{ todayAll = await getLogsByRange(td, td, null, 500); }catch(_e){}
-  }
+  // ── 데이터 수집 — 서버 직접 조회 우선 ──
+  let todayAll = await getTodayLogs();
   const todayLogs=siteId?todayAll.filter(l=>l.siteId===siteId):todayAll;
   const completedToday=todayLogs.filter(l=>l.status==='end');
   const rate=todayLogs.length>0?completedToday.length/todayLogs.length:null;
