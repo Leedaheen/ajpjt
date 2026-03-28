@@ -439,7 +439,7 @@ async function ensureAdminAccount(){
   _syncAjMemberSb(admin);
 }
 function _syncAjMemberSb(member){ // Supabase 백그라운드 upsert
-  sbBatchUpsert('aj_members',[member]).catch(e=> {};
+  sbBatchUpsert('aj_members',[member]).catch(()=>{});
 }
 function _patchAjMemberSb(empNo,patch){ // Supabase 백그라운드 패치 (실패 무시)
   sbReq('aj_members','PATCH',patch,`?emp_no=eq.${encodeURIComponent(empNo)}`).catch(()=>{});
