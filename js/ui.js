@@ -14,7 +14,7 @@ function _toggleHomeAcc(key){
 }
 function renderHome(){
   if(!S) return;
-  _renderHomeAsync().catch(e=> {};
+  _renderHomeAsync().catch(()=>{});
 }
 
 async function _renderHomeAsync(){
@@ -3236,7 +3236,7 @@ async function _completeTransitInner(id) {
     const changed = await registerEquipFromTransit(rec);
     if (changed) {
       toast(`${verb} · 장비 마스터 등록 완료`, 'ok');
-      _syncToSupabase().catch(e=> {};
+      _syncToSupabase().catch(()=>{});
     } else {
       toast(verb + ' 처리 완료' + (rec.ajEquip ? '' : ' (장비번호 미입력)'), rec.ajEquip ? 'ok' : 'warn');
     }
@@ -3248,7 +3248,7 @@ async function _completeTransitInner(id) {
     const changed = await deregisterEquipFromTransit(rec);
     if (changed) {
       toast(`${verb} · ${outNos.size}대 마스터 반출처리 완료`, 'ok');
-      _syncToSupabase().catch(e=> {};
+      _syncToSupabase().catch(()=>{});
     } else if (outNos.size === 0) toast(verb + ' 처리 완료 (장비번호 미입력)', 'warn');
     else toast(`${verb} · 마스터에서 장비를 찾을 수 없습니다 (이미 반출 또는 미등록)`, 'warn');
   }

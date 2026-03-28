@@ -2072,7 +2072,7 @@ if('serviceWorker' in navigator && !_swSkip){
           if(e.data?.type==='BG_SYNC') queueSync();
         });
       })
-      .catch(e => {};
+      .catch(()=>{});
   });
 }
 

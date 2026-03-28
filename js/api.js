@@ -382,7 +382,7 @@ async function _syncToSupabase(){
   // 부분 실패 테이블 로깅 (성공한 테이블은 이미 synced:true 처리됨)
   const _syncFailed = _syncResults.filter(r => r.status === 'rejected');
   if(_syncFailed.length){
-    _syncFailed.forEach(f => {};
+    _syncFailed.forEach(()=>{});
     if(_syncFailed.length === _syncResults.length) throw new Error('전체 테이블 동기화 실패');
   }
 
@@ -417,12 +417,12 @@ async function _syncToSupabase(){
   //    pull은 아래 _pullConfigFromSB() 내 _pullAjMembersFromSB()에서 수행
 
   // ── 설정 데이터 pull (sites/companies/notices/settings/invite/idle/aj_members) ──
-  await _pullConfigFromSB().catch(e => {};
+  await _pullConfigFromSB().catch(()=>{});
 
   // ── 다른 기기 변경사항 pull (충돌 방지) ─────────────────
   // 마지막 동기화 이후 서버에서 변경된 transit / AS 데이터를 내려받아 로컬 병합
   // updated_at 기준 비교: 서버 버전이 더 새로우면 로컬을 덮어씀
-  await _pullRecentFromSupabase().catch(e => {};
+  await _pullRecentFromSupabase().catch(()=>{});
   } catch(e) { throw e; }
 }
 
