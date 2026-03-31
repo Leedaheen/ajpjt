@@ -1395,7 +1395,8 @@ function _fmtAsDate(ts){
   return `${yy}/${mm}/${dd} ${hh}:${min}`;
 }
 function _asCard(r, canAct){
-  const seqNo = window._asSeqMap?.get(r.id) || 0;
+  // r.sbId = Supabase IDENTITY (고정 고유번호), 미동기화 레코드는 로컬 순번 fallback
+  const seqNo = r.sbId || window._asSeqMap?.get(r.id) || 0;
   const idx = seqNo - 1; // 하위 호환 (idx 사용하는 코드가 있을 경우)
   const isAJ = S?.role==='aj';
   const isEngineer = isAJ && S?.ajType==='정비기사';

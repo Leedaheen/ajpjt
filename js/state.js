@@ -367,6 +367,7 @@ function _sbAsToLocal(row){
   if(row.comments){ try{ const p=JSON.parse(row.comments); if(Array.isArray(p)) _comments=p; }catch(_){} }
   return {
     id:           row.record_id||String(row.id),
+    sbId:         row.id ? Number(row.id) : null,  // Supabase IDENTITY — 고정 고유번호
     date:         row.date,
     siteId:       row.site_id,
     siteName:     row.site_name,
@@ -424,7 +425,7 @@ async function _fetchFromSB(){
     const asSinceStr=asSince.toISOString();
     // select=* 대신 필요한 컬럼만 지정 → payload 절감 (DB에 없는 컬럼 제외)
     const TR_COLS = 'record_id,date,type,site_id,site_name,company,equip_specs,aj_equip,reporter_name,reporter_phone,manager_name,manager_phone,manager_location,note,status,messages,created_at';
-    const AS_COLS = 'record_id,date,site_id,site_name,company,equip,location,fault_type,description,reporter_name,reporter_phone,status,tech_name,tech_phone,resolved_at,resolve_note,requested_at,material_at,created_at';
+    const AS_COLS = 'id,record_id,date,site_id,site_name,company,equip,location,fault_type,description,reporter_name,reporter_phone,status,tech_name,tech_phone,resolved_at,resolve_note,requested_at,material_at,created_at';
 
     // 컬럼 오류 시 select=* fallback 헬퍼
     const _sbGetWithFallback = async (table, q, fallbackQ) => {
