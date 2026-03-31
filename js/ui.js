@@ -19,6 +19,9 @@ function renderHome(){
 
 async function _renderHomeAsync(){
   const dash=document.getElementById('home-dash'); if(!dash) return;
+  // 스크롤 위치 보존 (1시간 자동 갱신 시 화면 점프 방지)
+  const _pgHome = document.getElementById('pg-home');
+  const _savedScroll = _pgHome ? _pgHome.scrollTop : 0;
   const siteId=S.siteId==='all'?null:S.siteId;
   const td=today();
 
@@ -299,19 +302,39 @@ async function _renderHomeAsync(){
     {t:'transit',    l:'🚛 반입/반출 데이터'},
   ].map(q=>`<button class="ai-qbtn" onclick="_askAIHome('${q.t}')">${q.l}</button>`).join('');
 
+  const _aiCollapsed = DB.g('_aiPanelCollapsed', false);
   const panel0=`<div class="ai-panel" style="margin-bottom:0">
     <div class="ai-hd">
       <div class="ai-tag">데이터 분석</div>
       <div style="font-size:12px;font-weight:700;margin-left:2px">운영 분석 리포트</div>
-      <button onclick="goTab('pg-ops');setTimeout(()=>setOpsTab('ana',document.getElementById('opst-ana')),150)" style="margin-left:auto;font-size:10px;font-weight:700;padding:3px 8px;border-radius:7px;background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.2);color:#60a5fa;cursor:pointer;flex-shrink:0">분석탭 →</button>
+      <div style="display:flex;gap:6px;margin-left:auto;flex-shrink:0">
+        <button onclick="goTab('pg-ops');setTimeout(()=>setOpsTab('ana',document.getElementById('opst-ana')),150)" style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:7px;background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.2);color:#60a5fa;cursor:pointer">분석탭 →</button>
+        <button id="ai-panel-toggle" onclick="_toggleAIPanel()" style="font-size:12px;padding:2px 8px;border-radius:7px;background:rgba(255,255,255,.07);border:1px solid var(--br);color:var(--tx2);cursor:pointer" title="${_aiCollapsed?'패널 펼치기':'패널 접기'}">${_aiCollapsed?'▼':'▲'}</button>
+      </div>
     </div>
-    <div style="display:flex;flex-wrap:wrap;gap:5px;margin:0 0 8px">${homeAnaQBtns}</div>
-    <div id="home-analysis-result"></div>
+    <div id="ai-panel-body" style="display:${_aiCollapsed?'none':'block'}">
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin:0 0 8px">${homeAnaQBtns}</div>
+      <div id="home-analysis-result"></div>
+    </div>
   </div>`;
 
   dash.innerHTML=panel0+panel1+panel2+panel3;
-  // 기본 분석: 미입력 업체
-  _askAIHome('missing');
+  // 스크롤 위치 복원
+  if(_pgHome && _savedScroll > 0) requestAnimationFrame(()=>{ _pgHome.scrollTop = _savedScroll; });
+  // 기본 분석: 미입력 업체 (접힌 상태면 패널 열릴 때 자동 실행)
+  if(!_aiCollapsed) _askAIHome('missing');
+}
+
+function _toggleAIPanel(){
+  const body = document.getElementById('ai-panel-body');
+  const btn  = document.getElementById('ai-panel-toggle');
+  if(!body) return;
+  const collapsed = body.style.display === 'none';
+  body.style.display = collapsed ? 'block' : 'none';
+  if(btn){ btn.textContent = collapsed ? '▲' : '▼'; btn.title = collapsed ? '패널 접기' : '패널 펼치기'; }
+  DB.s('_aiPanelCollapsed', !collapsed);
+  // 처음 펼칠 때 분석 결과가 없으면 자동 실행
+  if(collapsed && !document.getElementById('home-analysis-result')?.children.length) _askAIHome('missing');
 }
 
 
@@ -1184,6 +1207,8 @@ function renderASPage(){
   const _allAsSortedPre = getAsReqs().slice().sort((a,b)=>(a.requestedAt||a.ts||0)-(b.requestedAt||b.ts||0));
   window._asSeqMap = new Map(_allAsSortedPre.map((r,i)=>[r.id,i+1]));
 
+  // 스크롤 위치 보존
+  const _asScroll = el.scrollTop;
   el.innerHTML=`<div style="padding:10px 14px 80px">
 
   <!-- KPI 요약 -->
@@ -1257,6 +1282,8 @@ function renderASPage(){
   window._asAllCards = reqs;
   window._asCardIdx  = Math.min(20, reqs.length);
   _attachASListSentinel(canFullAS);
+  // 스크롤 위치 복원 (자동 갱신/리얼타임 시 점프 방지)
+  if(_asScroll > 0) requestAnimationFrame(()=>{ el.scrollTop = _asScroll; });
 }
 
 // ── 업체별 고유 아바타 색상 ────────────────────────────────────
@@ -1421,8 +1448,8 @@ function _asCard(r, canAct){
       const rFull = rDate.toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric'})
                   + ' ' + rDate.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
       parts.push(`처리완료: ${rFull}`);
-      // requestedAt 우선, 없으면 ts(신청시각), 그 다음 createdAt
-      const base = r.requestedAt || r.ts || r.createdAt;
+      // requestedAt(신청시각) 우선, 없으면 서버 createdAt (ts는 로컬 타임스탬프로 부정확)
+      const base = r.requestedAt || r.createdAt;
       if(base){
         const diffMs = Number(r.resolvedAt) - Number(base);
         if(diffMs > 0){
@@ -1863,6 +1890,8 @@ function renderTransit(){
   const _allTrSorted=getTransit().sort((a,b)=>(a.ts||0)-(b.ts||0));
   window._trSeqMap=new Map(_allTrSorted.map((r,i)=>[r.id,i+1]));
 
+  // 스크롤 위치 보존
+  const _trScroll = el.scrollTop;
   el.innerHTML=`
   <!-- KPI 필터 탭 -->
   <div id="tr-kpi-bar" style="position:sticky;top:0;z-index:20;background:var(--bg1);padding:6px 8px 5px;border-bottom:1px solid var(--br)">
@@ -1948,6 +1977,8 @@ function renderTransit(){
   window._trDoneAll   = done;      window._trDoneIdx   = Math.min(20, done.length);
   window._trCancelAll = cancelled; window._trCancelIdx = Math.min(20, cancelled.length);
   _attachTrSentinels(el);
+  // 스크롤 위치 복원 (realtime/자동갱신 시 점프 방지)
+  if(_trScroll > 0) requestAnimationFrame(()=>{ el.scrollTop = _trScroll; });
 }
 
 function _filterTransit(){
@@ -2300,12 +2331,6 @@ function _trCard(r, seqNo, canEdit, canMsg){
   const doneBadge = isDone
     ? `<span style="font-size:9px;font-weight:800;padding:2px 7px;border-radius:8px;background:rgba(34,197,94,.2);color:#22c55e;margin-left:4px">${r.status}</span>`
     : '';
-  // 프로젝트 뱃지
-  const projectBadge = r.project
-    ? `<span style="font-size:9px;font-weight:800;padding:2px 6px;border-radius:6px;background:rgba(20,184,166,.2);color:#14b8a6">${r.project}</span>`
-    : '';
-
-
   // AJ 장비번호 영역
   let ajEquipHtml = '';
   if (r.ajEquip) {
@@ -3127,6 +3152,9 @@ async function _saveInlineEquip(id) {
 // 인라인 자동완성 초기화 (카드 렌더 후 호출)
 function _initInlineEquipAC(id, siteId) {
   setTimeout(() => {
+    const inp = document.getElementById('inline-equip-' + id);
+    if (!inp || inp.dataset.acInit) return; // 이미 초기화됐거나 DOM 교체됨
+    inp.dataset.acInit = '1';
     setupEquipAutocomplete('inline-equip-' + id, {
       siteIdFn:  () => siteId || (S?.siteId === 'all' ? null : S?.siteId),
       companyFn: () => null,
@@ -3202,7 +3230,30 @@ async function _completeTransitInner(id) {
       if (val) rec.ajEquip = val;
     }
     if (!rec.ajEquip) {
-      if (!confirm('장비번호가 입력되지 않았습니다.\n장비번호 없이 반입완료 처리하시겠습니까?\n(나중에 카드에서 입력 가능)')) return;
+      // 장비번호 미입력 시 인라인 입력 모달 제공
+      const _equipInput = await new Promise(resolve => {
+        const _ov = document.createElement('div');
+        _ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:10005;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box';
+        _ov.innerHTML=`<div style="background:var(--bg2);border-radius:14px;padding:20px;width:100%;max-width:340px">
+          <div style="font-size:13px;font-weight:800;margin-bottom:6px;color:#fbbf24">⚠ 장비번호 미입력</div>
+          <div style="font-size:11px;color:var(--tx3);margin-bottom:12px">장비번호를 지금 입력하거나 건너뛰고 나중에 등록할 수 있습니다.</div>
+          <input id="_no-equip-inp" type="text" placeholder="예: GF123, GF456 (쉼표 구분)" style="width:100%;box-sizing:border-box;padding:9px 12px;border-radius:8px;border:1px solid var(--br);background:var(--bg3);color:var(--tx);font-size:12px;margin-bottom:12px;text-transform:uppercase">
+          <div style="display:flex;gap:8px">
+            <button id="_no-eq-cancel" style="flex:1;padding:9px;border-radius:8px;background:transparent;border:1px solid var(--br);color:var(--tx2);font-size:12px;cursor:pointer">취소</button>
+            <button id="_no-eq-skip" style="flex:1;padding:9px;border-radius:8px;background:rgba(251,146,60,.15);border:1px solid rgba(251,146,60,.3);color:#fb923c;font-size:12px;font-weight:700;cursor:pointer">번호없이 완료</button>
+            <button id="_no-eq-ok" style="flex:1;padding:9px;border-radius:8px;background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.3);color:#4ade80;font-size:12px;font-weight:700;cursor:pointer">입력 후 완료</button>
+          </div>
+        </div>`;
+        document.body.appendChild(_ov);
+        const _inp = _ov.querySelector('#_no-equip-inp');
+        _ov.querySelector('#_no-eq-cancel').onclick  = ()=>{ _ov.remove(); resolve(null); };
+        _ov.querySelector('#_no-eq-skip').onclick    = ()=>{ _ov.remove(); resolve(''); };
+        _ov.querySelector('#_no-eq-ok').onclick      = ()=>{ const v=_inp.value.toUpperCase().trim(); _ov.remove(); resolve(v||''); };
+        _inp.addEventListener('keydown', e=>{ if(e.key==='Enter'){ const v=_inp.value.toUpperCase().trim(); _ov.remove(); resolve(v||''); } });
+        setTimeout(()=>_inp.focus(), 50);
+      });
+      if (_equipInput === null) return; // 취소 → 완료 처리 중단
+      if (_equipInput) rec.ajEquip = _equipInput;
     }
   }
 
@@ -3990,6 +4041,15 @@ async function submitAS(){
     return;
   }
   if(!equip){ toast('장비번호를 입력하세요','err'); return; }
+  // 동일 장비 중복 AS 방지 — 이미 대기/처리중인 AS가 있으면 경고
+  const _dupAS = getAS().filter(a =>
+    a.status !== '처리완료' && a.status !== '취소' &&
+    equipList.some(no => (a.equip||'').toUpperCase().split(/[,\s]+/).includes(no))
+  );
+  if(_dupAS.length){
+    const _dupNos = _dupAS.map(a=>a.equip).join(' / ');
+    if(!confirm(`⚠️ 이미 처리 중인 AS가 있습니다:\n${_dupNos}\n\n중복으로 신청하시겠습니까?`)) return;
+  }
   // 장비마스터 유효성 검사 — 역할 무관, 보유 장비 아니면 확인 팝업
   const _asSiteId = S.siteId==='all' ? null : S.siteId;
   if(_asSiteId){
@@ -5164,8 +5224,8 @@ function _renderEquipMasterSheet(sh) {
       <div style="font-size:11px;font-weight:800;color:var(--blue);margin-bottom:4px;padding:4px 8px;background:rgba(59,130,246,.08);border-radius:6px">${co} (${list.length}대)</div>
       ${list.map(e => {
         const _projEl = e.project
-          ? `<span style="font-size:9px;padding:2px 5px;background:rgba(20,184,166,.1);border-radius:4px;color:#14b8a6">${e.project}</span>`
-          : '';
+          ? `<span title="수정 버튼으로 편집" style="font-size:9px;padding:2px 5px;background:rgba(20,184,166,.1);border-radius:4px;color:#14b8a6;cursor:help">${e.project} ✏</span>`
+          : `<span title="수정 버튼으로 프로젝트 입력" style="font-size:9px;padding:2px 5px;border-radius:4px;color:var(--tx3);border:1px dashed var(--br);cursor:help">프로젝트—</span>`;
         const _pendingBadge = e.pendingApproval
           ? `<span style="font-size:9px;padding:1px 5px;border-radius:4px;background:rgba(245,158,11,.15);color:#f59e0b;border:1px solid rgba(245,158,11,.3);margin-left:4px">⏳승인대기</span>`
           : '';
@@ -5173,8 +5233,8 @@ function _renderEquipMasterSheet(sh) {
           ? `<button onclick="_approveEquipEntry('${e.id}')" style="font-size:9px;padding:2px 8px;border-radius:4px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);color:#4ade80;cursor:pointer">✅승인</button>`
           : '';
         const _modelEl = e.model
-          ? `<span style="font-size:9px;padding:2px 5px;background:rgba(167,139,250,.1);border-radius:4px;color:#a78bfa;font-family:monospace">${e.model}</span>`
-          : '';
+          ? `<span title="수정 버튼으로 편집" style="font-size:9px;padding:2px 5px;background:rgba(167,139,250,.1);border-radius:4px;color:#a78bfa;font-family:monospace;cursor:help">${e.model} ✏</span>`
+          : `<span title="수정 버튼으로 모델명 입력" style="font-size:9px;padding:2px 5px;border-radius:4px;color:var(--tx3);border:1px dashed var(--br);cursor:help">모델—</span>`;
         return `<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid var(--br)">
           <div style="flex:1;min-width:0">
             <span style="font-family:monospace;font-weight:700;font-size:12px;color:#60a5fa">${e.equipNo}</span>
