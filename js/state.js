@@ -453,6 +453,8 @@ async function _fetchFromSB(){
       ),
       // 오늘 가동내역 — 홈화면·분석 캐시 실시간 갱신용
       sbReq('logs','GET',null,`?select=*${siteFilter}&date=eq.${today()}&order=created_at.desc&limit=500`).catch(()=>null),
+      // 장비 마스터 — 운영분석리포트 항상 최신 유지
+      loadEquipFromSupabase().catch(()=>null),
     ]);
     let changed=false;
     if(Array.isArray(trRows)&&trRows.length){
@@ -671,7 +673,9 @@ async function loadEquipFromSupabase() {
     const SB_URL = DB.g(K.SB_URL,'');
     const SB_KEY = DB.g(K.SB_KEY,'');
     if (!SB_URL || !SB_KEY) return;
-    const res = await fetch(SB_URL + '/rest/v1/equipment?select=*&order=created_at.desc&limit=2000', {
+    const _sid = (typeof S !== 'undefined' && S?.siteId && S.siteId !== 'all') ? S.siteId : null;
+    const _sf = _sid ? `&site_id=eq.${encodeURIComponent(_sid)}` : '';
+    const res = await fetch(SB_URL + `/rest/v1/equipment?select=*${_sf}&order=created_at.desc&limit=2000`, {
       headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
     });
     if (!res.ok) return;
