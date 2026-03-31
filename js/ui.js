@@ -5182,7 +5182,7 @@ async function clearAppCache(){
 }
 
 // ── 장비 마스터 관리 시트 ────────────────────────────────────
-function openEquipMasterSheet() {
+async function openEquipMasterSheet() {
   let sh = document.getElementById('sh-equip-master');
   if (!sh) {
     sh = document.createElement('div');
@@ -5191,13 +5191,24 @@ function openEquipMasterSheet() {
     sh.onclick = function(e) { if (e.target === sh) closeSheet('sh-equip-master'); };
     document.body.appendChild(sh);
   }
-  _renderEquipMasterSheet(sh);
+
+  // 1) 시트를 열고 즉시 로딩 스피너 표시
+  sh.innerHTML = `<div class="sheet"><div class="sh-handle"></div>
+    <div class="sh-title">🏗 가동 장비 내역</div>
+    <div style="padding:40px 20px;text-align:center;color:var(--tx3);font-size:12px">
+      <div style="width:20px;height:20px;border:2px solid var(--br);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 10px"></div>
+      Supabase에서 장비 목록 불러오는 중...
+    </div></div>`;
   openSheet('sh-equip-master');
-  // 항상 Supabase에서 최신 장비 목록 로드 후 재렌더
-  loadEquipFromSupabase().then(() => {
-    const _sh = document.getElementById('sh-equip-master');
-    if (_sh && _sh.classList.contains('on')) _renderEquipMasterSheet(_sh);
-  }).catch(() => {});
+
+  // 2) Supabase 로드 완료 후 렌더 (항상 서버 데이터가 기본값)
+  try {
+    await loadEquipFromSupabase();
+  } catch(_e) {}
+
+  // 3) 시트가 아직 열려있으면 최신 데이터로 렌더
+  const _sh = document.getElementById('sh-equip-master');
+  if (_sh && _sh.classList.contains('on')) _renderEquipMasterSheet(_sh);
 }
 
 function _renderEquipMasterSheet(sh) {
