@@ -666,6 +666,9 @@ async function saveEquipMaster(arr) {
   _cache.equipment = arr;
   try { await IDB.putAll('equipment', arr); } catch (_e) {}
   DB.s(K.EQUIP, arr);
+  // 변경 항목만 즉시 Supabase 반영 (synced=false 인 것만)
+  const unsynced = arr.filter(e => !e.synced);
+  if (unsynced.length) _pushEquipItemsToSB(unsynced).catch(() => {});
 }
 
 // Supabase에서 equipment 전체 로드 (앱 시작 시 or 수동 새로고침)
@@ -1024,12 +1027,6 @@ function saveCos(obj){
   DB.s(K.COS, obj);
   _pushCosToSB(obj).catch(()=>{});
 }
-function saveSites(arr){
-  _cache.sites = null;
-  DB.s(K.SITES, arr);
-  _pushSitesToSB(arr).catch(()=>{});
-}
-
 /* IDB 180일 초과 로그 자동 정리 — 데이터 무제한 누적 방지 */
 async function _purgeOldLogs(){
   const KEY = '_logPurgeTs';

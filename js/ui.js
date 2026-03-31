@@ -98,11 +98,14 @@ async function _renderHomeAsync(){
   const doneRate=allAS.length>0?Math.round(doneAS.length/allAS.length*100):null;
   const todayAS=allAS.filter(r=>{const d=r.requestedAt?new Date(r.requestedAt).toISOString().split('T')[0]:(r.date||''); return d===td;});
 
-  // ── 날씨 fetch (병렬) ──
+  // ── 날씨 fetch (3초 타임아웃) ──
   let wx=null;
   try{
     const lat=DB.g('site_lat','37.0505'), lng=DB.g('site_lng','127.0752');
-    const wr=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=precipitation_sum,temperature_2m_max,wind_speed_10m_max,weathercode&timezone=Asia%2FSeoul&forecast_days=2`);
+    const _wxAC=new AbortController();
+    const _wxTimer=setTimeout(()=>_wxAC.abort(),3000);
+    const wr=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=precipitation_sum,temperature_2m_max,wind_speed_10m_max,weathercode&timezone=Asia%2FSeoul&forecast_days=2`,{signal:_wxAC.signal});
+    clearTimeout(_wxTimer);
     const wd=await wr.json();
     if(wd.daily){
       const idx=wd.daily.time.indexOf(td);
@@ -5130,6 +5133,11 @@ function openEquipMasterSheet() {
   }
   _renderEquipMasterSheet(sh);
   openSheet('sh-equip-master');
+  // 항상 Supabase에서 최신 장비 목록 로드 후 재렌더
+  loadEquipFromSupabase().then(() => {
+    const _sh = document.getElementById('sh-equip-master');
+    if (_sh && _sh.classList.contains('on')) _renderEquipMasterSheet(_sh);
+  }).catch(() => {});
 }
 
 function _renderEquipMasterSheet(sh) {
@@ -5951,6 +5959,14 @@ function saveProjects(siteId){
   sites[idx].projects=projects;
   saveSites(sites);
   renderSiteMgr();
+  // 반입반출 폼이 열려 있으면 project chips 즉시 갱신
+  const trProjRow = document.getElementById('tr-project-row');
+  if(trProjRow){
+    const projChips = projects.map(p=>`<span class="chip" onclick="this.classList.toggle('on')">${p}</span>`).join('');
+    trProjRow.innerHTML = projChips
+      ? `<div style="font-size:11px;color:var(--tx3);margin-bottom:4px">프로젝트</div><div id="tr-project-chips" style="display:flex;gap:6px;flex-wrap:wrap">${projChips}</div>`
+      : '';
+  }
   toast('프로젝트 저장됨','ok');
 }
 function addSite(){

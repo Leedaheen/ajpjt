@@ -1069,23 +1069,32 @@ function _setAppBadge(count){
 
 async function _checkPendingNotif(){
   if(S?.role !== 'aj') return;
-  const pending = getMembers().filter(m => (m.status||'pending') === 'pending' && m.role !== 'tech');
+  // Supabase에서 최신 AJ멤버 목록 갱신 (신규 가입 감지)
+  await _pullAjMembersFromSB().catch(()=>{});
+  // 협력사 대기 멤버
+  const subPending = getMembers().filter(m => (m.status||'pending') === 'pending' && m.role !== 'tech');
+  // AJ멤버 대기 멤버 (멤버 관리자 등 신규 가입 승인 대기)
+  const ajPending = _getAjMembers().filter(m => (m.status||'approved') === 'pending');
+  const pending = [...subPending, ...ajPending];
   const count = pending.length;
   _setAppBadge(count);
+  // AJ 계정 관리 화면 대기 배지 갱신
+  const ajCntEl = document.getElementById('aj-pending-cnt');
+  if(ajCntEl){ ajCntEl.textContent=ajPending.length; ajCntEl.style.display=ajPending.length>0?'inline':'none'; }
   if(count === 0) return;
   // 이미 알림을 보낸 ID는 중복 발송하지 않음
   const notifiedSet = new Set(JSON.parse(DB.g('_notif_pend_ids','[]')));
-  const newOnes = pending.filter(m => !notifiedSet.has(m.record_id||m.id));
+  const newOnes = pending.filter(m => !notifiedSet.has(m.record_id||m.id||m.emp_no));
   if(!newOnes.length) return;
   const granted = await _requestNotifPermission();
   if(!granted) return;
-  const names = newOnes.map(m=>`${m.company||''} ${m.name||''}`.trim()).join(', ');
+  const names = newOnes.map(m=>`${m.company||m.aj_type||''} ${m.name||''}`.trim()).join(', ');
   await _showOSNotif(
     `가입 승인 요청 ${count}건`,
     `${names}님의 가입 승인이 필요합니다.`,
     'pending-approval'
   );
-  newOnes.forEach(m => notifiedSet.add(m.record_id||m.id));
+  newOnes.forEach(m => notifiedSet.add(m.record_id||m.id||m.emp_no));
   DB.s('_notif_pend_ids', JSON.stringify([...notifiedSet]));
 }
 
@@ -2018,6 +2027,7 @@ function enterApp(){
 
 /* ── Pull-to-Refresh ─────────────────────────────────────── */
 function _initPullToRefresh(){
+  window._ptrEnabled = true;
   const THRESHOLD=65;
   let _y0=0,_pulling=false,_triggered=false;
   let _ptr=document.getElementById('ptr-bar');
@@ -2034,7 +2044,7 @@ function _initPullToRefresh(){
   }
   function _onSheet(el){ return !!el?.closest?.('.soverlay.on,.soverlay[style*="display: block"]'); }
   document.addEventListener('touchstart',e=>{
-    if(_onSheet(e.target)||_getScrollTop()>4) return;
+    if(!window._ptrEnabled||_onSheet(e.target)||_getScrollTop()>4) return;
     _y0=e.touches[0].clientY; _pulling=true; _triggered=false;
     _ptr.style.transition='none';
   },{passive:true});
@@ -2172,6 +2182,7 @@ function doLogout(){
   document.removeEventListener('visibilitychange', _onVisibilityChange);
   window.removeEventListener('online',  _onOnline);
   window.removeEventListener('offline', _onOffline);
+  window._ptrEnabled = false; // Pull-to-Refresh 터치 핸들러 비활성화
   if(typeof _cleanupRealtime==='function') _cleanupRealtime();
   // 재시도 타이머 정리 (api.js 전역 참조)
   if(typeof _retrySyncTimer !== 'undefined' && _retrySyncTimer){
@@ -2341,7 +2352,10 @@ function goTab(pgId){
   }
   if(pgId==='pg-admin'){
     renderAdmin();
-    _fetchFromSB().then(changed=>{ if(changed && curPg==='pg-admin') renderAdmin(); }).catch(()=>{});
+    Promise.all([
+      _fetchFromSB().catch(()=>{}),
+      _pullAjMembersFromSB().catch(()=>{}),  // AJ 대기 멤버 즉시 반영
+    ]).then(()=>{ if(curPg==='pg-admin'){ renderAdmin(); renderAcctAjList(); } });
   }
 }
 

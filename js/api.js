@@ -203,7 +203,7 @@ async function syncNow(){
   // 다중 탭 락 — localStorage 기반 (60초 타임아웃으로 데드락 방지)
   const _LS_LOCK_KEY = '_sync_lock_ts';
   const prevLock = Number(localStorage.getItem(_LS_LOCK_KEY)||0);
-  if(prevLock && Date.now() - prevLock < 60000){
+  if(prevLock && Date.now() - prevLock < 30000){
     return;
   }
   localStorage.setItem(_LS_LOCK_KEY, Date.now());
@@ -536,6 +536,35 @@ async function _pushSitesToSB(arr){
     projects:JSON.stringify(s.projects||[]), updated_at:new Date().toISOString()
   }));
   if(rows.length) await sbBatchUpsert('sites', rows);
+}
+
+async function _pushEquipItemsToSB(items){
+  if(!items||!items.length) return;
+  const sbUrl=DB.g(K.SB_URL,'');
+  if(!sbUrl) return;
+  const rows=items.map(e=>({
+    record_id:  e.id,
+    equip_no:   e.equipNo||'',
+    serial_no:  e.serialNo||'',
+    site_id:    e.siteId||'',
+    site_name:  e.siteName||'',
+    company:    e.company||'',
+    spec:       e.spec||'',
+    model:      e.model||'',
+    project:    e.project||'',
+    transit_id: e.transitId||'',
+    status:     e.status||'active',
+    in_date:    e.inDate||null,
+    out_date:   e.outDate||null,
+    updated_at: new Date().toISOString(),
+  }));
+  await sbBatchUpsert('equipment', rows, 'record_id');
+  // 업서트 성공 시 synced 플래그 갱신
+  const arr = getEquipMaster();
+  const pushed = new Set(items.map(e=>e.id));
+  arr.forEach(e=>{ if(pushed.has(e.id)) e.synced=true; });
+  _cache.equipment = arr;
+  DB.s(K.EQUIP, arr);
 }
 
 async function _pushCosToSB(obj){
