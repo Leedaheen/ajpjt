@@ -1,0 +1,2483 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="AJ network">
+<meta name="theme-color" content="#080d18">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="description" content="AJ 고소작업대 가동현황 관리 시스템">
+<link rel="manifest" href="manifest.json">
+<!-- PWA iOS 아이콘 -->
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect width='180' height='180' rx='28' fill='%23DE1F23'/><text y='140' x='90' text-anchor='middle' font-family='Arial Black,Arial,sans-serif' font-weight='900' font-size='120' fill='white'>AJ</text></svg>">
+<title>AJ network 고소작업대 운영/관리 플랫폼</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&family=JetBrains+Mono:wght@600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<!-- Google Identity Services (Sign In With Google) -->
+<script>
+// Google Identity Services 라이브러리 로드 완료 콜백
+// main script(line 2133+)보다 먼저 실행될 수 있으므로 _gsiInit 존재 여부 확인
+function onGoogleLibraryLoad(){
+  if(typeof _gsiInit==='function'){
+    _gsiInit();
+  } else {
+    // main script 아직 파싱 중 → 로드 완료 플래그 설정 (initLogin에서 처리)
+    window._gsiLoadPending=true;
+    // DOMContentLoaded 후에 재시도 (추가 안전장치)
+    document.addEventListener('DOMContentLoaded', function _gsiRetry(){
+      document.removeEventListener('DOMContentLoaded', _gsiRetry);
+      if(typeof _gsiInit==='function') _gsiInit();
+    });
+  }
+}
+</script>
+<script src="https://accounts.google.com/gsi/client" async></script>
+<style>
+/* ═══════════════════════════════════════════
+   DESIGN TOKENS
+═══════════════════════════════════════════ */
+/* ── 다크 테마 (기본 / 시스템 다크모드) ── */
+:root {
+  /* Background layers */
+  --bg:     #080d18;
+  --bg1:    #0e1525;
+  --bg2:    #131d30;
+  --bg3:    #1a2640;
+
+  /* Borders */
+  --br:     rgba(255,255,255,0.07);
+  --br2:    rgba(255,255,255,0.04);
+  --br3:    rgba(255,255,255,0.12);
+
+  /* Brand colors */
+  --blue:   #3b8bff;
+  --blue2:  #1a4fa0;
+  --teal:   #14b8a6;
+  --green:  #22c55e;
+  --yellow: #f59e0b;
+  --red:    #ef4444;
+  --orange: #f97316;
+  --purple: #8b5cf6;
+
+  /* Role colors */
+  --aj:     #DE1F23;
+  --sub:    #14b8a6;
+  --tech:   #3b8bff;
+
+  /* Text */
+  --tx:     #f0f4ff;
+  --tx2:    #8ca0bc;
+  --tx3:    #445060;
+
+  /* Shadows */
+  --shadow-card: 0 2px 12px rgba(0,0,0,0.4);
+  --shadow-nav:  0 -1px 0 rgba(255,255,255,0.06);
+
+  /* Input surface */
+  --input-bg:   #0e1525;
+  --input-br:   rgba(255,255,255,0.10);
+
+  /* Layout */
+  --r:      14px;
+  --rs:     10px;
+  --rxs:    6px;
+  --sft:    env(safe-area-inset-top,0px);
+  --sfb:    env(safe-area-inset-bottom,0px);
+
+  /* Nav height */
+  --nav-h:  58px;
+
+  /* PC wrap bg */
+  --wrap-bg: #0b1220;
+
+  /* Login mesh opacity */
+  --mesh-opacity: 1;
+
+  /* card/kpi surface */
+  --card-bg:  #0e1525;
+  --kpi-bg:   #131d30;
+
+  /* chip */
+  --chip-bg:   rgba(255,255,255,0.06);
+  --chip-on-bg: rgba(59,139,255,0.18);
+
+  /* log-search */
+  --search-bg: #131d30;
+
+  /* 스피너 bg */
+  --sp-ov-bg: rgba(8,13,24,.82);
+
+  /* AS 처리내용 강조 */
+  --as-note-col: #fbbf24;
+  --as-note-bg:  rgba(251,191,36,.1);
+}
+
+/* ── 라이트 테마 (시스템 라이트모드) ── */
+@media (prefers-color-scheme: light) {
+  :root {
+    /* Background layers */
+    --bg:     #f0f4fb;
+    --bg1:    #ffffff;
+    --bg2:    #f5f7fc;
+    --bg3:    #e8edf7;
+
+    /* Borders */
+    --br:     rgba(0,0,0,0.08);
+    --br2:    rgba(0,0,0,0.05);
+    --br3:    rgba(0,0,0,0.13);
+
+    /* Brand colors - slightly deeper for light bg */
+    --blue:   #2563eb;
+    --blue2:  #1d4ed8;
+    --teal:   #0d9488;
+    --green:  #16a34a;
+    --yellow: #d97706;
+    --red:    #dc2626;
+    --orange: #ea580c;
+    --purple: #7c3aed;
+
+    /* Role colors */
+    --aj:     #b91c1c;
+    --sub:    #0d9488;
+    --tech:   #2563eb;
+
+    /* Text */
+    --tx:     #111827;
+    --tx2:    #4b5563;
+    --tx3:    #9ca3af;
+
+    /* Shadows */
+    --shadow-card: 0 1px 8px rgba(0,0,0,0.08);
+    --shadow-nav:  0 -1px 0 rgba(0,0,0,0.07);
+
+    /* Input surface */
+    --input-bg:   #ffffff;
+    --input-br:   rgba(0,0,0,0.12);
+
+    /* PC wrap bg */
+    --wrap-bg: #e2e8f0;
+
+    /* Login mesh opacity */
+    --mesh-opacity: 0.3;
+
+    /* card/kpi surface */
+    --card-bg:  #ffffff;
+    --kpi-bg:   #f0f4fb;
+
+    /* chip */
+    --chip-bg:   rgba(0,0,0,0.05);
+    --chip-on-bg: rgba(37,99,235,0.12);
+
+    /* log-search */
+    --search-bg: #ffffff;
+
+    /* AS 처리내용 강조 */
+    --as-note-col: #92400e;
+    --as-note-bg:  rgba(146,64,14,.1);
+  }
+}
+
+/* ─── 렌더 성능 최적화 ─── */
+.page          { contain: strict; }
+.lcard         { contain: content; }
+.co-card       { contain: content; }
+.rc            { contain: content; }
+.kpi           { contain: layout style; }
+.chart-card    { contain: layout; }
+.soverlay      { contain: layout style; }
+.toast         { will-change: opacity, transform; }
+.sheet         { will-change: transform; }
+.soverlay      { will-change: opacity; }
+
+/* ─── 엔터프라이즈 디자인 시스템 보강 ─── */
+:root {
+  /* 터치 타겟 최소 높이 */
+  --touch-min: 44px;
+  /* 엔터프라이즈 강조 선 */
+  --accent-line: 3px;
+  /* 카드 세밀 그림자 */
+  --shadow-enterprise: 0 1px 3px rgba(0,0,0,.18), 0 4px 16px rgba(0,0,0,.12);
+  /* 배지 */
+  --badge-r: 6px;
+}
+
+/* ═══════════════════════════════════════════
+   RESET
+═══════════════════════════════════════════ */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{height:100%;}
+body{height:100%;height:100dvh;background:var(--bg);color:var(--tx);font-family:'Noto Sans KR',sans-serif;overflow:hidden;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;}
+input,select,button,textarea{font-family:inherit;}
+/* ── 스크롤바: 얇고 반투명, 스크롤 중에만 표시 후 페이드아웃 ── */
+::-webkit-scrollbar{width:3px;height:3px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:transparent;border-radius:99px;transition:background .6s ease;}
+/* 스크롤 중인 컨테이너에만 thumb 표시 */
+.is-scrolling::-webkit-scrollbar-thumb{background:rgba(148,163,184,.35);}
+.is-scrolling::-webkit-scrollbar-thumb:hover{background:rgba(148,163,184,.6);}
+/* 수평 칩은 스크롤바 완전 숨김 */
+.fchips::-webkit-scrollbar{height:0;}
+/* Firefox */
+*{scrollbar-width:thin;scrollbar-color:transparent transparent;}
+.is-scrolling{scrollbar-color:rgba(148,163,184,.35) transparent;}
+
+/* ═══════════════════════════════════════════
+   KEYFRAMES
+═══════════════════════════════════════════ */
+@keyframes spin    {to{transform:rotate(360deg)}}
+@keyframes fadeUp  {from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideIn {from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:translateX(0)}}
+@keyframes slideUp {from{opacity:0;transform:translateY(100%)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse   {0%,100%{opacity:1}50%{opacity:.45}}
+@keyframes shake   {0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
+@keyframes glow    {0%,100%{box-shadow:0 0 8px rgba(59,139,255,.3)}50%{box-shadow:0 0 20px rgba(59,139,255,.6)}}
+
+/* ═══════════════════════════════════════════
+   LOGIN SCREEN
+═══════════════════════════════════════════ */
+#loginScreen{
+  position:fixed;inset:0;z-index:9000;
+  background:var(--bg);
+  display:flex;flex-direction:column;
+  overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding-top:var(--sft);
+}
+
+/* Animated background mesh */
+#loginScreen::before{
+  content:'';position:fixed;inset:0;
+  background:
+    radial-gradient(ellipse 60% 40% at 20% 10%, rgba(59,139,255,.12) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 60% at 80% 80%, rgba(20,184,166,.08) 0%, transparent 60%);
+  pointer-events:none;z-index:0;
+  opacity: var(--mesh-opacity, 1);
+}
+
+.login-content{position:relative;z-index:1;flex:1;display:flex;flex-direction:column;}
+
+/* Hero */
+.login-hero{
+  padding:20px 24px 14px;text-align:center;
+  background:linear-gradient(180deg,rgba(59,139,255,.05) 0%,transparent 100%);
+}
+@media (prefers-color-scheme: light) {
+  .login-hero { background: linear-gradient(180deg,rgba(37,99,235,.04) 0%,transparent 100%); }
+}
+.login-logo{
+  width:54px;height:54px;border-radius:16px;
+  background:none;
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto 16px;
+  font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:white;
+}
+.login-title{font-size:18px;font-weight:900;letter-spacing:-.3px;margin-bottom:2px;}
+.login-sub{font-size:12px;color:var(--tx2);line-height:1.6;}
+
+/* Role tabs — 3 options */
+.role-tabs{
+  display:flex;gap:0;
+  background:var(--bg2);border-radius:var(--rs);
+  padding:4px;margin:12px 20px 0;
+  border:1px solid var(--br);
+}
+.role-tab{
+  flex:1;padding:8px 6px;text-align:center;border-radius:8px;
+  font-size:12px;font-weight:700;cursor:pointer;transition:all .2s;
+  color:var(--tx3);line-height:1.3;
+}
+.role-tab.active-tech  {background:rgba(59,139,255,.2); color:var(--blue); box-shadow:0 2px 8px rgba(59,139,255,.2);}
+.role-tab.active-sub   {background:rgba(20,184,166,.2); color:var(--teal); box-shadow:0 2px 8px rgba(20,184,166,.2);}
+.role-tab.active-aj    {background:rgba(222,31,35,.2);   color:var(--aj);   box-shadow:0 2px 8px rgba(222,31,35,.2);}
+
+/* Login form body */
+.login-body{flex:1;padding:12px 10px 80px;overflow-y:auto;}
+
+/* Form groups */
+.lg{margin-bottom:10px;}
+.lg-label{font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--tx2);margin-bottom:6px;display:flex;align-items:center;gap:4px;}
+.req{color:var(--red);}
+.lg-input,.lg-select{
+  width:100%;background:var(--bg2);
+  border:1px solid var(--br);border-radius:var(--rs);
+  color:var(--tx);font-size:15px;padding:12px 14px;
+  outline:none;transition:border-color .2s,box-shadow .2s;
+  -webkit-appearance:none;
+}
+.lg-input:focus,.lg-select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,139,255,.12);}
+.lg-input{
+  width:100%;background:var(--bg2);
+  border:1px solid var(--br);border-radius:var(--rs);
+  color:var(--tx);font-size:15px;padding:12px 14px;
+  box-sizing:border-box;outline:none;
+  transition:border-color .15s,box-shadow .15s;
+  -webkit-appearance:none;
+}
+.lg-input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,139,255,.12);}
+.lg-input::placeholder{color:var(--tx3);}
+.lg-select option{background:var(--bg2);}
+.lg-input.shake{animation:shake .4s ease;border-color:var(--red)!important;}
+.phone-input::placeholder::after{content:' (숫자만)';}
+.phone-input.err{border-color:var(--red)!important;}
+
+/* Site select (for login) */
+.site-select-wrap{position:relative;}
+.site-select-wrap::after{
+  content:'▾';position:absolute;right:12px;top:50%;transform:translateY(-50%);
+  color:var(--tx2);pointer-events:none;font-size:12px;
+}
+.site-select-wrap select{padding-right:32px;}
+
+/* Notice box (for sub/aj login) */
+.role-notice{
+  border-radius:var(--rs);padding:10px 12px;margin-bottom:12px;
+  display:flex;gap:10px;align-items:flex-start;
+}
+.role-notice.sub{background:rgba(20,184,166,.07);border:1px solid rgba(20,184,166,.2);}
+.role-notice.aj {background:rgba(222,31,35,.07);  border:1px solid rgba(222,31,35,.2);}
+.rn-ico{font-size:18px;flex-shrink:0;margin-top:1px;}
+.rn-txt{font-size:12px;color:var(--tx2);line-height:1.7;}
+.rn-txt b{color:var(--tx);}
+
+/* Privacy */
+.privacy-wrap{background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);padding:10px 14px;margin-bottom:12px;}
+.priv-hd{display:flex;align-items:center;justify-content: space-between;margin-bottom:10px;}
+.priv-hd-title{font-size:12px;font-weight:700;}
+.priv-all{display:flex;align-items:center;gap:6px;cursor:pointer;}
+.priv-all-lbl{font-size:11px;color:var(--blue);font-weight:600;}
+.priv-item{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-top:1px solid var(--br2);cursor:pointer;}
+.priv-ck{
+  width:20px;height:20px;border-radius:5px;flex-shrink:0;margin-top:1px;
+  border:2px solid var(--br3);background:var(--bg3);
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;transition:all .15s;
+}
+.priv-ck.on{background:var(--blue);border-color:var(--blue);color:white;}
+.priv-item-r{flex:1;}
+.priv-name{font-size:12px;font-weight:700;}
+.priv-tag-req{font-size:9px;color:var(--red);margin-left:4px;}
+.priv-tag-opt{font-size:9px;color:var(--tx2);margin-left:4px;}
+.priv-desc{font-size:11px;color:var(--tx2);margin-top:2px;line-height:1.5;}
+
+/* Login button */
+.login-btn{
+  width:100%;height:44px;border-radius:var(--r);
+  border:none;cursor:pointer;
+  font-size:14px;font-weight:700;color:white;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  transition:all .15s;margin-top:4px;
+  position:relative;overflow:hidden;
+}
+.login-btn::before{content:'';position:absolute;inset:0;background:rgba(255,255,255,0);transition:background .15s;}
+.login-btn:active::before{background:rgba(255,255,255,.12);}
+.login-btn:active{transform:scale(.98);}
+.login-btn:disabled{opacity:.4;cursor:not-allowed;transform:none!important;}
+.login-btn.tech{background:linear-gradient(135deg,var(--blue),#1e3a8a);box-shadow:0 4px 16px rgba(59,139,255,.3);}
+.login-btn.sub {background:linear-gradient(135deg,var(--teal),#0f766e);box-shadow:0 4px 16px rgba(20,184,166,.3);}
+.login-btn.aj  {background:linear-gradient(135deg,var(--aj),#7f1d1d);  box-shadow:0 4px 16px rgba(222,31,35,.3);}
+
+.aj-tab{flex:1;padding:6px 4px;font-size:11px;font-weight:600;background:transparent;border:1px solid rgba(222,31,35,.3);border-radius:6px;color:var(--tx3);cursor:pointer;transition:.15s}
+.aj-tab.on{background:rgba(222,31,35,.18);color:#DE1F23;border-color:#DE1F23}
+.quick-login{text-align:center;margin-top:10px;font-size:11px;color:var(--tx3);}
+.quick-login b{color:var(--blue);cursor:pointer;text-decoration:underline;}
+/* Google Sign-In */
+.google-or{display:flex;align-items:center;gap:8px;margin:12px 0 8px;color:var(--tx3);font-size:11px}
+.google-or::before,.google-or::after{content:'';flex:1;height:1px;background:var(--br)}
+.gsi-wrap{display:flex;justify-content:center;min-height:44px;margin-bottom:4px}
+.gsi-no-client{font-size:11px;color:var(--tx3);text-align:center;padding:4px 0 8px;display:none}
+/* 회원 승인 상태 뱃지 */
+.mbr-badge{display:inline-block;font-size:9px;font-weight:800;padding:2px 6px;border-radius:5px;vertical-align:middle}
+.mbr-badge.pending {background:rgba(245,158,11,.2);color:#fbbf24}
+.mbr-badge.approved{background:rgba(34,197,94,.15);color:#4ade80}
+.mbr-badge.rejected{background:rgba(239,68,68,.15);color:#f87171}
+/* 가입신청 안내박스 */
+.pending-box{padding:12px 14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:10px;margin-bottom:12px}
+.pending-box-title{font-size:13px;font-weight:800;color:#fbbf24;margin-bottom:4px}
+.pending-box-desc{font-size:11px;color:var(--tx2);line-height:1.7}
+
+/* Admin hint */
+.admin-hint{font-size:11px;color:var(--tx3);text-align:center;margin-top:10px;line-height:1.7;}
+.admin-hint code{background:var(--bg3);padding:2px 7px;border-radius:4px;font-family:'JetBrains Mono',monospace;color:var(--tx2);}
+
+/* ═══════════════════════════════════════════
+   APP SHELL
+═══════════════════════════════════════════ */
+#app{
+  display:flex;flex-direction:column;
+  height:100%;height:100dvh;
+  opacity:0;pointer-events:none;transition:opacity .3s;
+  margin:0 auto;
+}
+/* PC: 앱 너비 제한 + 좌우 배경 */
+@media(min-width:600px){
+  html,body{ overflow:auto; background:var(--wrap-bg); }
+  #app{ max-width:640px; height:100vh; box-shadow:0 0 60px rgba(0,0,0,.6); border-left:1px solid rgba(255,255,255,.06); border-right:1px solid rgba(255,255,255,.06); overflow:hidden; }
+  #loginScreen{ max-width:480px; left:50%; transform:translateX(-50%); width:480px; }
+}
+#app.on{opacity:1;pointer-events:all;}
+
+/* Status spacer */
+.sf{height:var(--sft);background:var(--bg1);flex-shrink:0;}
+
+/* Top Bar */
+.topbar{
+  flex-shrink:0;height:56px;
+  background:var(--bg1);
+  border-bottom:1px solid var(--br);
+  display:flex;align-items:center;padding:0 14px;gap:10px;
+  position:relative;z-index:50;
+  box-shadow:0 2px 12px rgba(0,0,0,.15);
+}
+.topbar-logo{
+  width:34px;height:34px;border-radius:10px;flex-shrink:0;
+  background:linear-gradient(135deg,var(--blue),#1a3a8f);
+  display:flex;align-items:center;justify-content:center;
+  font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:white;
+}
+.topbar-center{flex:1;min-width:0;}
+.topbar-title{font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.topbar-sub{font-size:11px;color:var(--tx3);margin-top:1px;display:flex;align-items:center;gap:5px;}
+.topbar-acts{display:flex;gap:7px;flex-shrink:0;align-items:center;}
+.tb-btn{
+  width:36px;height:36px;border-radius:var(--rs);
+  background:var(--bg2);border:1px solid var(--br);
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;cursor:pointer;transition:all .15s;
+  position:relative;flex-shrink:0;
+}
+.tb-btn:active{background:var(--bg3);transform:scale(.92);}
+.ndot{position:absolute;top:5px;right:5px;width:8px;height:8px;border-radius:50%;background:var(--red);border:2px solid var(--bg1);display:none;}
+.ndot.on{display:block;}
+/* 오프라인 상태 표시 */
+.offline-badge{
+  display:none;font-size:9px;font-weight:800;letter-spacing:.5px;
+  padding:2px 7px;border-radius:5px;background:rgba(239,68,68,.15);
+  color:var(--red);border:1px solid rgba(239,68,68,.3);
+}
+.offline-badge.on{display:inline-flex;align-items:center;gap:3px;}
+
+/* Role badge */
+.rbadge{
+  flex-shrink:0;padding:3px 9px;border-radius:10px;
+  font-size:9px;font-weight:700;letter-spacing:.5px;white-space:nowrap;
+}
+.rbadge.tech{background:rgba(59,139,255,.15); color:var(--blue);}
+.rbadge.sub {background:rgba(20,184,166,.15); color:var(--teal);}
+.rbadge.aj  {background:rgba(222,31,35,.15);  color:var(--aj);}
+
+/* Site indicator */
+.site-pill{
+  flex-shrink:0;padding:3px 9px;border-radius:10px;
+  font-size:9px;font-weight:600;
+  background:var(--bg3);border:1px solid var(--br3);color:var(--tx2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px;
+}
+
+/* Pages */
+.pages{flex:1;overflow:hidden;position:relative;}
+.page{
+  position:absolute;inset:0;overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+  opacity:0;pointer-events:none;transform:translateY(8px);
+  transition:opacity .2s ease,transform .2s ease;
+}
+.page.on{opacity:1;pointer-events:all;transform:translateY(0);}
+
+/* Bottom Nav */
+.botnav{
+  flex-shrink:0;
+  height:calc(var(--nav-h) + var(--sfb));
+  background:var(--bg1);border-top:1px solid var(--br);
+  display:flex;align-items:flex-start;padding-top:2px;
+  box-shadow:0 -4px 20px rgba(0,0,0,.15);
+  position:relative;z-index:100;
+}
+.ntab{
+  flex:1;display:flex;flex-direction:column;align-items:center;
+  gap:3px;padding:6px 2px;cursor:pointer;position:relative;
+  transition:opacity .15s;
+}
+.ntab:active{opacity:.6;}
+.ntab-pip{position:absolute;top:0;width:32px;height:3px;border-radius:0 0 5px 5px;background:var(--blue);opacity:0;transition:opacity .2s,width .2s;box-shadow:0 2px 8px rgba(59,139,255,.4);}
+.ntab.on .ntab-pip{opacity:1;}
+.ntab-ico{font-size:20px;transition:transform .2s;line-height:1;color:var(--tx3);display:flex;align-items:center;justify-content:center;}
+.ntab.on .ntab-ico{transform:scale(1.1);color:var(--blue);}
+.ntab-ico svg{width:22px;height:22px;display:block;}
+#nt-ops .ntab-ico svg{width:24px;height:24px;}
+.tb-btn svg{width:18px;height:18px;display:block;}
+.kpi-ico svg{width:20px;height:20px;display:block;}
+.mrow-ico svg{width:20px;height:20px;display:block;}
+.ntab-lbl{font-size:11px;font-weight:700;color:var(--tx3);transition:color .15s;}
+.ntab.on .ntab-lbl{color:var(--blue);}
+.ntab-badge{
+  position:absolute;top:4px;right:calc(50% - 20px);
+  background:var(--red);color:white;border-radius:8px;
+  font-size:9px;font-weight:700;padding:1px 5px;min-width:16px;text-align:center;
+  border:2px solid var(--bg1);display:none;
+}
+.ntab-badge.on{display:block;}
+/* Locked nav item */
+.ntab.locked{opacity:.25;cursor:default;}
+.ntab.locked:active{opacity:.25;}
+
+/* AJ site selector bar */
+.site-selector-bar{
+  display:none;
+  padding:10px 14px 0;
+}
+.site-selector-bar.on{ display:block; }
+.site-sel-wrap{
+  display:flex;align-items:center;gap:8px;
+  background:var(--bg2);border:1px solid var(--br3);
+  border-radius:var(--rs);padding:0 12px;
+  position:relative;
+}
+.site-sel-ico{ font-size:14px; flex-shrink:0; color:var(--tx2); }
+.site-sel{
+  flex:1;background:transparent;border:none;
+  color:var(--tx);font-size:13px;font-weight:700;
+  padding:11px 4px;outline:none;cursor:pointer;
+  font-family:'Noto Sans KR',sans-serif;
+  -webkit-appearance:none;
+}
+.site-sel option{ background:var(--bg2); }
+.site-sel-arrow{
+  font-size:10px;color:var(--tx2);flex-shrink:0;pointer-events:none;
+}
+
+/* ═══════════════════════════════════════════
+   PAGE: HOME
+═══════════════════════════════════════════ */
+.pg-scroll{padding:14px 7px 20px;}
+
+
+/* Sync */
+.sync-row{display:flex;align-items:center;gap:10px;background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);padding:10px 14px;margin-bottom:14px;}
+.sdot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.sdot.ok  {background:var(--green);box-shadow:0 0 0 3px rgba(34,197,94,.2);animation:pulse 3s infinite;}
+.sdot.err {background:var(--red);box-shadow:0 0 0 3px rgba(239,68,68,.2);}
+.sdot.sync{background:var(--yellow);box-shadow:0 0 0 3px rgba(245,158,11,.2);}
+.sync-txt{flex:1;font-size:12px;color:var(--tx2);}
+.sync-txt b{color:var(--tx);}
+.sync-go{font-size:11px;color:var(--blue);cursor:pointer;padding:5px 11px;border-radius:6px;background:rgba(59,139,255,.12);border:1px solid rgba(59,139,255,.2);flex-shrink:0;font-weight:700;}
+/* 탑바 동기화 pill */
+.sync-pill{display:flex;align-items:center;gap:5px;cursor:pointer;padding:5px 9px;border-radius:8px;border:1px solid var(--br);background:var(--bg2);transition:background .15s;flex-shrink:0;}
+.sync-pill:active{background:var(--bg3);}
+.sync-pill-txt{font-size:10px;color:var(--tx2);white-space:nowrap;max-width:88px;overflow:hidden;text-overflow:ellipsis;line-height:1.2;}
+
+/* Section headers */
+.shd{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;}
+.shd-title{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--tx2);}
+.shd-more{font-size:11px;color:var(--blue);cursor:pointer;padding:3px 8px;border-radius:6px;background:rgba(59,139,255,.08);}
+
+/* KPI grid */
+.kpi-g{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
+.kpi{
+  background:var(--bg1);border:1px solid var(--br);border-radius:var(--r);
+  padding:16px 14px;position:relative;overflow:hidden;
+}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--kc,var(--blue));border-radius:var(--r) var(--r) 0 0;}
+.kpi::after{content:'';position:absolute;top:0;left:0;bottom:0;width:3px;background:var(--kc,var(--blue));opacity:.3;border-radius:var(--r) 0 0 var(--r);}
+.kpi-ico{font-size:22px;margin-bottom:8px;color:var(--kc,var(--blue));display:flex;}
+.kpi-val{font-size:28px;font-weight:900;line-height:1;color:var(--kc,var(--blue));font-family:'JetBrains Mono',monospace;}
+.kpi-lbl{font-size:11px;color:var(--tx2);margin-top:5px;font-weight:500;}
+.kpi-trend{position:absolute;top:12px;right:12px;font-size:10px;padding:3px 7px;border-radius:5px;font-family:'JetBrains Mono',monospace;font-weight:700;}
+.t-up {background:rgba(34,197,94,.15); color:var(--green);}
+.t-dn {background:rgba(239,68,68,.15); color:var(--red);}
+
+/* Monthly bar chart */
+.chart-card{background:var(--bg1);border:1px solid var(--br);border-radius:var(--r);padding:12px 12px 7px;margin-bottom:12px;}
+.chart-label{font-size:10px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;}
+.bars{display:flex;align-items:flex-end;gap:4px;height:52px;}
+.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;}
+.bar-fill{width:100%;border-radius:3px 3px 0 0;min-height:2px;transition:height .3s;}
+.bar-lbl{font-size:7px;color:var(--tx3);font-family:'JetBrains Mono',monospace;}
+
+/* Company list on home */
+.co-list{display:flex;flex-direction:column;gap:8px;}
+.co-card{
+  background:var(--bg1);border:1px solid var(--br);border-radius:var(--rs);
+  padding:12px 14px;display:flex;align-items:center;gap:12px;
+  transition:border-color .15s;
+}
+.co-card:active{border-color:var(--blue);}
+.co-avi{
+  width:38px;height:38px;border-radius:10px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:900;font-family:'JetBrains Mono',monospace;
+}
+.co-inf{flex:1;min-width:0;}
+.co-nm{font-size:13px;font-weight:700;}
+.co-mt{font-size:11px;color:var(--tx2);margin-top:2px;}
+.co-rt{text-align:right;flex-shrink:0;}
+.co-pct{font-size:17px;font-weight:900;font-family:'JetBrains Mono',monospace;}
+.co-bar{width:56px;height:4px;background:var(--br);border-radius:2px;margin-top:5px;}
+.co-bar-f{height:100%;border-radius:2px;}
+
+/* ═══════════════════════════════════════════
+   PAGE: INPUT — USE START / END
+═══════════════════════════════════════════ */
+.input-tabs{
+  display:flex;gap:0;background:var(--bg2);border-radius:var(--rs);
+  padding:3px;border:1px solid var(--br);margin-bottom:16px;
+}
+.it{
+  flex:1;text-align:center;padding:10px;border-radius:8px;
+  font-size:12px;font-weight:700;cursor:pointer;transition:all .2s;color:var(--tx3);
+  display:flex;align-items:center;justify-content:center;gap:5px;
+}
+.it.on-start{background:var(--blue);color:white;box-shadow:0 2px 10px rgba(59,139,255,.35);}
+.it.on-end  {background:var(--teal);color:white;box-shadow:0 2px 10px rgba(20,184,166,.35);}
+
+/* User greeting */
+.greeting{
+  border-radius:var(--r);padding:12px 14px;margin-bottom:16px;
+  display:flex;align-items:center;gap:12px;
+  background:linear-gradient(135deg,rgba(59,139,255,.1),rgba(20,184,166,.06));
+  border:1px solid rgba(59,139,255,.2);
+}
+.g-ico{font-size:26px;flex-shrink:0;}
+.g-name{font-size:14px;font-weight:900;}
+.g-sub{font-size:11px;color:var(--tx2);margin-top:2px;}
+
+/* Pending badge — show when open sessions exist */
+.pending-banner{
+  background:rgba(20,184,166,.07);border:1px solid rgba(20,184,166,.2);
+  border-radius:var(--rs);padding:10px 13px;margin-bottom:14px;
+  font-size:12px;color:var(--teal);display:none;
+}
+.pending-banner.on{display:flex;align-items:center;gap:8px;}
+.pending-banner b{color:var(--tx);}
+
+/* Form fields */
+.fg{margin-bottom:14px;}
+.fg-lbl{font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--tx2);margin-bottom:6px;display:block;}
+.fg-input,.fg-select{
+  width:100%;background:var(--bg2);border:1px solid var(--br);
+  border-radius:var(--rs);color:var(--tx);font-size:15px;padding:11px 13px;
+  outline:none;transition:border-color .2s,box-shadow .2s;-webkit-appearance:none;
+}
+.fg-input:focus,.fg-select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,139,255,.1);}
+.fg-input::placeholder{color:var(--tx3);}
+.fg-select option{background:var(--bg2);}
+.fg-display{
+  width:100%;background:var(--bg2);border:1px solid var(--br);
+  border-radius:var(--rs);color:var(--tx2);font-size:15px;padding:11px 13px;
+}
+
+/* Chips */
+.chips{display:flex;flex-wrap:wrap;gap:6px;}
+.chip{
+  padding:8px 14px;border-radius:20px;font-size:13px;font-weight:500;
+  border:1px solid var(--br);background:var(--bg2);color:var(--tx2);cursor:pointer;transition:all .15s;
+  min-height:34px;display:inline-flex;align-items:center;
+}
+.chip.on{background:rgba(59,139,255,.15);border-color:var(--blue);color:var(--blue);font-weight:700;}
+.chip.on-teal{background:rgba(20,184,166,.15);border-color:var(--teal);color:var(--teal);font-weight:700;}
+
+/* Submit buttons */
+.btn-row{display:flex;gap:8px;margin-top:6px;padding-bottom:24px;}
+.sbtn{
+  flex:1;height:50px;border-radius:var(--r);border:none;cursor:pointer;
+  font-size:15px;font-weight:700;color:white;
+  display:flex;align-items:center;justify-content:center;gap:7px;
+  transition:all .15s;position:relative;overflow:hidden;
+}
+.sbtn:active{transform:scale(.97);box-shadow:none!important;}
+.sbtn:disabled{opacity:.35;cursor:not-allowed;transform:none!important;}
+.sbtn.start{background:linear-gradient(135deg,var(--blue),#1e3a8a);box-shadow:0 4px 14px rgba(59,139,255,.3);}
+.sbtn.end  {background:linear-gradient(135deg,var(--teal),#0f766e);box-shadow:0 4px 14px rgba(20,184,166,.3);}
+.sbtn .spin{width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .7s linear infinite;display:none;flex-shrink:0;}
+.sbtn.loading .spin{display:block;}
+.sbtn.loading .btxt{display:none;}
+
+/* ═══════════════════════════════════════════
+   PAGE: LOG
+═══════════════════════════════════════════ */
+.log-sticky{
+  padding:10px 7px 8px;border-bottom:1px solid var(--br2);
+}
+.floor-filter-row{margin-top:5px;padding-top:5px;border-top:1px solid var(--br2);}
+.floor-fc{
+  flex-shrink:0;padding:6px 12px;border-radius:12px;font-size:11px;font-weight:700;
+  border:1px solid var(--br);background:var(--bg3);color:var(--tx3);cursor:pointer;white-space:nowrap;
+  min-height:30px;display:inline-flex;align-items:center;
+}
+.floor-fc.on{background:rgba(20,184,166,.15);border-color:var(--teal);color:var(--teal);}
+.log-search{
+  background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);
+  color:var(--tx);padding:10px 14px;font-size:15px;width:100%;outline:none;margin-bottom:9px;
+  transition:border-color .2s;
+}
+.log-search:focus{border-color:var(--blue);}
+.fchips{display:flex;gap:6px;overflow-x:auto;}
+.fchips::-webkit-scrollbar{display:none;}
+.fc{
+  flex-shrink:0;padding:7px 13px;border-radius:14px;font-size:12px;font-weight:600;
+  border:1px solid var(--br);background:var(--bg2);color:var(--tx2);cursor:pointer;white-space:nowrap;
+  min-height:32px;display:inline-flex;align-items:center;
+}
+.fc.on{background:rgba(59,139,255,.15);border-color:var(--blue);color:var(--blue);}
+.log-body{padding:9px 14px 24px;display:flex;flex-direction:column;gap:8px;}
+
+/* Log card */
+.lcard{
+  background:var(--bg1);border:1px solid var(--br);border-radius:var(--r);
+  padding:12px 7px;animation:fadeUp .2s ease;
+  border-left:3px solid var(--br3);
+  transition:border-color .15s;
+}
+.lcard.s-start-card{border-left-color:var(--blue);}
+.lcard.s-end-card  {border-left-color:var(--teal);}
+.lcard.s-off-card  {border-left-color:var(--red);}
+.lc-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.lc-co{display:flex;align-items:center;gap:7px;}
+.lc-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.lc-name{font-size:14px;font-weight:800;}
+.lc-time{font-size:11px;color:var(--tx3);font-family:'JetBrains Mono',monospace;}
+.lc-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px 8px;}
+.lc-item{font-size:12px;color:var(--tx2);}
+.lc-item span{color:var(--tx);font-weight:600;}
+.lc-status{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:var(--badge-r,6px);font-size:11px;font-weight:700;letter-spacing:.3px;}
+.s-start{background:rgba(59,139,255,.15);color:var(--blue);}
+.s-end  {background:rgba(20,184,166,.15);color:var(--teal);}
+.s-off  {background:rgba(239,68,68,.15); color:var(--red);}
+.s-hol  {background:rgba(148,163,184,.1);color:var(--tx2);}
+.lc-dur{
+  margin-top:9px;padding-top:9px;border-top:1px solid var(--br2);
+  font-size:12px;color:var(--tx2);display:flex;align-items:center;gap:5px;
+}
+.lc-dur b{color:var(--teal);font-family:'JetBrains Mono',monospace;font-size:13px;}
+
+/* ═══════════════════════════════════════════
+   PAGE: ANALYSIS (sub-admin + aj)
+═══════════════════════════════════════════ */
+.locked-page{
+  display:flex;flex-direction:column;align-items:center;
+  padding:60px 24px;text-align:center;
+}
+.lp-ico{font-size:48px;margin-bottom:16px;}
+.lp-title{font-size:16px;font-weight:900;margin-bottom:8px;}
+.lp-desc{font-size:13px;color:var(--tx2);line-height:1.7;}
+
+/* AI panel */
+.ai-panel{
+  border-radius:var(--r);padding:15px;margin-bottom:13px;
+  border:1px solid rgba(139,92,246,.2);
+  background:linear-gradient(135deg,rgba(139,92,246,.06),rgba(59,139,255,.03));
+}
+.ai-hd{display:flex;align-items:center;gap:8px;margin-bottom:11px;}
+.ai-tag{font-size:9px;font-weight:700;letter-spacing:1px;padding:3px 9px;border-radius:8px;background:rgba(139,92,246,.2);color:var(--purple);}
+.ai-text{font-size:12px;line-height:1.8;color:var(--tx2);}
+.ai-text b{color:var(--tx);}
+.ai-bul{display:block;padding-left:2px;margin-bottom:5px;}
+.ai-ft{display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid rgba(139,92,246,.12);}
+.ai-time{font-size:9px;color:var(--tx3);}
+.ai-re{font-size:10px;color:var(--purple);cursor:pointer;}
+
+/* AI Query buttons */
+.ai-qbtn{font-size:11px;font-weight:700;padding:6px 11px;border-radius:20px;background:rgba(99,102,241,.12);color:#a5b4fc;border:1px solid rgba(99,102,241,.25);cursor:pointer;transition:all .15s;white-space:nowrap;}
+.ai-qbtn:active{background:rgba(99,102,241,.28);transform:scale(.96);}
+.ai-qbox{background:linear-gradient(135deg,rgba(99,102,241,.08),rgba(168,85,247,.06));border:1px solid rgba(99,102,241,.18);border-radius:12px;padding:12px;margin-bottom:12px;}
+.ai-qres{margin-top:10px;padding:12px;background:var(--bg2);border:1px solid var(--br);border-radius:10px;font-size:12px;line-height:1.85;color:var(--tx2);}
+.ai-qres b{color:var(--tx);}
+
+/* Period tabs */
+.ptabs{display:flex;gap:5px;margin-bottom:14px;}
+.ptab{
+  flex:1;padding:9px 6px;text-align:center;font-size:12px;font-weight:700;
+  border-radius:var(--rs);border:1px solid var(--br);background:var(--bg2);color:var(--tx2);cursor:pointer;
+  min-height:38px;display:flex;align-items:center;justify-content:center;
+}
+.ptab.on{background:rgba(59,139,255,.15);border-color:var(--blue);color:var(--blue);}
+
+/* Rank cards */
+.rank-list{display:flex;flex-direction:column;gap:7px;margin-bottom:13px;}
+.rc{background:var(--bg1);border:1px solid var(--br);border-radius:var(--rs);padding:12px 14px;display:flex;align-items:center;gap:12px;}
+.rk-n{font-size:16px;font-weight:900;font-family:'JetBrains Mono',monospace;width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:50%;flex-shrink:0;font-size:13px;}
+.rk-1{color:#111;background:#fbbf24;}.rk-2{color:#111;background:#9ca3af;}.rk-3{color:#111;background:var(--orange);}
+.rk-n:not(.rk-1):not(.rk-2):not(.rk-3){color:var(--tx3);background:var(--bg3);font-size:11px;}
+.rk-i{flex:1;min-width:0;}
+.rk-nm{font-size:13px;font-weight:700;}
+.rk-mt{font-size:11px;color:var(--tx2);margin-top:2px;}
+.rk-r{text-align:right;flex-shrink:0;}
+.rk-pct{font-size:18px;font-weight:900;font-family:'JetBrains Mono',monospace;}
+.rk-bar{width:64px;height:4px;background:var(--br);border-radius:2px;margin-top:5px;margin-left:auto;}
+.rk-bf{height:100%;border-radius:2px;}
+
+/* Usage hours summary */
+.usage-card{background:var(--bg1);border:1px solid var(--br);border-radius:var(--r);padding:13px;margin-bottom:13px;}
+.usage-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px;}
+.usage-item{background:var(--bg2);border-radius:var(--rs);padding:10px;text-align:center;}
+.usage-val{font-size:18px;font-weight:900;color:var(--teal);font-family:'JetBrains Mono',monospace;}
+.usage-lbl{font-size:9px;color:var(--tx2);margin-top:3px;}
+
+/* Heatmap */
+.hmap{background:var(--bg1);border:1px solid var(--br);border-radius:var(--r);padding:13px;}
+.hm-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-top:7px;}
+.hm-hd{font-size:7px;color:var(--tx3);text-align:center;padding-bottom:2px;}
+.hm-c{border-radius:3px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:56px;padding:3px 1px;gap:2px;font-family:'JetBrains Mono',monospace;font-weight:600;}
+.hm-leg{display:flex;align-items:center;gap:4px;margin-top:8px;font-size:9px;color:var(--tx3);}
+.hm-lc{width:11px;height:11px;border-radius:2px;}
+
+/* ═══════════════════════════════════════════
+   PAGE: ADMIN
+═══════════════════════════════════════════ */
+.admin-profile{
+  border-radius:var(--r);padding:14px;margin-bottom:14px;
+  display:flex;align-items:center;gap:13px;
+}
+.admin-profile.aj {background:linear-gradient(135deg,rgba(222,31,35,.1),rgba(222,31,35,.04));border:1px solid rgba(222,31,35,.2);}
+.admin-profile.sub{background:linear-gradient(135deg,rgba(20,184,166,.1),rgba(20,184,166,.04));border:1px solid rgba(20,184,166,.2);}
+.ap-avi{
+  width:44px;height:44px;border-radius:50%;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;color:white;
+}
+.ap-avi.aj {background:linear-gradient(135deg,var(--aj),#7f1d1d);}
+.ap-avi.sub{background:linear-gradient(135deg,var(--teal),#0f766e);}
+.ap-name{font-size:14px;font-weight:900;}
+.ap-role{font-size:10px;font-weight:700;margin-top:2px;}
+.ap-role.aj {color:var(--aj);}
+.ap-role.sub{color:var(--teal);}
+
+.menu-list{display:flex;flex-direction:column;gap:8px;margin-bottom:16px;}
+.mrow{
+  background:var(--bg1);border:1px solid var(--br);border-radius:var(--r);
+  padding:14px 16px;display:flex;align-items:center;gap:13px;cursor:pointer;
+  transition:border-color .2s,background .2s;min-height:var(--touch-min,44px);
+}
+.mrow:active{border-color:var(--blue);background:rgba(59,139,255,.03);}
+.mrow-ico{width:40px;height:40px;border-radius:var(--rs);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+.mrow-inf{flex:1;}
+.mrow-title{font-size:14px;font-weight:700;}
+.mrow-desc{font-size:11px;color:var(--tx2);margin-top:2px;}
+.mrow-arr{color:var(--tx3);font-size:16px;}
+
+/* Stats 2-col */
+.stat2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
+.sbox{background:var(--bg1);border:1px solid var(--br);border-radius:var(--rs);padding:13px;}
+.sbox-lbl{font-size:9px;color:var(--tx2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px;}
+.sbox-val{font-size:20px;font-weight:900;font-family:'JetBrains Mono',monospace;}
+
+/* Sites manager */
+.sites-list{display:flex;flex-direction:column;gap:7px;margin-bottom:14px;}
+.site-row{
+  background:var(--bg2);border-radius:var(--rs);padding:11px 13px;
+  display:flex;align-items:center;gap:10px;
+}
+.site-row-info{flex:1;}
+.site-row-name{font-size:13px;font-weight:700;}
+.site-row-meta{font-size:10px;color:var(--tx2);margin-top:2px;}
+.site-del{color:var(--red);font-size:17px;cursor:pointer;padding:2px 6px;flex-shrink:0;}
+
+/* ═══════════════════════════════════════════
+   SHARED COMPONENTS
+═══════════════════════════════════════════ */
+
+/* Sheet/Modal */
+.soverlay{
+  position:fixed;inset:0;z-index:600;
+  background:rgba(0,0,0,.7);backdrop-filter:blur(3px);
+  opacity:0;pointer-events:none;transition:opacity .25s;
+  display:flex;align-items:flex-end;justify-content:center;
+}
+.soverlay.on{opacity:1;pointer-events:all;}
+.sheet{
+  background:var(--bg1);border-radius:20px 20px 0 0;
+  border-top:1px solid var(--br);
+  width:100%;max-width:600px;max-height:92dvh;overflow-y:auto;overflow-x:hidden;
+  padding:0 8px calc(24px + var(--sfb));
+  box-sizing:border-box;
+  transform:translateY(100%);transition:transform .3s cubic-bezier(.32,0,.67,0);
+  z-index:601;
+}
+.soverlay.on .sheet{transform:translateY(0);transition:transform .3s cubic-bezier(.33,1,.68,1);}
+.sh-handle{width:38px;height:4px;background:var(--br3);border-radius:2px;margin:13px auto 16px;}
+.sh-title{font-size:18px;font-weight:900;margin-bottom:15px;}
+
+/* Buttons in sheets */
+.btn-full{
+  width:100%;height:50px;border-radius:var(--r);border:none;cursor:pointer;
+  font-size:16px;font-weight:700;color:white;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  background:linear-gradient(135deg,var(--blue),#1e3a8a);
+  box-shadow:0 4px 14px rgba(59,139,255,.25);transition:all .15s;
+  letter-spacing:.2px;
+}
+.btn-full:active{transform:scale(.98);box-shadow:none;}
+.btn-full:disabled{opacity:.4;cursor:not-allowed;transform:none;}
+.btn-full.green{background:linear-gradient(135deg,var(--green),#15803d);box-shadow:0 4px 14px rgba(34,197,94,.2);}
+.btn-full.teal {background:linear-gradient(135deg,var(--teal),#0f766e); box-shadow:0 4px 14px rgba(20,184,166,.2);}
+.btn-full.red  {background:linear-gradient(135deg,var(--red),#991b1b);  box-shadow:0 4px 14px rgba(239,68,68,.2);}
+.btn-full.gold {background:linear-gradient(135deg,var(--aj),#7f1d1d);  box-shadow:0 4px 14px rgba(222,31,35,.2);}
+.btn-ghost{
+  width:100%;padding:13px;background:var(--bg2);border:1px solid var(--br);
+  border-radius:var(--r);color:var(--tx2);font-size:15px;cursor:pointer;margin-top:7px;
+  min-height:46px;font-weight:600;transition:background .15s;
+}
+.btn-ghost:active{background:var(--bg3);}
+.btn-gap{display:flex;flex-direction:column;gap:9px;}
+
+/* Toast */
+.toast-wrap{position:fixed;top:calc(62px + var(--sft));left:50%;transform:translateX(-50%) translateY(-10px);z-index:9999;pointer-events:none;}
+.toast{
+  background:var(--bg3);color:var(--tx);padding:10px 18px;border-radius:22px;
+  font-size:13px;font-weight:600;white-space:nowrap;
+  box-shadow:0 4px 20px rgba(0,0,0,.5);border:1px solid var(--br);
+  opacity:0;transform:translateY(-6px);transition:all .22s;
+}
+.toast.on{opacity:1;transform:translateY(0);}
+.toast.ok  {background:var(--green);border-color:transparent;color:white;}
+.toast.err {background:var(--red);  border-color:transparent;color:white;}
+.toast.warn{background:var(--yellow);border-color:transparent;color:#1a0e00;}
+.toast-close{background:none;border:none;color:inherit;font-size:16px;line-height:1;cursor:pointer;padding:0 0 0 10px;opacity:.7;vertical-align:middle;pointer-events:auto;}
+
+/* Spinner overlay */
+.sp-ov{
+  position:fixed;inset:0;z-index:9000;background:var(--sp-ov-bg,rgba(8,13,24,.75));
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;pointer-events:none;transition:opacity .2s;
+}
+.sp-ov.on{opacity:1;pointer-events:all;}
+.sp-box{background:var(--bg1);border-radius:var(--r);padding:26px 34px;display:flex;flex-direction:column;align-items:center;gap:13px;}
+.sp{width:34px;height:34px;border:3px solid var(--br);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;}
+.sp-txt{font-size:12px;color:var(--tx2);}
+
+/* Empty */
+.empty{display:flex;flex-direction:column;align-items:center;padding:50px 20px;color:var(--tx3);}
+.empty-ico{font-size:40px;margin-bottom:12px;}
+.empty-txt{font-size:13px;margin-bottom:4px;}
+.empty-sub{font-size:11px;color:var(--tx3);margin-top:2px;}
+
+/* Divider */
+.div{height:1px;background:var(--br2);margin:13px 0;}
+
+/* Notif */
+.nlist{display:flex;flex-direction:column;gap:7px;}
+.nitem{background:var(--bg2);border-radius:var(--rs);padding:11px 13px;display:flex;gap:9px;}
+.nitem.unread{border-left:3px solid var(--blue);}
+.nitem-ico{font-size:16px;flex-shrink:0;}
+.nitem-title{font-size:12px;font-weight:700;}
+.nitem-desc{font-size:10px;color:var(--tx2);margin-top:2px;}
+.nitem-time{font-size:9px;color:var(--tx3);margin-top:3px;font-family:'JetBrains Mono',monospace;}
+
+/* ─── 이력/분석 서브탭 ─── */
+.log-subtabs{display:flex;gap:0;border-bottom:2px solid var(--br2);background:var(--bg);}
+.lst{flex:1;text-align:center;padding:11px 6px;font-size:12px;font-weight:700;color:var(--tx3);cursor:pointer;position:relative;}
+.lst.on{color:var(--blue);}
+.lst.on::after{content:'';position:absolute;bottom:-2px;left:0;right:0;height:2px;background:var(--blue);border-radius:2px 2px 0 0;}
+
+/* ─── 가동현황 서브탭 ─── */
+.ops-subtabs{
+  display:grid;grid-template-columns:1fr 1fr 1fr;
+  background:var(--bg2);border-bottom:1px solid var(--br2);
+  position:sticky;top:0;z-index:10;
+}
+.ops-tab{
+  padding:11px 4px;text-align:center;font-size:12px;font-weight:700;
+  color:var(--tx3);cursor:pointer;border-bottom:2px solid transparent;
+  transition:color .15s,border-color .15s;
+}
+.ops-tab.on{color:var(--blue);border-bottom-color:var(--blue);}
+/* ops 중앙 버튼 강조 */
+#nt-ops .ntab-ico{
+  font-size:22px;
+}
+#nt-ops.on .ntab-lbl{color:var(--blue);}
+#nt-ops.on .ntab-ico{transform:scale(1.15);}
+/* 현장 셀렉터를 topbar에 통합 */
+.topbar-site-sel{
+  background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.3);
+  border-radius:8px;padding:4px 10px 4px 8px;
+  font-size:11px;font-weight:700;color:var(--blue);
+  cursor:pointer;outline:none;max-width:130px;
+  -webkit-appearance:none;appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2360a5fa'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 6px center;
+  padding-right:22px;
+}
+.topbar-site-label{font-size:11px;font-weight:700;color:var(--blue);
+  background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.3);
+  border-radius:8px;padding:4px 10px;cursor:default;
+  max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+/* ─── 둘러보기 배너 ─── */
+.browse-mode .topbar::after{
+  content:'둘러보기 모드 — 데이터 변경 불가';
+  position:absolute;bottom:-18px;left:0;right:0;
+  text-align:center;font-size:9px;font-weight:700;
+  color:var(--yellow);background:rgba(245,158,11,.08);
+  padding:2px;
+}
+
+/* ─── 미가동 버튼 ─── */
+.sbtn{flex:1;}
+
+/* ─── AS 요청 textarea ─── */
+textarea.fg-input{height:72px;line-height:1.5;}
+
+/* ─── 반입반출 ─── */
+#transit-content .lcard{margin-bottom:8px;}
+
+/* ─── input-tabs 3열 ─── */
+.input-tabs{grid-template-columns:1fr 1fr 1fr !important;}
+
+/* ══════════════════════════════════════════
+   LIGHT THEME OVERRIDES
+══════════════════════════════════════════ */
+@media (prefers-color-scheme: light) {
+  body { background: var(--bg); color: var(--tx); }
+
+  /* 스피너 오버레이 */
+  :root { --sp-ov-bg: rgba(240,244,251,.85); }
+
+  /* 모달 오버레이 */
+  .soverlay { background: rgba(0,0,0,.35); }
+
+  /* 로그인 메시 그라디언트 */
+  #loginScreen::before {
+    background:
+      radial-gradient(ellipse 60% 40% at 20% 10%, rgba(37,99,235,.07) 0%, transparent 60%),
+      radial-gradient(ellipse 40% 60% at 80% 80%, rgba(13,148,136,.05) 0%, transparent 60%);
+  }
+
+  /* topbar 로고 배경 */
+  .topbar { border-bottom: 1px solid var(--br); }
+
+  /* 카드 그림자 */
+  .lcard-wrap, .lcard { box-shadow: var(--shadow-card); }
+
+  /* 토스트 */
+  .toast.ok  { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+  .toast.err { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+  .toast.warn{ background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+  .toast     { background: #f0f4fb; color: var(--tx); border: 1px solid var(--br); box-shadow: 0 4px 16px rgba(0,0,0,.12); }
+
+  /* 입력 필드 */
+  .lg-input, .fg-input-el, .fg-input-area, input[class*="input"], textarea[class*="input"] {
+    background: var(--input-bg);
+    border-color: var(--input-br);
+  }
+  .log-search { background: var(--search-bg); border-color: var(--br); }
+
+  /* 버튼 */
+  .btn-ghost { background: rgba(0,0,0,.04); border-color: var(--br3); color: var(--tx2); }
+  .btn-ghost:hover { background: rgba(0,0,0,.08); }
+
+  /* 칩 */
+  .chip    { background: var(--chip-bg); border-color: var(--br); color: var(--tx2); }
+  .chip.on { background: var(--chip-on-bg); border-color: var(--blue); color: var(--blue); }
+  .fc      { background: var(--chip-bg); border-color: var(--br); color: var(--tx3); }
+  .fc.on   { background: var(--chip-on-bg); border-color: var(--blue); color: var(--blue); }
+
+  /* 역할 탭 active 색상 (라이트에서 더 진하게) */
+  .role-tab.active-tech { background: rgba(37,99,235,.15); color: var(--blue); }
+  .role-tab.active-sub  { background: rgba(13,148,136,.15); color: var(--teal); }
+  .role-tab.active-aj   { background: rgba(185,28,28,.15);  color: var(--aj); }
+
+  /* botnav 탭 active */
+  .ntab.on .ni { color: var(--blue); }
+  .ntab.on .nl { color: var(--blue); }
+
+  /* kpi 카드 */
+  .kpi { background: var(--kpi-bg); }
+
+  /* lcard 배경 */
+  .lcard { background: var(--card-bg); border: 1px solid var(--br); }
+
+  /* topbar 배경 */
+  .topbar { background: var(--bg1); }
+
+  /* botnav 배경 */
+  .botnav { background: var(--bg1); border-top: 1px solid var(--br); position:relative; z-index:100; }
+
+  /* 시트/모달 */
+  .sheet { background: var(--bg1); }
+
+  /* PC 랩 - 미디어 쿼리 중첩은 HTML 직접 처리 */
+
+  /* 알림 배너 */
+  .pending-banner { background: rgba(13,148,136,.08); }
+
+  /* admin hint */
+  .admin-hint { color: var(--tx3); background: var(--bg2); border-radius: 8px; padding: 8px 12px; }
+
+  /* 구분선 */
+  .lc-top { border-bottom-color: var(--br); }
+}
+@keyframes _ptrSpin { to { transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════
+     LOGIN SCREEN
+═══════════════════════════════════════════ -->
+<div id="loginScreen">
+<div class="login-content">
+
+  <div class="login-hero">
+    <div class="login-logo" style="background:none;box-shadow:none;border:none;padding:4px;outline:none"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80" width="72" height="48" aria-label="AJ">
+  <rect width="120" height="80" rx="12" fill="#DE1F23"/>
+  <text x="8" y="62" font-family="'Arial Black',Arial,sans-serif" font-weight="900" font-size="66" fill="white" letter-spacing="-3">AJ</text>
+</svg></div>
+    <div class="login-title">AJ network</div>
+    <div class="login-sub">고소작업대 운영/관리 플랫폼</div>
+  </div>
+
+  <!-- 3-way role selector -->
+  <div class="role-tabs" id="roleTabs">
+    <div class="role-tab active-tech" data-r="tech" onclick="switchRole('tech')">기술인</div>
+    <div class="role-tab" data-r="sub" onclick="switchRole('sub')">협력사 관리자</div>
+    <div class="role-tab" data-r="aj" onclick="switchRole('aj')">AJ 관리자</div>
+  </div>
+
+  <div class="login-body">
+
+    <!-- ── 기술인 폼 ── -->
+    <div id="form-tech">
+      <div style="font-size:10px;font-weight:700;color:var(--tx2);letter-spacing:1px;text-transform:uppercase;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--br)">기술인 로그인</div>
+      <!-- Google 로그인 -->
+      <div class="gsi-wrap" id="gsi-btn-tech"></div>
+      <div class="gsi-no-client" id="gsi-no-client-tech">Google 로그인 사용 시 <b onclick="openSheet('sh-supabase')" style="color:var(--blue);cursor:pointer">Client ID 설정</b>이 필요합니다</div>
+      <button id="kakao-btn-tech" onclick="_doKakaoLogin('tech')" style="display:none;width:300px;max-width:100%;padding:10px 0;background:#FEE500;border:none;border-radius:10px;font-size:14px;font-weight:700;color:#191919;cursor:pointer;margin:8px auto 0">
+        <span style="display:inline-flex;align-items:center;gap:8px">
+          <svg width="18" height="17" viewBox="0 0 18 17" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M9 0C4.029 0 0 3.134 0 7c0 2.473 1.576 4.641 3.965 5.903-.174.694-.632 2.521-.724 2.912-.112.487.167.481.35.35.145-.102 2.302-1.573 3.234-2.21C7.176 14.0 8.08 14 9 14c4.971 0 9-3.134 9-7S13.971 0 9 0z" fill="#191919"/></svg>
+          카카오 로그인
+        </span>
+      </button>
+      <div class="quick-login" style="margin-top:16px">이전에 로그인하셨나요? <b onclick="loadSession()">저장된 정보로 계속하기</b></div>
+      <div class="quick-login" style="margin-top:6px"><b onclick="startBrowse()" style="color:var(--tx3)">데이터 없이 둘러보기</b></div>
+    </div>
+
+    <!-- ── 협력사 관리자 폼 ── -->
+    <div id="form-sub" style="display:none">
+      <div class="role-notice sub" style="margin-bottom:14px">
+        <div class="rn-txt">가입 후 <b>AJ관리자의 승인</b>이 필요합니다.</div>
+      </div>
+      <!-- Google 로그인 -->
+      <div class="gsi-wrap" id="gsi-btn-sub"></div>
+      <div class="gsi-no-client" id="gsi-no-client-sub">Google 로그인 사용 시 <b onclick="openSheet('sh-supabase')" style="color:var(--blue);cursor:pointer">Client ID 설정</b>이 필요합니다</div>
+      <button id="kakao-btn-sub" onclick="_doKakaoLogin('sub')" style="display:none;width:300px;max-width:100%;padding:10px 0;background:#FEE500;border:none;border-radius:10px;font-size:14px;font-weight:700;color:#191919;cursor:pointer;margin:8px auto 0">
+        <span style="display:inline-flex;align-items:center;gap:8px">
+          <svg width="18" height="17" viewBox="0 0 18 17" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M9 0C4.029 0 0 3.134 0 7c0 2.473 1.576 4.641 3.965 5.903-.174.694-.632 2.521-.724 2.912-.112.487.167.481.35.35.145-.102 2.302-1.573 3.234-2.21C7.176 14.0 8.08 14 9 14c4.971 0 9-3.134 9-7S13.971 0 9 0z" fill="#191919"/></svg>
+          카카오 로그인
+        </span>
+      </button>
+      <div style="text-align:center;margin-top:14px">
+        <span onclick="_enterInviteCode()" style="font-size:12px;color:var(--blue);cursor:pointer;text-decoration:underline;text-underline-offset:3px">초대코드 입력하기</span>
+      </div>
+    </div>
+
+    <!-- ── AJ 관리자 폼 ── -->
+    <div id="form-aj" style="display:none">
+      <div class="role-notice aj" style="margin-bottom:14px">
+        <div class="rn-txt">AJ관리자 계정으로 로그인합니다.</div>
+      </div>
+      <div class="gsi-wrap" id="gsi-btn-aj"></div>
+      <div class="gsi-no-client" id="gsi-no-client">Google 로그인 사용 시 <b onclick="openSheet('sh-supabase')" style="color:var(--blue);cursor:pointer">Client ID 설정</b>이 필요합니다</div>
+      <button id="kakao-btn-aj" onclick="_doKakaoLogin('aj')" style="display:none;width:300px;max-width:100%;padding:10px 0;background:#FEE500;border:none;border-radius:10px;font-size:14px;font-weight:700;color:#191919;cursor:pointer;margin:8px auto 0">
+        <span style="display:inline-flex;align-items:center;gap:8px">
+          <svg width="18" height="17" viewBox="0 0 18 17" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M9 0C4.029 0 0 3.134 0 7c0 2.473 1.576 4.641 3.965 5.903-.174.694-.632 2.521-.724 2.912-.112.487.167.481.35.35.145-.102 2.302-1.573 3.234-2.21C7.176 14.0 8.08 14 9 14c4.971 0 9-3.134 9-7S13.971 0 9 0z" fill="#191919"/></svg>
+          카카오 로그인
+        </span>
+      </button>
+    </div>
+
+  </div><!-- /login-body -->
+  <!-- 서버 연결 설정 (SB_URL 미설정 시 표시) -->
+  <div id="server-setup-hint" style="text-align:center;padding-bottom:12px;display:none">
+    <span onclick="_openServerSetup()" style="font-size:10px;color:var(--tx3);cursor:pointer;text-decoration:underline;opacity:.6">⚙ 서버 연결 설정</span>
+  </div>
+  </div><!-- /login-content -->
+
+</div><!-- /loginScreen -->
+
+<!-- 서버 연결 설정 모달 — body 직하위 (z-index stacking context 충돌 방지) -->
+<div id="modal-server-setup" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:99999;align-items:center;justify-content:center">
+  <div style="background:var(--bg);border-radius:16px;padding:24px;width:90%;max-width:380px;box-shadow:0 8px 32px rgba(0,0,0,.5)">
+    <div style="font-size:15px;font-weight:800;margin-bottom:16px">서버 연결 설정</div>
+    <label style="font-size:11px;font-weight:700;color:var(--tx2);display:block;margin-bottom:4px">Supabase Project URL</label>
+    <input id="setup-sb-url" type="url" placeholder="https://xxxx.supabase.co" style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--br);background:var(--bg2);color:var(--tx);font-size:12px;box-sizing:border-box;margin-bottom:10px">
+    <label style="font-size:11px;font-weight:700;color:var(--tx2);display:block;margin-bottom:4px">Supabase Anon Key</label>
+    <input id="setup-sb-key" type="text" placeholder="eyJhbGci..." style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--br);background:var(--bg2);color:var(--tx);font-size:11px;box-sizing:border-box;margin-bottom:10px;font-family:monospace">
+    <label style="font-size:11px;font-weight:700;color:var(--tx2);display:block;margin-bottom:4px">카카오 JS 앱키</label>
+    <input id="setup-kakao-key" type="text" placeholder="카카오 개발자 콘솔 앱키" style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--br);background:var(--bg2);color:var(--tx);font-size:12px;box-sizing:border-box;margin-bottom:16px">
+    <div style="display:flex;gap:8px">
+      <button onclick="document.getElementById('modal-server-setup').style.display='none'" style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--br);background:none;color:var(--tx2);font-size:13px;cursor:pointer">취소</button>
+      <button onclick="_saveServerSetup()" style="flex:2;padding:10px;border-radius:8px;border:none;background:var(--red);color:#fff;font-size:13px;font-weight:700;cursor:pointer">저장 후 재시작</button>
+    </div>
+  </div>
+</div>
+
+<!-- 프로필 입력 모달 (기술인/협력사 최초 가입용 — Google·카카오 공통) -->
+<div id="modal-gprofile" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9999;align-items:flex-end;justify-content:center">
+  <div style="background:var(--bg1);border-radius:20px 20px 0 0;padding:20px 20px 44px;width:100%;max-width:480px;max-height:92vh;overflow-y:auto">
+    <div style="width:36px;height:4px;background:var(--br);border-radius:2px;margin:0 auto 18px"></div>
+    <div style="font-size:15px;font-weight:800;margin-bottom:4px" id="gpf-title">프로필 입력</div>
+    <div style="font-size:12px;color:var(--tx2);margin-bottom:14px;line-height:1.6" id="gpf-desc"></div>
+    <!-- 연동 계정 표시 -->
+    <div style="padding:10px 12px;background:var(--bg2);border-radius:10px;margin-bottom:16px;display:flex;align-items:center;gap:10px">
+      <div id="gpf-provider-icon" style="width:34px;height:34px;border-radius:50%;background:rgba(234,67,53,.15);display:flex;align-items:center;justify-content:center;font-weight:900;color:#EA4335;font-size:14px;flex-shrink:0">G</div>
+      <div>
+        <div style="font-size:12px;font-weight:700" id="gpf-gname">—</div>
+        <div style="font-size:10px;color:var(--tx3)" id="gpf-email">—</div>
+      </div>
+    </div>
+    <!-- 프로필 폼 -->
+    <div class="lg">
+      <label class="lg-label">현장 선택 <span class="req">*</span></label>
+      <div class="site-select-wrap"><select class="lg-select" id="gpf-site" onchange="syncGpfCoList()"></select></div>
+    </div>
+    <div class="lg">
+      <label class="lg-label">소속 업체 <span class="req">*</span></label>
+      <div class="site-select-wrap"><select class="lg-select" id="gpf-company"></select></div>
+    </div>
+    <div class="lg">
+      <label class="lg-label">이름 <span class="req">*</span></label>
+      <input type="text" class="lg-input" id="gpf-name" placeholder="성명 입력" maxlength="20">
+    </div>
+    <div class="lg">
+      <label class="lg-label">연락처 <span class="req">*</span></label>
+      <input type="tel" class="lg-input phone-input" id="gpf-phone" placeholder="숫자만 입력" maxlength="11">
+    </div>
+    <div class="lg" id="gpf-jobtitle-wrap" style="display:none">
+      <label class="lg-label">직급/직함</label>
+      <input type="text" class="lg-input" id="gpf-jobtitle" placeholder="예: 팀장, 대리, 반장">
+    </div>
+    <div class="lg" id="gpf-team-wrap" style="display:none">
+      <label class="lg-label">팀명 <span style="font-size:10px;color:var(--tx3)">(선택)</span></label>
+      <input type="text" class="lg-input" id="gpf-team" placeholder="소속 팀명 (예: 홍길동팀)" maxlength="30">
+    </div>
+    <!-- 제출 버튼 -->
+    <button class="login-btn" id="gpf-submit-btn" onclick="doGoogleProfileSubmit()" style="margin-top:10px">시작하기</button>
+    <button onclick="document.getElementById('modal-gprofile').style.display='none'" style="width:100%;margin-top:8px;padding:10px;font-size:13px;font-weight:600;background:transparent;border:1px solid var(--br);border-radius:var(--rs);color:var(--tx2);cursor:pointer">취소</button>
+  </div>
+</div>
+
+<!-- AJ 관리자 Google 가입 신청 모달 -->
+<div id="modal-glink" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9999;align-items:flex-end;justify-content:center">
+  <div style="background:var(--bg1);border-radius:20px 20px 0 0;padding:20px 20px 44px;width:100%;max-width:480px">
+    <div style="width:36px;height:4px;background:var(--br);border-radius:2px;margin:0 auto 18px"></div>
+    <div style="font-size:16px;font-weight:800;margin-bottom:4px">AJ 관리자 가입 신청</div>
+    <div style="font-size:12px;color:var(--tx2);margin-bottom:14px;line-height:1.6">아래 정보를 입력 후 가입 신청하세요.<br>기존 AJ 관리자 승인 후 서비스를 이용할 수 있습니다.</div>
+    <!-- Google 계정 표시 -->
+    <div style="padding:10px 12px;background:var(--bg2);border-radius:10px;margin-bottom:16px;display:flex;align-items:center;gap:10px">
+      <div style="width:34px;height:34px;border-radius:50%;background:rgba(234,67,53,.15);display:flex;align-items:center;justify-content:center;font-weight:900;color:#EA4335;font-size:14px;flex-shrink:0">G</div>
+      <div>
+        <div style="font-size:12px;font-weight:700" id="gl-gname">—</div>
+        <div style="font-size:10px;color:var(--tx3)" id="gl-email">—</div>
+      </div>
+    </div>
+    <div class="lg">
+      <label class="lg-label">이름 <span class="req">*</span></label>
+      <input type="text" class="lg-input" id="glName" placeholder="이름 입력">
+    </div>
+    <div class="lg">
+      <label class="lg-label">연락처 <span class="req">*</span></label>
+      <input type="tel" class="lg-input phone-input" id="glPhone" placeholder="숫자만 입력" maxlength="11">
+    </div>
+    <div class="lg">
+      <label class="lg-label">직무 유형 <span class="req">*</span></label>
+      <div style="display:flex;gap:8px;margin-top:4px" id="gl-aj-type-chips">
+        <button type="button" class="chip on" onclick="toggleGlAjType('관리자')" style="flex:1;padding:8px 0;font-size:12px;font-weight:700;border-radius:8px;border:1px solid rgba(222,31,35,.4);background:rgba(222,31,35,.15);color:#f87171;cursor:pointer;text-align:center">관리자</button>
+        <button type="button" class="chip" onclick="toggleGlAjType('정비기사')" style="flex:1;padding:8px 0;font-size:12px;font-weight:700;border-radius:8px;border:1px solid var(--br);background:transparent;color:var(--tx2);cursor:pointer;text-align:center">정비기사</button>
+      </div>
+    </div>
+    <button class="login-btn aj" onclick="doGoogleAjRegister()" style="margin-top:10px">가입 신청</button>
+    <button onclick="document.getElementById('modal-glink').style.display='none'" style="width:100%;margin-top:8px;padding:10px;font-size:13px;font-weight:600;background:transparent;border:1px solid var(--br);border-radius:var(--rs);color:var(--tx2);cursor:pointer">취소</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     APP SHELL
+═══════════════════════════════════════════ -->
+<div id="app">
+  <div class="sf"></div>
+
+  <!-- Top bar -->
+  <header class="topbar">
+    <div class="topbar-logo" style="padding:0;background:none;display:flex;align-items:center"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80" width="42" height="28" aria-label="AJ"><text x="8" y="62" font-family="'Arial Black',Arial,sans-serif" font-weight="900" font-size="66" fill="#DE1F23" letter-spacing="-3">AJ</text></svg></div>
+    <div class="topbar-center">
+      <!-- AJ: 현장 드롭다운 / 기타: 현장명 표시 -->
+      <div id="site-selector-wrap"></div>
+      <div class="topbar-sub" id="tbSub" style="display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden">
+        <span id="tbName" style="font-weight:700;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">—</span>
+        <span id="tbRole" style="font-size:10px;color:var(--tx3);white-space:nowrap"></span>
+      </div>
+    </div>
+    <div class="topbar-acts">
+      <div class="sync-pill" onclick="syncNow()">
+        <div id="sdot" class="sdot"></div>
+        <span id="stxt" class="sync-pill-txt">동기화</span>
+      </div>
+      <div class="offline-badge" id="offline-badge">✕ 오프라인</div>
+      <div class="rbadge" id="rbadge" style="display:flex;align-items:center;justify-content:center"></div>
+      <div class="tb-btn" onclick="openNotifSheet()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg><div class="ndot" id="ndot"></div></div>
+      <div class="tb-btn" onclick="doLogout()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></div>
+    </div>
+  </header>
+
+  <!-- Notice Bar -->
+  <div id="notice-bar" style="display:none;background:linear-gradient(90deg,#1e3a5f,#1e40af);padding:8px 14px;font-size:12px;color:#93c5fd;border-bottom:1px solid rgba(59,130,246,.3);position:relative;z-index:30"></div>
+
+  <!-- Pages -->
+  <div class="pages">
+
+    <!-- HOME -->
+    <div class="page on" id="pg-home">
+      <div class="pg-scroll">
+
+        <!-- 홈 대시보드 3패널 -->
+        <div id="home-dash" style="padding:10px 12px 12px;display:flex;flex-direction:column;gap:8px"></div>
+        <div style="height:8px"></div>
+      </div>
+    </div>
+
+
+    <!-- TRANSIT: 반입/반출 -->
+    <div class="page" id="pg-transit">
+      <div class="pg-scroll" style="padding-bottom:80px">
+        <div id="transit-content"></div>
+      </div>
+    </div>
+
+    <!-- OPS: 가동현황 (입력/이력/분석 통합) -->
+    <div class="page" id="pg-ops" style="display:flex;flex-direction:column;overflow:hidden">
+      <!-- 서브탭 -->
+      <div class="ops-subtabs" id="ops-subtabs" style="flex-shrink:0">
+        <div class="ops-tab on" id="opst-input" onclick="setOpsTab('input',this)">입력</div>
+        <div class="ops-tab" id="opst-log"   onclick="setOpsTab('log',this)">이력</div>
+        <div class="ops-tab" id="opst-ana"   onclick="setOpsTab('ana',this)">분석</div>
+      </div>
+      <!-- 입력 패널 -->
+      <div id="ops-input-panel" class="pg-scroll" style="flex:1;overflow-y:auto;padding-bottom:80px"></div>
+      <!-- 이력 패널 -->
+      <div id="ops-log-panel" class="pg-scroll" style="flex:1;overflow-y:auto;display:none;padding-bottom:80px"></div>
+      <!-- 분석 패널 -->
+      <div id="ops-ana-panel" style="flex:1;overflow-y:auto;display:none;padding-bottom:80px">
+        <div class="pg-scroll" id="ana-content"></div>
+      </div>
+    </div>
+
+    <!-- AS 요청 탭 -->
+    <div class="page" id="pg-as" style="display:flex;flex-direction:column">
+      <div id="as-sticky-header" style="flex-shrink:0;padding:12px 14px 0;background:var(--bg1);border-bottom:1px solid var(--br);z-index:10"></div>
+      <div class="pg-scroll" id="as-content" style="flex:1;overflow-y:auto"></div>
+    </div>
+
+    <!-- ADMIN -->
+    <div class="page" id="pg-admin">
+      <div class="pg-scroll" id="adm-content"></div>
+    </div>
+
+  </div><!-- /pages -->
+
+  <!-- Scroll-to-top float button -->
+  <button id="scroll-top-btn" onclick="_scrollTop()" style="display:none;position:fixed;bottom:calc(var(--nav-h) + var(--sfb) + 14px);left:50%;transform:translateX(-50%);z-index:200;background:rgba(20,20,30,.88);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.9);border-radius:999px;padding:7px 18px 7px 14px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 4px 24px rgba(0,0,0,.45);white-space:nowrap;transition:opacity .2s,transform .15s">▲ 맨 위로</button>
+
+  <!-- Bottom Nav: 홈/반입반출/가동현황/AS/관리 -->
+  <nav class="botnav" style="display:grid;grid-template-columns:repeat(5,1fr)">
+    <div class="ntab on" id="nt-home" onclick="goTab('pg-home')">
+      <div class="ntab-pip"></div>
+      <div class="ntab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/><path d="M9 22V12h6v10"/></svg></div>
+      <div class="ntab-lbl">홈</div>
+    </div>
+    <div class="ntab" id="nt-transit" onclick="goTab('pg-transit')">
+      <div class="ntab-pip"></div>
+      <div class="ntab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></div>
+      <div class="ntab-lbl">반입반출</div>
+    </div>
+    <div class="ntab" id="nt-ops" onclick="goTab('pg-ops')">
+      <div class="ntab-pip"></div>
+      <div class="ntab-ico ops-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
+      <div class="ntab-lbl">가동현황</div>
+      <div class="ntab-badge" id="nb-ops"></div>
+    </div>
+    <div class="ntab" id="nt-as" onclick="guardTab('pg-as')">
+      <div class="ntab-pip"></div>
+      <div class="ntab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg></div>
+      <div class="ntab-lbl">AS</div>
+      <div class="ntab-badge" id="nb-as"></div>
+    </div>
+    <div class="ntab locked" id="nt-admin" onclick="guardTab('pg-admin')">
+      <div class="ntab-pip"></div>
+      <div class="ntab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></div>
+      <div class="ntab-lbl">관리</div>
+    </div>
+  </nav>
+</div>
+<!-- 저작권 — 스크린 최하단 고정 -->
+<div style="position:fixed;bottom:0;left:0;right:0;text-align:center;font-size:7px;color:var(--tx3);opacity:0.35;pointer-events:none;letter-spacing:0.2px;z-index:1;padding-bottom:max(env(safe-area-inset-bottom,0px),2px)">ⓒ 2026 Daheen Lee. All Rights Reserved.</div>
+
+<!-- ═══ SHEETS ═══ -->
+
+<!-- Notification sheet -->
+<div class="soverlay" id="sh-notif" onclick="if(event.target===this)closeSheet('sh-notif')">
+  <div class="sheet">
+    <div class="sh-handle"></div>
+    <div class="sh-title">🔔 알림</div>
+    <div class="nlist" id="notif-list"></div>
+    <button class="btn-ghost" onclick="clearNotifs();closeSheet('sh-notif')">모두 읽음 처리</button>
+  </div>
+</div>
+
+<!-- GS URL sheet -->
+<div class="soverlay" id="sh-gs" onclick="if(event.target===this)closeSheet('sh-gs')">
+  <div class="sheet">
+    <div class="sh-handle"></div>
+    <div class="sh-title">Google Sheets 연동 설정</div>
+
+    <!-- URL 입력 -->
+    <div class="lg">
+      <label class="fg-lbl">Apps Script 웹앱 URL</label>
+      <div style="position:relative">
+        <input type="url" class="lg-input" id="gs-url" placeholder="https://script.google.com/macros/s/..." style="padding-right:75px;font-size:12px;font-family:'JetBrains Mono',monospace;">
+        <div onclick="pasteUrl()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--blue);cursor:pointer;padding:3px 7px;background:rgba(59,139,255,.1);border-radius:4px;">붙여넣기</div>
+      </div>
+    </div>
+    <div class="btn-gap" style="margin-bottom:0">
+      <button class="btn-full" onclick="saveGsUrl()">연동 저장</button>
+    </div>
+
+    <!-- 구분선 -->
+    <div style="border-top:1px solid var(--br);margin:16px 0 12px"></div>
+
+    <!-- 연동 가이드 -->
+    <div style="font-size:13px;font-weight:800;margin-bottom:10px">📋 구글시트 연동 방법</div>
+    <div style="font-size:10px;color:var(--tx3);margin-bottom:10px;padding:8px 10px;background:rgba(59,130,246,.07);border-radius:8px;border:1px solid rgba(59,130,246,.15)">
+      새 스프레드시트도 사용 가능합니다. 기존 연결을 해제하고 새 URL을 등록하면 됩니다.
+    </div>
+
+    <!-- Step 1 -->
+    <div style="display:flex;gap:10px;margin-bottom:12px;align-items:flex-start">
+      <div style="width:24px;height:24px;border-radius:50%;background:#3b82f6;color:white;font-size:11px;font-weight:900;display:flex;align-items:center;justify-content:center;flex-shrink:0">1</div>
+      <div>
+        <div style="font-size:12px;font-weight:700;margin-bottom:3px">구글 스프레드시트 생성</div>
+        <div style="font-size:10px;color:var(--tx3);line-height:1.6">
+          drive.google.com → 새 스프레드시트 생성<br>
+          시트 이름을 <b style="color:var(--tx)">LOGS</b>로 변경 (A1부터 헤더 자동 생성됨)
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2 -->
+    <div style="display:flex;gap:10px;margin-bottom:12px;align-items:flex-start">
+      <div style="width:24px;height:24px;border-radius:50%;background:#3b82f6;color:white;font-size:11px;font-weight:900;display:flex;align-items:center;justify-content:center;flex-shrink:0">2</div>
+      <div>
+        <div style="font-size:12px;font-weight:700;margin-bottom:3px">Apps Script 열기</div>
+        <div style="font-size:10px;color:var(--tx3);line-height:1.6">
+          스프레드시트 상단 메뉴 → <b style="color:var(--tx)">확장 프로그램 → Apps Script</b>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3 -->
+    <div style="display:flex;gap:10px;margin-bottom:12px;align-items:flex-start">
+      <div style="width:24px;height:24px;border-radius:50%;background:#3b82f6;color:white;font-size:11px;font-weight:900;display:flex;align-items:center;justify-content:center;flex-shrink:0">3</div>
+      <div style="flex:1">
+        <div style="font-size:12px;font-weight:700;margin-bottom:6px">Code.gs에 아래 코드 붙여넣기</div>
+        <div style="position:relative">
+          <pre id="gs-code-pre" style="font-size:9px;font-family:'JetBrains Mono',monospace;background:var(--bg2);border:1px solid var(--br);border-radius:8px;padding:10px;overflow-x:auto;color:var(--tx2);line-height:1.5;white-space:pre-wrap;margin:0">function doPost(e){
+  try{
+    var d=JSON.parse(e.postData.contents);
+    var ss=SpreadsheetApp.getActiveSpreadsheet();
+    var sh=ss.getSheetByName(d.sheet||'LOGS')||ss.insertSheet(d.sheet||'LOGS');
+    if(sh.getLastRow()===0){
+      sh.appendRow(d.headers||['날짜','현장','업체','장비번호','상태','입력시각']);
+    }
+    if(d.rows){ d.rows.forEach(function(r){ sh.appendRow(r); }); }
+    else if(d.row){ sh.appendRow(d.row); }
+    return ContentService.createTextOutput(JSON.stringify({ok:true})).setMimeType(ContentService.MimeType.JSON);
+  }catch(err){
+    return ContentService.createTextOutput(JSON.stringify({ok:false,error:err.message})).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+function doGet(e){
+  return ContentService.createTextOutput(JSON.stringify({ok:true,msg:'AJ연동 정상'})).setMimeType(ContentService.MimeType.JSON);
+}</pre>
+          <button onclick="navigator.clipboard?.writeText(document.getElementById('gs-code-pre').textContent).then(()=>toast('코드 복사됨','ok'))"
+            style="position:absolute;top:6px;right:6px;padding:3px 8px;font-size:9px;background:rgba(59,130,246,.2);border:1px solid rgba(59,130,246,.3);border-radius:4px;color:#60a5fa;cursor:pointer">복사</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 4 -->
+    <div style="display:flex;gap:10px;margin-bottom:12px;align-items:flex-start">
+      <div style="width:24px;height:24px;border-radius:50%;background:#3b82f6;color:white;font-size:11px;font-weight:900;display:flex;align-items:center;justify-content:center;flex-shrink:0">4</div>
+      <div>
+        <div style="font-size:12px;font-weight:700;margin-bottom:3px">웹앱으로 배포</div>
+        <div style="font-size:10px;color:var(--tx3);line-height:1.6">
+          Apps Script 우측 상단 <b style="color:var(--tx)">배포 → 새 배포</b><br>
+          유형: <b style="color:var(--tx)">웹앱</b> 선택<br>
+          다음 사용자로 실행: <b style="color:var(--tx)">나</b><br>
+          액세스 권한: <b style="color:var(--tx)">모든 사용자</b><br>
+          → <b style="color:#4ade80">배포</b> 버튼 클릭
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 5 -->
+    <div style="display:flex;gap:10px;margin-bottom:16px;align-items:flex-start">
+      <div style="width:24px;height:24px;border-radius:50%;background:#4ade80;color:#111;font-size:11px;font-weight:900;display:flex;align-items:center;justify-content:center;flex-shrink:0">5</div>
+      <div>
+        <div style="font-size:12px;font-weight:700;margin-bottom:3px">URL 복사 → 위에 붙여넣기</div>
+        <div style="font-size:10px;color:var(--tx3);line-height:1.6">
+          배포 완료 후 표시되는 <b style="color:var(--tx)">웹앱 URL</b>을 복사해서<br>
+          위 입력란에 붙여넣고 <b style="color:#4ade80">연동 저장</b> 클릭
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:10px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:8px;font-size:10px;color:var(--tx3);line-height:1.6;margin-bottom:8px">
+      ⚠️ <b style="color:var(--yellow)">새 스프레드시트 연결 시</b>: 위 과정을 새 시트에서 다시 진행하고, URL만 교체하면 됩니다. 기존 앱 데이터는 localStorage에 그대로 유지됩니다.
+    </div>
+
+    <button class="btn-ghost" onclick="closeSheet('sh-gs')" style="width:100%">닫기</button>
+  </div>
+</div>
+
+<!-- Sites manager sheet -->
+<div class="soverlay" id="sh-supabase" onclick="if(event.target===this)closeSheet('sh-supabase')">
+  <div class="sheet">
+    <div class="sh-handle"></div>
+    <div class="sh-title">🗄 Supabase 연동 설정</div>
+
+    <div style="padding:10px;background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.2);border-radius:8px;font-size:11px;color:var(--tx2);line-height:1.6;margin-bottom:10px">
+      Supabase는 <b>무료 플랜</b>으로 최대 <b>500MB · 50만 행</b> 저장 가능.<br>
+      데이터가 영구 누적되며 어느 기기에서나 실시간 조회됩니다.
+    </div>
+    <div style="padding:10px;background:rgba(59,139,255,.07);border:1px solid rgba(59,139,255,.2);border-radius:8px;font-size:11px;color:var(--tx2);line-height:1.8;margin-bottom:14px">
+      📦 <b>로컬 IndexedDB 현황</b><br>
+      <span id="idb-stats" style="color:var(--tx)">로드 중...</span>
+    </div>
+
+    <div id="sb-credentials-block">
+    <div class="lg">
+      <label class="fg-lbl">Project URL</label>
+      <input type="url" class="lg-input" id="sb-url-input" placeholder="https://xxxxxxxxxxxx.supabase.co" style="font-size:12px;font-family:'JetBrains Mono',monospace">
+    </div>
+    <div class="lg">
+      <label class="fg-lbl">anon / public Key</label>
+      <input type="text" class="lg-input" id="sb-key-input" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." style="font-size:11px;font-family:'JetBrains Mono',monospace">
+    </div>
+    <div class="lg">
+      <label class="fg-lbl">카카오 JavaScript 앱 키</label>
+      <input type="text" class="lg-input" id="kakao-key-input" placeholder="카카오 개발자 콘솔 → 앱 키 → JavaScript 키" style="font-size:11px;font-family:'JetBrains Mono',monospace">
+    </div>
+    <div class="btn-gap" style="margin-bottom:0">
+      <button class="btn-full" onclick="saveSupabaseConfig()">연동 저장</button>
+    </div>
+    <button onclick="testSupabaseConnection()" style="width:100%;margin-top:8px;padding:10px;font-size:12px;font-weight:700;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:var(--rs);color:var(--green);cursor:pointer">연결 테스트</button>
+    </div>
+
+    <div style="border-top:1px solid var(--br);margin:16px 0 12px"></div>
+    <div style="font-size:13px;font-weight:800;margin-bottom:10px">📋 Supabase 설정 방법</div>
+
+    <!-- Step 1 -->
+    <div style="display:flex;gap:10px;margin-bottom:12px;align-items:flex-start">
+      <div style="width:24px;height:24px;border-radius:50%;background:#22c55e;color:#111;font-size:11px;font-weight:900;display:flex;align-items:center;justify-content:center;flex-shrink:0">1</div>
+      <div>
+        <div style="font-size:12px;font-weight:700;margin-bottom:3px">프로젝트 생성</div>
+        <div style="font-size:10px;color:var(--tx3);line-height:1.6">
+          <b>supabase.com</b> → 무료 계정 생성 → New Project<br>
+          지역: <b>Northeast Asia (Seoul)</b> 선택
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2 -->
+    <div id="sb-sql-block" style="display:flex;gap:10px;margin-bottom:12px;align-items:flex-start">
+      <div style="width:24px;height:24px;border-radius:50%;background:#22c55e;color:#111;font-size:11px;font-weight:900;display:flex;align-items:center;justify-content:center;flex-shrink:0">2</div>
+      <div style="flex:1">
+        <div style="font-size:12px;font-weight:700;margin-bottom:5px">SQL Editor에서 테이블 생성</div>
+        <div style="font-size:10px;color:var(--tx3);margin-bottom:6px">Project → SQL Editor → New query → 아래 SQL 실행</div>
+        <div style="position:relative">
+          <pre id="sb-sql-pre" style="font-size:8.5px;font-family:'JetBrains Mono',monospace;background:var(--bg2);border:1px solid var(--br);border-radius:8px;padding:10px;overflow-x:auto;color:var(--tx2);line-height:1.5;white-space:pre-wrap;margin:0">-- ══════════════════════════════════════
+-- 고소작업대 가동현황 v3.4 — Supabase SQL
+-- ══════════════════════════════════════
+
+-- 1. 테이블 생성
+create table if not exists logs (
+  id          bigint generated always as identity primary key,
+  record_id   text unique not null,
+  date        text,        -- YYYY-MM-DD
+  site_id     text,
+  site_name   text,
+  company     text,
+  floor       text,
+  equip       text,
+  recorder    text,
+  status      text,        -- start | end | idle
+  start_time  text,
+  end_time    text,
+  used_hours  numeric default 0,
+  meter_start text,
+  meter_end   text,
+  off_reason  text,
+  created_at  timestamptz default now()
+);
+
+create table if not exists transit (
+  id               bigint generated always as identity primary key,
+  record_id        text unique not null,
+  date             text,
+  type             text,    -- 반입 | 반출
+  site_id          text,
+  site_name        text,
+  company          text,
+  equip_specs      text,
+  aj_equip         text,
+  reporter_name    text,
+  reporter_phone   text,
+  manager_name     text,
+  manager_phone    text,
+  manager_location text,
+  note             text,
+  status           text,   -- 대기 | 완료 | 취소
+  messages         text,   -- JSON array
+  created_at       timestamptz default now()
+);
+
+create table if not exists as_requests (
+  id             bigint generated always as identity primary key,
+  record_id      text unique not null,
+  date           text,
+  site_id        text,
+  site_name      text,
+  company        text,
+  equip          text,
+  location       text,
+  fault_type     text,
+  description    text,
+  reporter_name  text,
+  reporter_phone text,
+  status         text,     -- 대기 | 처리중 | 완료
+  tech_name      text,
+  resolved_at    timestamptz,
+  resolve_note   text,
+  created_at     timestamptz default now()
+);
+
+create table if not exists members (
+  id        bigint generated always as identity primary key,
+  record_id text unique not null,
+  name      text,
+  company   text,
+  site_id   text,
+  site_name text,
+  phone     text,
+  title     text,
+  joined_at timestamptz default now()
+);
+
+-- 2. 성능 인덱스 (3000대+ 환경 최적화)
+-- logs: 날짜·현장·상태 복합 조회용
+create index if not exists idx_logs_date       on logs(date);
+create index if not exists idx_logs_site_date  on logs(site_id, date);
+create index if not exists idx_logs_status     on logs(status);
+create index if not exists idx_logs_company    on logs(company);
+create index if not exists idx_logs_created    on logs(created_at desc);
+
+-- transit: 현장·날짜·상태 조회용
+create index if not exists idx_transit_site    on transit(site_id, date);
+create index if not exists idx_transit_status  on transit(status);
+
+-- as_requests: 현장·상태 조회용
+create index if not exists idx_as_site         on as_requests(site_id, date);
+create index if not exists idx_as_status       on as_requests(status);
+
+-- 3. RLS 비활성화 (내부 전용 — anon key 직접 접근)
+alter table logs         disable row level security;
+alter table transit      disable row level security;
+alter table as_requests  disable row level security;
+alter table members      disable row level security;
+
+-- 4. 장비 마스터 테이블 (별도 관리)
+create table if not exists equipment (
+  id          bigint generated always as identity primary key,
+  record_id   text unique not null,
+  equip_no    text not null,
+  site_id     text,
+  site_name   text,
+  company     text,
+  spec        text,
+  model       text,
+  transit_id  text,
+  status      text default 'active',  -- active | out
+  in_date     text,
+  out_date    text,
+  created_at  timestamptz default now()
+);
+create index if not exists idx_equip_site    on equipment(site_id, status);
+create index if not exists idx_equip_company on equipment(company, status);
+create index if not exists idx_equip_no      on equipment(equip_no);
+alter table equipment disable row level security;
+
+-- 5. members 테이블 소셜 로그인 / 승인 시스템 컬럼 추가
+alter table members add column if not exists google_email text;
+alter table members add column if not exists kakao_id     text;
+alter table members add column if not exists status       text default 'approved';
+alter table members add column if not exists role         text default 'sub';
+alter table members add column if not exists team         text default '';
+create index if not exists idx_members_google on members(google_email) where google_email is not null;
+create index if not exists idx_members_kakao  on members(kakao_id)     where kakao_id is not null;
+create index if not exists idx_members_status on members(status);
+
+-- 6. as_requests 누락 컬럼 추가
+alter table as_requests add column if not exists tech_phone    text;
+alter table as_requests add column if not exists requested_at  timestamptz;
+alter table as_requests add column if not exists material_at   timestamptz;
+
+-- 7. AJ 관리자 테이블 (Supabase에 없을 경우 생성)
+create table if not exists aj_members (
+  emp_no     text primary key,
+  name       text not null,
+  phone      text default '',
+  pw_hash    text not null,
+  aj_type    text default '관리자',
+  google_email text,
+  kakao_id   text,
+  status     text default 'approved',
+  record_id  text,
+  created_at timestamptz default now()
+);
+alter table aj_members disable row level security;
+-- 이미 aj_members 테이블이 있는 경우 컬럼 추가
+alter table aj_members add column if not exists google_email text;
+alter table aj_members add column if not exists kakao_id     text;
+alter table aj_members add column if not exists status       text default 'approved';
+alter table aj_members add column if not exists record_id    text;
+create index if not exists idx_aj_google on aj_members(google_email)
+  where google_email is not null;
+create index if not exists idx_aj_kakao  on aj_members(kakao_id)
+  where kakao_id is not null;
+create index if not exists idx_aj_status on aj_members(status);
+
+-- 8. 앱 전역 설정 테이블 (카카오 JS키, 알림시간 등 영구 저장)
+create table if not exists app_settings (
+  site_id      text primary key,   -- 'global' 또는 site_id
+  alert_time   text default '15:00',
+  custom_alerts text default '[]',
+  kakao_js_key text default '',    -- 캐시 삭제해도 자동 복구
+  updated_at   timestamptz default now()
+);
+alter table app_settings disable row level security;
+-- 이미 있는 경우 컬럼 추가
+alter table app_settings add column if not exists kakao_js_key text default '';</pre>
+          <button onclick="navigator.clipboard?.writeText(document.getElementById('sb-sql-pre').textContent).then(()=>toast('SQL 복사됨','ok'))"
+            style="position:absolute;top:6px;right:6px;padding:3px 8px;font-size:9px;background:rgba(34,197,94,.2);border:1px solid rgba(34,197,94,.3);border-radius:4px;color:#4ade80;cursor:pointer">복사</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3 -->
+    <div style="display:flex;gap:10px;margin-bottom:12px;align-items:flex-start">
+      <div style="width:24px;height:24px;border-radius:50%;background:#22c55e;color:#111;font-size:11px;font-weight:900;display:flex;align-items:center;justify-content:center;flex-shrink:0">3</div>
+      <div>
+        <div style="font-size:12px;font-weight:700;margin-bottom:3px">API 키 복사</div>
+        <div style="font-size:10px;color:var(--tx3);line-height:1.6">
+          Project Settings → API<br>
+          <b>Project URL</b>과 <b>anon / public</b> 키를 위에 입력
+        </div>
+      </div>
+    </div>
+
+    <div id="sb-warn-block" style="padding:10px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:8px;font-size:10px;color:var(--tx3);line-height:1.6;margin-bottom:12px">
+      ⚠️ anon key는 테이블 접근용 공개키입니다. service_role key는 절대 사용하지 마세요.
+    </div>
+
+    <!-- 협력사 초대코드 설정 -->
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;font-weight:700;color:var(--tx2);margin-bottom:6px">협력사 초대코드</div>
+      <div style="display:flex;gap:6px">
+        <input id="invite-code-input" type="text" placeholder="초대코드 설정 (비워두면 비활성)"
+          value="" oninput=""
+          style="flex:1;padding:7px 10px;font-size:12px;background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);color:var(--tx)">
+        <button onclick="_saveInviteCode()" style="padding:7px 12px;font-size:11px;font-weight:700;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);border-radius:var(--rs);color:var(--blue);cursor:pointer">저장</button>
+      </div>
+      <div style="font-size:10px;color:var(--tx3);margin-top:4px">이 코드를 협력사 담당자에게 전달하면 승인 없이 즉시 가입됩니다.</div>
+    </div>
+
+    <button class="btn-ghost" onclick="closeSheet('sh-supabase')" style="width:100%">닫기</button>
+  </div>
+</div>
+
+<!-- Admin Hub sheet — 현장·협력사·계정 통합 관리 -->
+<div class="soverlay" id="sh-admin-hub" onclick="if(event.target===this)closeSheet('sh-admin-hub')">
+  <div class="sheet">
+    <div class="sh-handle"></div>
+    <div class="sh-title">현장 관리</div>
+    <div class="menu-list" style="margin-bottom:10px">
+      <div class="mrow" onclick="_openSiteMgr()">
+        <div class="mrow-ico" style="background:rgba(245,158,11,.12);color:rgb(245,158,11)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg></div>
+        <div class="mrow-inf"><div class="mrow-title">현장</div><div class="mrow-desc">현장 추가·삭제 및 목록 관리</div></div>
+        <div class="mrow-arr">›</div>
+      </div>
+      <div class="mrow" onclick="_openCoMgr()">
+        <div class="mrow-ico" style="background:rgba(59,139,255,.12);color:rgb(59,139,255)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg></div>
+        <div class="mrow-inf"><div class="mrow-title">협력사</div><div class="mrow-desc">현장별 업체·장비 수량 추가·수정</div></div>
+        <div class="mrow-arr">›</div>
+      </div>
+      <div class="mrow" onclick="closeSheet('sh-admin-hub');setTimeout(()=>openAcctMgr('aj'),60)">
+        <div class="mrow-ico" style="background:rgba(222,31,35,.12);color:rgb(222,31,35)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></div>
+        <div class="mrow-inf"><div class="mrow-title">계정 관리</div><div class="mrow-desc">AJ·협력사 관리자 계정 및 가입 승인 관리</div></div>
+        <div class="mrow-arr">›</div>
+      </div>
+    </div>
+    <button class="btn-ghost" onclick="closeSheet('sh-admin-hub')" style="width:100%">닫기</button>
+  </div>
+</div>
+
+<!-- Sites manager sheet -->
+<div class="soverlay" id="sh-sites" onclick="if(event.target===this)closeSheet('sh-sites')">
+  <div class="sheet">
+    <div class="sh-handle"></div>
+    <div class="sh-title">현장 관리</div>
+    <div class="sites-list" id="site-mgr-list"></div>
+    <div style="display:flex;gap:6px;margin-bottom:10px;align-items:center">
+      <input type="text" class="lg-input" id="new-site-name" placeholder="현장명 (예: P5 복합동(골조))" style="flex:0 0 calc(85% - 3px)">
+      <button class="btn-full" onclick="addSite()" style="flex:0 0 calc(15% - 3px);padding:10px 0;white-space:nowrap;font-size:12px">추가</button>
+    </div>
+    <div class="btn-gap">
+      <button class="btn-ghost" onclick="closeSheet('sh-sites')">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- Company manager sheet -->
+<div class="soverlay" id="sh-company" onclick="if(event.target===this)closeSheet('sh-company')">
+  <div class="sheet">
+    <div class="sh-handle"></div>
+    <div class="sh-title">업체 관리</div>
+    <div id="co-mgr-list" style="display:flex;flex-direction:column;gap:7px;margin-bottom:14px"></div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <select class="lg-select" id="co-mgr-site" style="flex:0 0 140px"></select>
+      <input type="text" class="lg-input" id="new-co-name" placeholder="업체명">
+    </div>
+    <div class="btn-gap">
+      <button class="btn-full" onclick="addCompany()">+ 업체 추가</button>
+      <button class="btn-ghost" onclick="closeSheet('sh-company')">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- Invite code sheet -->
+<div class="soverlay" id="sh-invite" onclick="if(event.target===this)closeSheet('sh-invite')">
+  <div class="sheet" style="max-height:85vh;overflow-y:auto">
+    <div class="sh-handle"></div>
+    <div class="sh-title">현장별 초대코드 관리</div>
+    <div style="font-size:11px;color:var(--tx3);margin-bottom:12px;padding:8px 10px;background:rgba(245,158,11,.07);border-radius:var(--rs);border:1px solid rgba(245,158,11,.2)">
+      매월 1일 자동으로 새 코드가 생성됩니다. 현장마다 별도 코드를 사용할 수 있습니다.
+    </div>
+    <!-- 현장별 코드 목록 (JS로 채워짐) -->
+    <div id="invite-site-codes"></div>
+    <button class="btn-ghost" onclick="closeSheet('sh-invite')" style="width:100%;margin-top:4px">닫기</button>
+  </div>
+</div>
+
+<!-- Alert settings sheet -->
+<div class="soverlay" id="sh-alert" onclick="if(event.target===this)closeSheet('sh-alert')">
+  <div class="sheet" style="max-height:90vh;overflow-y:auto">
+    <div class="sh-handle"></div>
+    <div class="sh-title">알림 설정</div>
+
+    <!-- 기본 알림 설정 -->
+    <div style="background:var(--bg2);border:1px solid var(--br);border-radius:10px;padding:14px;margin-bottom:14px">
+      <div style="font-size:12px;font-weight:800;margin-bottom:10px">기본 알림</div>
+      <div class="lg" style="margin-bottom:10px">
+        <label class="lg-label">알림 기준 시간</label>
+        <input type="time" class="lg-input" id="alert-time" value="15:00">
+      </div>
+      <div class="lg" style="margin-bottom:10px">
+        <label class="lg-label" style="margin-bottom:8px">알림 대상</label>
+        <div class="chips">
+          <div class="chip on" id="ac-noinput" onclick="this.classList.toggle('on')">미입력 업체</div>
+          <div class="chip on" id="ac-noend"   onclick="this.classList.toggle('on')">미종료 장비</div>
+        </div>
+      </div>
+      <div class="lg" style="margin-bottom:0">
+        <label class="lg-label" style="margin-bottom:8px">알림 수신 대상</label>
+        <div class="chips">
+          <div class="chip" id="ac-role-tech"   onclick="this.classList.toggle('on')">기술인</div>
+          <div class="chip on" id="ac-role-sub" onclick="this.classList.toggle('on')">협력사담당자</div>
+          <div class="chip on" id="ac-role-aj"  onclick="this.classList.toggle('on')">AJ관리자</div>
+          <div class="chip" id="ac-role-ajtech"  onclick="this.classList.toggle('on')">AJ정비기사</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 추가 알림 목록 -->
+    <div style="margin-bottom:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="font-size:12px;font-weight:800">추가 알림</div>
+        <button onclick="openAddAlertForm()" style="font-size:11px;padding:4px 12px;border-radius:6px;background:rgba(59,139,255,.15);border:1px solid rgba(59,139,255,.3);color:#60a5fa;cursor:pointer;font-weight:700">+ 알림 추가</button>
+      </div>
+      <div id="custom-alert-list"></div>
+
+      <!-- 추가 알림 입력 폼 (기본 숨김) -->
+      <div id="add-alert-form" style="display:none;background:var(--bg2);border:1px solid var(--br);border-radius:10px;padding:12px;margin-top:8px">
+        <div style="font-size:12px;font-weight:700;margin-bottom:10px">새 알림 추가</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div>
+            <label style="font-size:10px;color:var(--tx3);display:block;margin-bottom:4px">알림 시간</label>
+            <input type="time" id="new-alert-time" style="width:100%;padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:7px;background:var(--bg1);color:var(--tx);outline:none;box-sizing:border-box">
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--tx3);display:block;margin-bottom:4px">반복</label>
+            <select id="new-alert-repeat" style="width:100%;padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:7px;background:var(--bg1);color:var(--tx);outline:none;box-sizing:border-box">
+              <option value="daily">매일</option>
+              <option value="weekday">평일만</option>
+              <option value="weekly">매주</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-bottom:8px">
+          <label style="font-size:10px;color:var(--tx3);display:block;margin-bottom:4px">알림 내용</label>
+          <input type="text" id="new-alert-label" placeholder="예: 오전 점검 알림" style="width:100%;padding:7px 10px;font-size:12px;border:1px solid var(--br);border-radius:7px;background:var(--bg1);color:var(--tx);outline:none;box-sizing:border-box">
+        </div>
+        <div style="display:flex;gap:8px">
+          <button onclick="closeAddAlertForm()" style="flex:1;padding:8px;font-size:12px;background:var(--bg3);border:1px solid var(--br);border-radius:7px;color:var(--tx2);cursor:pointer">취소</button>
+          <button onclick="addCustomAlert()" style="flex:1;padding:8px;font-size:12px;font-weight:700;background:rgba(59,139,255,.2);border:1px solid rgba(59,139,255,.3);border-radius:7px;color:#60a5fa;cursor:pointer">추가</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="btn-gap">
+      <button class="btn-full" onclick="saveAlertSettings()">기본 알림 저장</button>
+      <button class="btn-ghost" onclick="closeSheet('sh-alert')">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- Export sheet -->
+<div class="soverlay" id="sh-export" onclick="if(event.target===this)closeSheet('sh-export')">
+  <div class="sheet" style="max-height:90vh;overflow-y:auto">
+    <div class="sh-handle"></div>
+    <div class="sh-title">데이터 내보내기</div>
+    <div class="lg" id="export-site-row">
+      <label class="lg-label">현장 선택</label>
+      <div class="site-select-wrap"><select class="lg-select" id="export-site" onchange="initExportFilters()"></select></div>
+    </div>
+    <div class="lg">
+      <label class="lg-label">데이터 유형</label>
+      <div class="chips" id="export-type-chips" style="margin-top:4px;flex-wrap:wrap">
+        <div class="chip on" onclick="selectExportType(this,'가동현황')">가동현황</div>
+        <div class="chip" onclick="selectExportType(this,'반입반출')">반입반출</div>
+        <div class="chip" onclick="selectExportType(this,'AS요청')">AS요청</div>
+        <div class="chip" onclick="selectExportType(this,'장비사용내역')">장비사용내역</div>
+      </div>
+    </div>
+    <!-- 가동현황 필터 -->
+    <div id="export-filter-가동현황">
+      <div style="font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:6px;padding:6px 0 0">필터</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+        <div class="fg" style="margin:0"><label class="fg-lbl">시작일</label><input type="date" class="fg-input" id="ef-ops-from"></div>
+        <div class="fg" style="margin:0"><label class="fg-lbl">종료일</label><input type="date" class="fg-input" id="ef-ops-to"></div>
+      </div>
+      <div class="fg"><label class="fg-lbl">위치 (복수 선택, 미선택=전체)</label>
+        <div class="chips" id="ef-ops-floor" style="flex-wrap:wrap"></div>
+      </div>
+    </div>
+    <!-- 반입반출 필터 -->
+    <div id="export-filter-반입반출" style="display:none">
+      <div style="font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:6px;padding:6px 0 0">필터</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+        <div class="fg" style="margin:0"><label class="fg-lbl">시작일</label><input type="date" class="fg-input" id="ef-tr-from"></div>
+        <div class="fg" style="margin:0"><label class="fg-lbl">종료일</label><input type="date" class="fg-input" id="ef-tr-to"></div>
+      </div>
+      <div class="fg"><label class="fg-lbl">업체 (비워두면 전체)</label><input type="text" class="fg-input" id="ef-tr-company" placeholder="전체"></div>
+      <div class="fg"><label class="fg-lbl">프로젝트 (비워두면 전체)</label><input type="text" class="fg-input" id="ef-tr-project" placeholder="전체"></div>
+      <div class="fg"><label class="fg-lbl">구분 (미선택=전체)</label>
+        <div class="chips" id="ef-tr-type" style="flex-wrap:wrap">
+          <div class="chip" onclick="toggleChip(this)">반입</div>
+          <div class="chip" onclick="toggleChip(this)">반출</div>
+          <div class="chip" onclick="toggleChip(this)">인수인계</div>
+        </div>
+      </div>
+    </div>
+    <!-- AS요청 필터 -->
+    <div id="export-filter-AS요청" style="display:none">
+      <div style="font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:6px;padding:6px 0 0">필터</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+        <div class="fg" style="margin:0"><label class="fg-lbl">시작일</label><input type="date" class="fg-input" id="ef-as-from"></div>
+        <div class="fg" style="margin:0"><label class="fg-lbl">종료일</label><input type="date" class="fg-input" id="ef-as-to"></div>
+      </div>
+      <div class="fg"><label class="fg-lbl">업체 (비워두면 전체)</label><input type="text" class="fg-input" id="ef-as-company" placeholder="전체"></div>
+    </div>
+    <!-- 장비사용내역 필터 -->
+    <div id="export-filter-장비사용내역" style="display:none">
+      <div style="font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:6px;padding:6px 0 0">필터</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+        <div class="fg" style="margin:0"><label class="fg-lbl">시작일</label><input type="date" class="fg-input" id="ef-eq-from"></div>
+        <div class="fg" style="margin:0"><label class="fg-lbl">종료일</label><input type="date" class="fg-input" id="ef-eq-to"></div>
+      </div>
+      <div class="fg"><label class="fg-lbl">업체 (비워두면 전체)</label><input type="text" class="fg-input" id="ef-eq-company" placeholder="전체"></div>
+      <div class="fg"><label class="fg-lbl">프로젝트 (비워두면 전체)</label><input type="text" class="fg-input" id="ef-eq-project" placeholder="전체"></div>
+      <div class="fg"><label class="fg-lbl">제원 (비워두면 전체)</label><input type="text" class="fg-input" id="ef-eq-spec" placeholder="예: 10M"></div>
+      <div class="fg"><label class="fg-lbl">위치 (복수 선택, 미선택=전체)</label>
+        <div class="chips" id="ef-eq-floor" style="flex-wrap:wrap"></div>
+      </div>
+    </div>
+    <div class="btn-gap" style="margin-top:16px">
+      <button class="btn-full green" onclick="exportCSV()">CSV로 저장 (엑셀 호환)</button>
+      <button class="btn-full" style="background:linear-gradient(135deg,var(--orange),#c2410c)" onclick="exportJSON()">JSON으로 저장</button>
+      <button class="btn-ghost" onclick="closeSheet('sh-export')">취소</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Toast & Spinner -->
+<div class="toast-wrap"><div class="toast" id="toast"></div></div>
+<div class="sp-ov" id="sp-ov"><div class="sp-box"><div class="sp"></div><div class="sp-txt" id="sp-txt">처리 중...</div></div></div>
+
+<script src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.4/kakao.min.js" crossorigin="anonymous"></script>
+<script src="js/db.js"></script>
+<script src="js/state.js"></script>
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/app.js"></script>
+<script src="js/event.js"></script>
+
+<!-- 관리자 계정 관리 (통합) sheet -->
+<div class="soverlay" id="sh-acct-mgr" onclick="if(event.target===this)closeSheet('sh-acct-mgr')">
+  <div class="sheet" style="max-height:92vh;overflow-y:auto">
+    <div class="sh-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 14px 0">
+      <div class="sh-title" style="margin:0;padding:0">관리자 계정 관리</div>
+      <button onclick="closeSheet('sh-acct-mgr')" style="background:none;border:none;font-size:20px;color:var(--tx2);cursor:pointer;line-height:1;padding:4px 8px">✕</button>
+    </div>
+    <!-- 탭 -->
+    <div style="display:flex;gap:0;margin:12px 14px 0;border-bottom:1px solid var(--br)">
+      <button id="acct-tab-aj" onclick="switchAcctTab('aj')" style="flex:1;padding:8px 4px;font-size:12px;font-weight:700;background:none;border:none;border-bottom:2px solid var(--red);color:var(--red);cursor:pointer">AJ관리자 <span id="aj-pending-cnt" style="display:none;background:#fbbf24;color:#000;border-radius:8px;padding:0 5px;font-size:9px;font-weight:900;margin-left:1px"></span></button>
+      <button id="acct-tab-sub" onclick="switchAcctTab('sub')" style="flex:1;padding:8px 4px;font-size:12px;font-weight:500;background:none;border:none;border-bottom:2px solid transparent;color:var(--tx2);cursor:pointer">협력사관리자</button>
+      <button id="acct-tab-invite" onclick="switchAcctTab('invite')" style="flex:1;padding:8px 4px;font-size:12px;font-weight:500;background:none;border:none;border-bottom:2px solid transparent;color:var(--tx2);cursor:pointer">초대코드</button>
+    </div>
+    <div style="padding:14px">
+      <!-- AJ 관리자 탭 -->
+      <div id="acct-pane-aj">
+        <div id="acct-aj-list"></div>
+        <button id="acct-aj-new-btn" class="btn-full" style="margin-top:8px" onclick="showNewAjMemberForm2()">+ 신규 계정 추가</button>
+        <div id="acct-aj-form" style="display:none">
+          <div style="font-size:14px;font-weight:900;margin-bottom:14px" id="acct-aj-form-title">계정 수정</div>
+          <input type="hidden" id="acct-aj-idx" value="-1">
+          <div class="fg"><label class="fg-lbl">이름 <span class="req">*</span></label><input type="text" class="fg-input" id="acct-aj-name" placeholder="이름" autocomplete="off"></div>
+          <div class="fg"><label class="fg-lbl">연락처</label><input type="tel" class="fg-input phone-input" id="acct-aj-phone" placeholder="010-0000-0000" maxlength="11"></div>
+          <div class="fg"><label class="fg-lbl">역할</label>
+            <select class="fg-select" id="acct-aj-type">
+              <option value="관리자">관리자</option>
+              <option value="정비기사">정비기사</option>
+            </select>
+          </div>
+          <div class="fg"><label class="fg-lbl">비밀번호</label><input type="password" class="fg-input" id="acct-aj-pw" placeholder="비밀번호 (6자 이상)"></div>
+          <div style="display:flex;gap:8px;margin-top:14px">
+            <button class="btn-full" style="background:var(--bg2);color:var(--tx2);border:1px solid var(--br)" onclick="closeAcctAjForm()">취소</button>
+            <button class="btn-full" onclick="saveAcctAjMember()">저장</button>
+          </div>
+        </div>
+      </div>
+      <!-- 협력사 관리자 탭 -->
+      <div id="acct-pane-sub" style="display:none">
+        <!-- 필터 탭 -->
+        <div style="display:flex;gap:4px;margin-bottom:10px">
+          <button id="sub-filter-all" onclick="setSubFilter('all')" style="flex:1;padding:5px 4px;font-size:11px;font-weight:700;background:rgba(20,184,166,.15);border:1px solid rgba(20,184,166,.4);border-radius:6px;color:var(--teal);cursor:pointer">전체</button>
+          <button id="sub-filter-pending" onclick="setSubFilter('pending')" style="flex:1;padding:5px 4px;font-size:11px;font-weight:500;background:transparent;border:1px solid var(--br);border-radius:6px;color:var(--tx2);cursor:pointer">대기중 <span id="sub-pending-cnt" style="display:none;background:#fbbf24;color:#000;border-radius:8px;padding:0 5px;font-size:9px;font-weight:900;margin-left:2px"></span></button>
+          <button id="sub-filter-approved" onclick="setSubFilter('approved')" style="flex:1;padding:5px 4px;font-size:11px;font-weight:500;background:transparent;border:1px solid var(--br);border-radius:6px;color:var(--tx2);cursor:pointer">승인됨</button>
+        </div>
+        <div id="acct-sub-list"></div>
+      </div>
+      <!-- 초대코드 탭 -->
+      <div id="acct-pane-invite" style="display:none">
+        <div style="font-size:11px;color:var(--tx3);margin-bottom:12px;padding:8px 10px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.15);border-radius:8px">
+          매월 1일 자동으로 새 코드가 생성됩니다.
+        </div>
+        <div id="acct-invite-codes"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- AJ 관리자 계정 관리 sheet -->
+<div class="soverlay" id="sh-aj-members" onclick="if(event.target===this)closeSheet('sh-aj-members')">
+  <div class="sheet" style="max-height:90vh;overflow-y:auto">
+    <div class="sh-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 14px 0">
+      <div class="sh-title" style="margin:0;padding:0">AJ 관리자 계정 관리</div>
+      <button onclick="closeSheet('sh-aj-members')" style="background:none;border:none;font-size:20px;color:var(--tx2);cursor:pointer;line-height:1;padding:4px 8px">✕</button>
+    </div>
+    <div style="padding:14px">
+      <!-- 계정 목록 -->
+      <div id="aj-member-list">
+        <div style="text-align:center;color:var(--tx3);padding:20px;font-size:12px">로딩 중...</div>
+      </div>
+      <!-- 신규 추가 버튼 -->
+      <button id="aj-mem-new-btn" class="btn-full" style="margin-top:8px" onclick="showNewAjMemberForm()">+ 신규 계정 추가</button>
+      <!-- 편집/추가 폼 (기본 숨김) -->
+      <div id="aj-member-form" style="display:none">
+        <div style="font-size:14px;font-weight:900;margin-bottom:14px" id="aj-mem-form-title">계정 수정</div>
+        <input type="hidden" id="aj-mem-idx" value="-1">
+        <div class="fg">
+          <label class="fg-lbl">이름 <span class="req">*</span></label>
+          <input type="text" class="fg-input" id="aj-mem-name" placeholder="이름" autocomplete="off">
+        </div>
+        <div class="fg">
+          <label class="fg-lbl">연락처</label>
+          <input type="tel" class="fg-input phone-input" id="aj-mem-phone" placeholder="010-0000-0000" maxlength="11">
+        </div>
+        <div class="fg">
+          <label class="fg-lbl">역할</label>
+          <select class="fg-select" id="aj-mem-type">
+            <option value="관리자">관리자</option>
+            <option value="정비기사">정비기사</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label class="fg-lbl">비밀번호</label>
+          <input type="password" class="fg-input" id="aj-mem-pw" placeholder="비밀번호 (6자 이상)">
+        </div>
+        <div style="display:flex;gap:8px;margin-top:14px">
+          <button class="btn-full" style="background:var(--bg2);color:var(--tx2);border:1px solid var(--br)" onclick="closeAjMemberForm()">취소</button>
+          <button class="btn-full" onclick="saveAjMember()">저장</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- AS 요청 sheet -->
+<div class="soverlay" id="sh-transit-form" onclick="if(event.target===this)closeSheet('sh-transit-form')">
+  <div class="sheet" style="max-height:90vh;overflow-y:auto" ontouchstart="_swipeStart(event)" ontouchmove="_swipeMove(event,'sh-transit-form')">
+    <div class="sh-handle"></div>
+    <div class="sh-title" id="transit-form-title">반입/반출 신청</div>
+
+    <!-- 반입/반출 구분 -->
+    <div class="fg">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <label class="fg-lbl" style="margin:0">구분 <span class="req">*</span></label>
+        <div id="tr-proj-change-inline" style="display:none;align-items:center;gap:5px">
+          <span style="font-size:10px;color:var(--tx2);flex-shrink:0">프로젝트 변경</span>
+          <div class="chips" id="tr-proj-change-chips" style="gap:4px">
+            <div class="chip" onclick="selectOne(this,'tr-proj-change-chips');_updateHandoverProjSection()">예</div>
+            <div class="chip on" onclick="selectOne(this,'tr-proj-change-chips');_updateHandoverProjSection()">아니오</div>
+          </div>
+        </div>
+      </div>
+      <div class="chips" id="tr-type-chips">
+        <div class="chip" onclick="selectOne(this,'tr-type-chips');_updateSpecModelVisibility()">반입</div>
+        <div class="chip" onclick="selectOne(this,'tr-type-chips');_updateSpecModelVisibility()">반출</div>
+        <div class="chip" onclick="selectOne(this,'tr-type-chips');_updateSpecModelVisibility()">인수인계</div>
+      </div>
+    </div>
+    <!-- 프로젝트 구분 (반입/반출 시 구분 아래 독립 행으로 표시) -->
+    <div class="fg" id="tr-project-row" style="display:none">
+      <label class="fg-lbl" style="margin-bottom:6px">프로젝트 구분 <span class="req">*</span></label>
+      <div class="chips" id="tr-project-chips" style="flex-wrap:wrap"></div>
+    </div>
+
+    <!-- 요청일 / 현장 / 업체명 같은 행 -->
+    <div style="display:flex;flex-wrap:wrap;gap:6px">
+      <div class="fg" style="flex:1;min-width:90px;margin-bottom:8px">
+        <label class="fg-lbl">반입/반출 요청일 <span class="req">*</span></label>
+        <input type="date" class="fg-input" id="tr-date">
+      </div>
+      <!-- 현장 선택 (AJ 전체 현장 모드 시 표시) -->
+      <div class="fg" id="tr-site-row" style="display:none;flex:1;min-width:90px;margin-bottom:8px">
+        <label class="fg-lbl">현장 선택 <span class="req">*</span></label>
+        <div class="site-select-wrap"><select class="fg-select" id="tr-site-sel" onchange="_updateProjectChips()"></select></div>
+      </div>
+      <!-- 업체명 -->
+      <div class="fg" id="tr-company-fg" style="flex:1;min-width:90px;margin-bottom:8px">
+        <label class="fg-lbl">업체명 <span class="req">*</span></label>
+        <input type="text" class="fg-input" id="tr-company" placeholder="업체명 입력">
+      </div>
+    </div>
+
+    <!-- ─── 반입/반출 전용 섹션 ─── -->
+    <div id="tr-basic-section">
+
+    <!-- 제원 목록 -->
+    <div class="fg">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <label class="fg-lbl" style="margin:0;flex:1">제원 / 수량 <span class="req">*</span></label>
+        <button class="btn-ghost" style="width:10%;font-size:11px;padding:4px 0;text-align:center;flex-shrink:0" onclick="_trAddSpecRow()">+ 추가</button>
+      </div>
+      <div id="tr-specs-list"></div>
+    </div>
+
+    <!-- 장비번호: 제원별 입력란으로 통합 (tr-spec-equip 클래스) -->
+    <input type="hidden" id="tr-equip" value="">
+
+    <!-- 신청인 정보는 회원 정보 자동 사용 (표시 전용) -->
+
+    <!-- 양중 담당자 -->
+    <div style="background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.15);border-radius:8px;padding:10px;margin-bottom:4px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="font-size:10px;font-weight:700;color:var(--blue)">양중 담당자</div>
+        <button type="button" onclick="_showMgrHistory()" style="font-size:9px;padding:2px 8px;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);border-radius:4px;color:var(--blue);cursor:pointer">이전 담당자 불러오기</button>
+      </div>
+      <!-- 이전 담당자 목록 (토글) -->
+      <div id="mgr-history-list" style="display:none;margin-bottom:8px;max-height:120px;overflow-y:auto"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px">
+        <div class="fg" style="margin:0">
+          <label class="fg-lbl">이름</label>
+          <input type="text" class="fg-input" id="tr-manager-name" placeholder="담당자 이름" autocomplete="off">
+        </div>
+        <div class="fg" style="margin:0">
+          <label class="fg-lbl">직함</label>
+          <input type="text" class="fg-input" id="tr-manager-title" placeholder="예: 팀장">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="fg" style="margin:0">
+          <label class="fg-lbl">연락처</label>
+          <input type="tel" class="fg-input phone-input" id="tr-manager-phone" placeholder="숫자만 입력" maxlength="11">
+        </div>
+        <div class="fg" style="margin:0">
+          <label class="fg-lbl">양중 위치 <span class="req">*</span></label>
+          <input type="text" class="fg-input" id="tr-manager-location" placeholder="예: 3F D-41열">
+        </div>
+      </div>
+    </div>
+
+    <!-- 비고 -->
+    <div class="fg">
+      <label class="fg-lbl">비고 <span style="font-size:10px;color:var(--tx3);font-weight:400">[반입/반출 사유 기입]</span></label>
+      <textarea class="fg-input" id="tr-note" placeholder="반입/반출 사유 및 기타 특이사항" rows="2" style="resize:none"></textarea>
+    </div>
+    <!-- 반입신청서 첨부 (반입 전용 · 반입 선택 시 표시) -->
+    <div class="fg" id="tr-plan-section" style="display:none">
+      <label class="fg-lbl">반입신청서 <span style="font-size:9px;color:var(--tx3)">(선택 · 이미지 자동 압축)</span></label>
+      <div id="tr-plan-wrap" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <label for="tr-plan-input" id="tr-plan-label" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.3);border-radius:8px;font-size:12px;color:#a5b4fc;cursor:pointer;font-weight:600;flex-shrink:0">
+          <span>📎</span> 반입신청서 첨부
+          <input type="file" id="tr-plan-input" accept="image/*,.pdf" onchange="_onTrPlanSelected(this)" style="display:none">
+        </label>
+        <div id="tr-plan-preview" style="display:none;position:relative;flex-shrink:0">
+          <img id="tr-plan-thumb" style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--br);display:block">
+          <div id="tr-plan-pdf-badge" style="display:none;width:72px;height:72px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;align-items:center;justify-content:center;flex-direction:column">
+            <span style="font-size:26px">📄</span>
+            <span style="font-size:9px;color:#f87171;font-weight:700">PDF</span>
+          </div>
+          <button onclick="_clearTrPlan()" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:#f87171;border:none;color:#fff;font-size:11px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0">×</button>
+        </div>
+        <div id="tr-plan-fname" style="font-size:10px;color:var(--tx3);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+      </div>
+    </div>
+    </div><!-- /tr-basic-section -->
+
+    <!-- ─── 인수인계 전용 섹션 ─── -->
+    <div id="tr-handover-section" style="display:none">
+
+      <!-- 업체 datalist (동적으로 채워짐) -->
+      <datalist id="handover-company-datalist"></datalist>
+
+      <!-- 인계업체 / 인수업체 -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="fg">
+          <label class="fg-lbl">인계업체 <span class="req">*</span></label>
+          <input type="text" class="fg-input" id="tr-from-co" list="handover-company-datalist" placeholder="인계 업체명" oninput="_updateHandoverEquipList()" autocomplete="off">
+        </div>
+        <div class="fg">
+          <label class="fg-lbl">인수업체 <span class="req">*</span></label>
+          <input type="text" class="fg-input" id="tr-to-co" list="handover-company-datalist" placeholder="인수 업체명" autocomplete="off">
+        </div>
+      </div>
+
+      <!-- 이동 장비번호 -->
+      <div class="fg">
+        <label class="fg-lbl">이동 장비번호 <span class="req">*</span></label>
+        <div id="tr-handover-equip-chips" style="display:flex;flex-wrap:wrap;gap:6px;min-height:36px;padding:8px;background:var(--bg2);border:1px solid var(--br);border-radius:8px;align-items:center;margin-bottom:5px">
+          <span style="font-size:10px;color:var(--tx3)">인계업체 입력 후 장비 선택</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:10px;color:var(--tx3);flex-shrink:0">직접 입력:</span>
+          <input type="text" id="tr-handover-equip-manual" placeholder="장비번호 (쉼표 구분)" style="flex:1;font-size:11px;padding:5px 8px;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx);font-family:monospace;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">
+        </div>
+        <div style="font-size:10px;color:var(--tx3);margin-top:4px">장비 칩 클릭으로 복수 선택 가능</div>
+      </div>
+
+      <!-- 프로젝트 변경 상세 (아코디언) — 구분 행 우측 칩으로 이동 -->
+      <div id="tr-proj-change-detail" style="display:none;border-left:3px solid rgba(20,184,166,.4);padding-left:10px;margin-bottom:8px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div class="fg" style="margin:0">
+            <label class="fg-lbl" style="font-size:10px">기존 사용 프로젝트</label>
+            <div class="chips" id="tr-from-proj-chips" style="flex-wrap:wrap;gap:4px"></div>
+          </div>
+          <div class="fg" style="margin:0">
+            <label class="fg-lbl" style="font-size:10px">이동 프로젝트</label>
+            <div class="chips" id="tr-to-proj-chips" style="flex-wrap:wrap;gap:4px"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 사용 위치 -->
+      <div class="fg">
+        <label class="fg-lbl">사용 위치</label>
+        <div class="chips" id="tr-handover-location-chips" style="flex-wrap:wrap;gap:5px">
+          <div class="chip" onclick="selectOne(this,'tr-handover-location-chips')">모듈동</div>
+          <div class="chip" onclick="selectOne(this,'tr-handover-location-chips')">외곽</div>
+          <div class="chip" onclick="selectOne(this,'tr-handover-location-chips')">1F</div>
+          <div class="chip" onclick="selectOne(this,'tr-handover-location-chips')">2F</div>
+          <div class="chip" onclick="selectOne(this,'tr-handover-location-chips')">3F</div>
+          <div class="chip" onclick="selectOne(this,'tr-handover-location-chips')">4F</div>
+          <div class="chip" onclick="selectOne(this,'tr-handover-location-chips')">5F</div>
+          <div class="chip" onclick="selectOne(this,'tr-handover-location-chips')">6F</div>
+          <div class="chip" onclick="selectOne(this,'tr-handover-location-chips')">7F</div>
+          <div class="chip" onclick="selectOne(this,'tr-handover-location-chips')">8F</div>
+          <div class="chip" onclick="selectOne(this,'tr-handover-location-chips')">9F</div>
+          <div class="chip" onclick="selectOne(this,'tr-handover-location-chips')">기타</div>
+        </div>
+      </div>
+
+      <!-- 기록자 -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="fg">
+          <label class="fg-lbl">기록자 이름</label>
+          <input type="text" class="fg-input" id="tr-handover-recorder" placeholder="이름">
+        </div>
+        <div class="fg">
+          <label class="fg-lbl">기록자 연락처</label>
+          <input type="tel" class="fg-input phone-input" id="tr-handover-phone" placeholder="숫자만 입력" maxlength="11">
+        </div>
+      </div>
+
+      <!-- 비고 -->
+      <div class="fg">
+        <label class="fg-lbl">비고</label>
+        <textarea class="fg-input" id="tr-handover-note" placeholder="기타 특이사항" rows="2" style="resize:none"></textarea>
+      </div>
+
+    </div><!-- /tr-handover-section -->
+
+    <div class="btn-gap">
+      <button class="btn-full teal" onclick="submitTransit()">신청 등록</button>
+    </div>
+  </div>
+</div>
+
+<div class="soverlay" id="sh-as" onclick="if(event.target===this)closeSheet('sh-as')">
+  <div class="sheet" style="max-height:92vh;overflow-y:auto">
+    <div class="sh-handle"></div>
+    <div class="sh-title" id="as-sheet-title">AS 신청</div>
+    <!-- 현장 표시 -->
+    <div style="font-size:11px;font-weight:700;color:var(--aj);margin-bottom:12px;padding:6px 10px;background:rgba(245,158,11,.1);border-radius:var(--rs)" id="as-site-disp">—</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+      <div class="fg" style="margin:0">
+        <label class="fg-lbl">요청 업체 <span class="req">*</span></label>
+        <input type="text" class="fg-input" id="as-company" placeholder="업체명" autocomplete="off">
+      </div>
+      <div class="fg" style="margin:0">
+        <label class="fg-lbl">AJ 장비번호 <span class="req">*</span></label>
+        <input type="text" class="fg-input" id="as-equip" placeholder="T001, T002" style="text-transform:uppercase" autocomplete="off">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+      <div class="fg" style="margin:0">
+        <label class="fg-lbl">장비 위치 <span class="req">*</span></label>
+        <div class="site-select-wrap">
+          <select class="fg-input" id="as-location">
+            <option value="">위치 선택</option>
+            <option value="모듈동">모듈동</option>
+            <option value="1F외곽">1F외곽</option>
+            <option value="1F">1F</option>
+            <option value="2F">2F</option>
+            <option value="3F">3F</option>
+            <option value="4F">4F</option>
+            <option value="5F">5F</option>
+            <option value="6F">6F</option>
+            <option value="7F">7F</option>
+            <option value="8F">8F</option>
+            <option value="9F">9F</option>
+            <option value="기타">기타</option>
+          </select>
+        </div>
+      </div>
+      <div class="fg" style="margin:0">
+        <label class="fg-lbl">상세 위치</label>
+        <input type="text" class="fg-input" id="as-location-detail" placeholder="예: D-E 41열">
+      </div>
+    </div>
+    <div class="fg">
+      <label class="fg-lbl">증상 유형 <span class="req">*</span></label>
+      <div class="chips" id="as-type-chips">
+        <div class="chip" onclick="selectOne(this,'as-type-chips')">작동불량</div>
+        <div class="chip" onclick="selectOne(this,'as-type-chips')">충전불량</div>
+        <div class="chip" onclick="selectOne(this,'as-type-chips')">누유의심</div>
+        <div class="chip" onclick="selectOne(this,'as-type-chips')">파손</div>
+        <div class="chip" onclick="selectOne(this,'as-type-chips')">자재요청</div>
+        <div class="chip" onclick="selectOne(this,'as-type-chips')">오류코드</div>
+        <div class="chip" onclick="selectOne(this,'as-type-chips')">기타</div>
+      </div>
+    </div>
+    <div class="fg">
+      <label class="fg-lbl">접수 내용 <span class="req">*</span></label>
+      <textarea class="fg-input" id="as-desc" placeholder="구체적인 증상을 입력해주세요" rows="3" style="resize:none"></textarea>
+    </div>
+    <!-- 사진 첨부 -->
+    <div class="fg">
+      <label class="fg-lbl">현장 사진 <span style="font-size:9px;color:var(--tx3)">(선택 · 자동 압축)</span></label>
+      <div id="as-photo-wrap" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <label for="as-photo-input" id="as-photo-label" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:1.5px dashed var(--br);border-radius:var(--rs);cursor:pointer;font-size:11px;color:var(--tx2);background:var(--bg2)">
+          <span style="font-size:16px">📷</span> 사진 선택 / 촬영
+          <input type="file" id="as-photo-input" accept="image/*" capture="environment" onchange="_onAsPhotoSelected(this)" style="display:none">
+        </label>
+        <div id="as-photo-preview" style="display:none;position:relative;width:80px;height:80px;flex-shrink:0">
+          <img id="as-photo-thumb-preview" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:1px solid var(--br);display:block">
+          <button onclick="_clearAsPhoto()" style="position:absolute;top:-7px;right:-7px;width:20px;height:20px;border-radius:50%;background:#f87171;border:none;color:#fff;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;padding:0">×</button>
+        </div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="fg">
+        <label class="fg-lbl">신청인 이름 <span class="req">*</span></label>
+        <input type="text" class="fg-input" id="as-reporter-name" placeholder="이름" required>
+      </div>
+      <div class="fg">
+        <label class="fg-lbl">신청인 연락처 <span class="req">*</span></label>
+        <input type="tel" class="fg-input phone-input" id="as-reporter-phone" placeholder="숫자만 입력" maxlength="11" required>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="fg">
+        <label class="fg-lbl">작업자 이름 <span style="font-size:10px;color:var(--tx3)">(선택)</span></label>
+        <input type="text" class="fg-input" id="as-worker-name" placeholder="작업자 이름">
+      </div>
+      <div class="fg">
+        <label class="fg-lbl">작업자 연락처 <span style="font-size:10px;color:var(--tx3)">(선택)</span></label>
+        <input type="tel" class="fg-input phone-input" id="as-worker-phone" placeholder="숫자만 입력" maxlength="11">
+      </div>
+    </div>
+    <div class="btn-gap">
+      <button class="btn-full" style="background:linear-gradient(135deg,#dc2626,#991b1b)" onclick="submitAS()">AS 신청 등록</button>
+      <button class="btn-ghost" onclick="closeSheet('sh-as')">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- QR 코드 생성 sheet -->
+<div class="soverlay" id="sh-qr-gen" onclick="if(event.target===this)closeSheet('sh-qr-gen')">
+  <div class="sheet" style="max-height:90vh;overflow-y:auto">
+    <div class="sh-handle"></div>
+    <div class="sh-title">QR 코드 생성</div>
+    <div style="font-size:11px;color:var(--tx3);margin-bottom:12px;padding:8px 10px;background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.15);border-radius:8px;line-height:1.6">
+      QR 스캔 시 가동현황 탭이 열리고 장비번호가 자동 입력됩니다.<br>
+      여러 대는 쉼표로 구분 · A4 1장에 QR 1개로 PDF 생성
+    </div>
+    <div class="fg">
+      <label class="fg-lbl">장비번호 <span class="req">*</span></label>
+      <textarea class="fg-input" id="qr-equip-input" placeholder="GA123, GB456, GC789" rows="3" style="resize:none;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></textarea>
+    </div>
+    <div class="btn-gap">
+      <button class="btn-full teal" onclick="generateQrPdf()">PDF 생성 · 인쇄</button>
+      <button class="btn-ghost" onclick="closeSheet('sh-qr-gen')">닫기</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>
