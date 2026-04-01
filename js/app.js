@@ -444,7 +444,8 @@ function _saveAjMembers(arr){ DB.s(K.AJ_MEMBERS,arr); }
 async function ensureAdminAccount(){
   const members = _getAjMembers();
   if(members.some(m=>m.emp_no==='admin')) return;
-  const pwHash = await sha256('aj2025!');
+  // [P2-1] salted hash 사용 (empNo + ':' + pw) — 일반 멤버와 동일 형식
+  const pwHash = await sha256('admin' + ':' + 'aj2025!');
   const admin = {emp_no:'admin', name:'관리자(Admin)', phone:'', pw_hash:pwHash, aj_type:'관리자', created_at:new Date().toISOString()};
   members.unshift(admin);
   _saveAjMembers(members);
@@ -546,6 +547,11 @@ async function onGoogleSignIn(response){
 /* ── 기술인 Google 로그인 ── */
 async function _doGoogleTechLogin(email, googleName, idToken){
   toast('Google 계정 확인 중...','ok',2000);
+  // [P1-6] SB 미설정 시 안내
+  if(!DB.g(K.SB_URL,'')){
+    toast('서버 연결 설정이 필요합니다. Supabase URL/Key를 입력해 주세요.','warn',5000);
+    _openServerSetup(); return;
+  }
   // Supabase Auth JWT 교환 — RLS authenticated 역할 획득
   if (idToken) {
     try {
@@ -589,6 +595,11 @@ async function _doGoogleTechLogin(email, googleName, idToken){
 /* ── 협력사 Google 로그인 ── */
 async function _doGoogleSubLogin(email, googleName, idToken){
   toast('Google 계정 확인 중...','ok',2000);
+  // [P1-6] SB 미설정 시 안내
+  if(!DB.g(K.SB_URL,'')){
+    toast('서버 연결 설정이 필요합니다. Supabase URL/Key를 입력해 주세요.','warn',5000);
+    _openServerSetup(); return;
+  }
   // Supabase Auth JWT 교환 — RLS authenticated 역할 획득
   if (idToken) {
     try {
@@ -817,11 +828,12 @@ async function _doGoogleAjLogin(email, googleName, idToken){
   const _st = member.status||'approved';
   if(_st==='pending'){ toast('가입 승인 대기 중입니다. AJ 관리자에게 문의하세요.','warn',4000); return; }
   if(_st==='rejected'){ toast('가입이 거절되었습니다. AJ 관리자에게 문의하세요.','err',4000); return; }
-  // auth_id 미설정 시 Supabase Auth uid로 자동 연결 (이후 로그인부터 auth_id 경로 사용)
+  // [P0-1] auth_id 미설정 시 서버 API(/api/auth/link-auth-id)로 자동 연결
+  // _patchAjMemberSb()는 is_aj_admin() RLS에 막히므로 전용 엔드포인트 사용
   if (!member.auth_id && _sbAuthSession?.user?.id) {
     const uid = _sbAuthSession.user.id;
-    _patchAjMemberSb(member.emp_no, { auth_id: uid, email }).catch(() => {});
-    member.auth_id = uid;
+    _linkAuthId(member.emp_no, uid, email).catch(() => {});
+    member.auth_id = uid; // 로컬 캐시 즉시 반영
   }
   DB.s(K.AJ_MEMBER, _safeAjMember(member));
   S={ role:'aj', name:member.name, phone:member.phone||'', ajType:member.aj_type||'관리자',
@@ -1085,6 +1097,12 @@ async function _doEmpNoLogin() {
   if (!member) {
     _recordLoginFailure();
     toast('계정을 찾을 수 없습니다. 사번을 확인하세요.', 'err', 3000);
+    return;
+  }
+
+  // [P1-5] Google 전용 계정 — 비밀번호 로그인 불가 안내
+  if (member.pw_hash === 'GOOGLE_AUTH') {
+    toast('Google 계정으로만 로그인 가능합니다. Google 로그인 버튼을 사용해주세요.', 'err', 4000);
     return;
   }
 
@@ -1455,6 +1473,25 @@ async function saveAjMember(){
   }
   toast(isNew?'계정이 추가되었습니다':'계정이 수정되었습니다','ok');
   closeAjMemberForm();
+}
+
+/**
+ * [P0-1] auth_id 자동 연결 — 서버 API 경유 (service_role로 RLS 우회)
+ * 일반 AJ 멤버는 is_aj_admin() 미충족으로 직접 PATCH 불가
+ */
+async function _linkAuthId(empNo, authId, email) {
+  const adminSecret = DB.g('admin_secret', '');
+  if (!adminSecret) {
+    // ADMIN_SECRET 없으면 service_role로 직접 PATCH 시도 (RLS 정책 "auth_id 자동 연결" 필요)
+    return sbReq(`aj_members?emp_no=eq.${encodeURIComponent(empNo)}`, 'PATCH', { auth_id: authId, email });
+  }
+  const res = await fetch('/api/auth/link-auth-id', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-admin-secret': adminSecret },
+    body: JSON.stringify({ empNo, authId, email })
+  });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+  return res.json();
 }
 
 /** 서버 API를 통해 Supabase Auth 비밀번호 변경 (service_role key 서버 전용) */
@@ -2090,6 +2127,9 @@ function loadSession(){
 }
 
 function enterApp(){
+  // [P2-2] 캐시된 JWT 만료 근접 시 사전 갱신 (비동기 — UI 블로킹 없음)
+  if(typeof _validateCachedSbSession === 'function') _validateCachedSbSession().catch(()=>{});
+
   const _ls=document.getElementById('loginScreen');
   if(_ls){
     _ls.style.pointerEvents='none'; // ← 즉시 클릭 차단 해제 (투명 레이어 클릭 흡수 방지)
@@ -2338,7 +2378,8 @@ function _showPwaInstallBanner() {
 }
 
 
-function doLogout(){
+// [P0-5] async — _sbAuthSignOut()를 await해야 서버 토큰 무효화 후 리로드 보장
+async function doLogout(){
   if(!confirm('로그아웃 하시겠습니까?')) return;
   // 인터벌 및 리스너 정리 (location.reload() 전 명시적 해제)
   _appIntervals.forEach(id => clearInterval(id));
@@ -2353,8 +2394,8 @@ function doLogout(){
   if(typeof _retrySyncTimer !== 'undefined' && _retrySyncTimer){
     clearTimeout(_retrySyncTimer); _retrySyncTimer = null;
   }
-  // [보안] Supabase Auth 세션도 무효화 (서버 토큰 revoke + 로컬 삭제)
-  if(typeof _sbAuthSignOut === 'function') _sbAuthSignOut().catch(()=>{});
+  // [보안] Supabase Auth 세션 무효화 — await로 서버 토큰 revoke 완료 보장
+  await _sbAuthSignOut().catch(()=>{});
   S=null; DB.s(K.SESSION,null); DB.s('auto_login',false); location.reload();
 }
 
