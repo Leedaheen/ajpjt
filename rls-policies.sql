@@ -60,7 +60,11 @@ ALTER TABLE public.aj_members ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "aj_members: 자신 읽기" ON public.aj_members;
 CREATE POLICY "aj_members: 자신 읽기"
   ON public.aj_members FOR SELECT
-  USING (auth_id = auth.uid());
+  -- auth_id 연결된 경우 OR Google 이메일로 첫 로그인 시 (auth_id 미설정 상태 대비)
+  USING (
+    auth_id = auth.uid()
+    OR google_email = auth.email()
+  );
 
 DROP POLICY IF EXISTS "aj_members: 관리자 전체 읽기" ON public.aj_members;
 CREATE POLICY "aj_members: 관리자 전체 읽기"

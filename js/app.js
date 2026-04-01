@@ -817,6 +817,12 @@ async function _doGoogleAjLogin(email, googleName, idToken){
   const _st = member.status||'approved';
   if(_st==='pending'){ toast('가입 승인 대기 중입니다. AJ 관리자에게 문의하세요.','warn',4000); return; }
   if(_st==='rejected'){ toast('가입이 거절되었습니다. AJ 관리자에게 문의하세요.','err',4000); return; }
+  // auth_id 미설정 시 Supabase Auth uid로 자동 연결 (이후 로그인부터 auth_id 경로 사용)
+  if (!member.auth_id && _sbAuthSession?.user?.id) {
+    const uid = _sbAuthSession.user.id;
+    _patchAjMemberSb(member.emp_no, { auth_id: uid, email }).catch(() => {});
+    member.auth_id = uid;
+  }
   DB.s(K.AJ_MEMBER, _safeAjMember(member));
   S={ role:'aj', name:member.name, phone:member.phone||'', ajType:member.aj_type||'관리자',
       company:'AJ네트웍스', siteId:'all', siteName:'전체 현장', loginAt:Date.now(), empNo:member.emp_no,
