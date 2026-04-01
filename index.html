@@ -1186,6 +1186,16 @@ textarea.fg-input{height:72px;line-height:1.5;}
           카카오 로그인
         </span>
       </button>
+      <!-- 사번+비밀번호 로그인 -->
+      <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--br)">
+        <div style="font-size:10px;color:var(--tx2);font-weight:700;letter-spacing:.5px;margin-bottom:8px;text-transform:uppercase">사번 + 비밀번호 로그인</div>
+        <input id="aj-login-emp" type="text" placeholder="사번 (emp_no)" autocomplete="username"
+          style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--br);background:var(--bg2);color:var(--tx);font-size:13px;box-sizing:border-box;margin-bottom:8px">
+        <input id="aj-login-pw" type="password" placeholder="비밀번호" autocomplete="current-password"
+          style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--br);background:var(--bg2);color:var(--tx);font-size:13px;box-sizing:border-box;margin-bottom:8px"
+          onkeydown="if(event.key==='Enter')_doEmpNoLogin()">
+        <button class="login-btn aj" onclick="_doEmpNoLogin()">로그인</button>
+      </div>
     </div>
 
   </div><!-- /login-body -->
@@ -2135,6 +2145,10 @@ alter table app_settings add column if not exists kakao_js_key text default '';<
             <option value="관리자">관리자</option>
             <option value="정비기사">정비기사</option>
           </select>
+        </div>
+        <div class="fg">
+          <label class="fg-lbl">이메일 <span style="font-size:11px;color:var(--tx3)">(Supabase Auth 로그인용)</span></label>
+          <input type="email" class="fg-input" id="aj-mem-email" placeholder="email@example.com (선택)">
         </div>
         <div class="fg">
           <label class="fg-lbl">비밀번호</label>

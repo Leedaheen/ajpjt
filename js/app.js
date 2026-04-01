@@ -539,7 +539,8 @@ async function onGoogleSignIn(response){
   const activeRole = window._gsiActiveRole || 'aj';
   if(activeRole === 'tech') await _doGoogleTechLogin(payload.email, payload.name||'');
   else if(activeRole === 'sub') await _doGoogleSubLogin(payload.email, payload.name||'');
-  else await _doGoogleAjLogin(payload.email, payload.name||'');
+  // AJ 로그인: id_token(response.credential)을 전달해 Supabase Auth JWT 교환 진행
+  else await _doGoogleAjLogin(payload.email, payload.name||'', response.credential);
 }
 
 /* ── 기술인 Google 로그인 ── */
@@ -770,12 +771,23 @@ async function doGoogleProfileSubmit(){
 }
 
 /* ── Google 이메일로 AJ 멤버 조회 후 로그인 ── */
-async function _doGoogleAjLogin(email, googleName){
+async function _doGoogleAjLogin(email, googleName, idToken){
   toast('Google 계정 확인 중...','ok',2000);
   // AJ 로그인은 서버 필수 — SB 미설정 시 서버 설정으로 안내
   if(!DB.g(K.SB_URL,'')){
     toast('서버 연결 설정이 필요합니다. Supabase URL/Key를 입력해 주세요.','warn',5000);
     _openServerSetup(); return;
+  }
+  // [보안] Google id_token → Supabase Auth JWT 교환
+  // 성공 시: 이후 모든 sbReq()가 anon key 대신 JWT를 사용 → RLS auth.role()='authenticated'
+  // 실패 시(Supabase Google 공급자 미설정 등): 경고만 출력하고 기존 흐름으로 계속 진행
+  if (idToken) {
+    try {
+      await _sbAuthSignInWithIdToken(idToken);
+      console.log('[Auth] Supabase Auth JWT 발급 완료 (RLS 인증 활성화)');
+    } catch(_e) {
+      console.warn('[Auth] Supabase Auth JWT 교환 실패 (anon key 사용):', _e.message);
+    }
   }
   // SB에서 최신 멤버 목록 풀링 (google_email 컬럼 포함)
   await _pullAjMembersFromSB().catch(()=>{});
@@ -998,6 +1010,16 @@ async function _adminLogin(){
     return;
   }
   _resetLoginAttempts();
+  // [보안] 이메일+비밀번호 Supabase Auth 로그인 시도 (RLS JWT 발급용)
+  // admin 멤버에 email 필드가 있고 Supabase Auth 계정이 존재할 때만 성공
+  if (adminMember?.email) {
+    try {
+      await _sbAuthSignInWithPassword(adminMember.email, pw);
+      console.log('[Auth] Supabase Auth JWT 발급 완료 (이메일+비밀번호)');
+    } catch(_e) {
+      console.warn('[Auth] Supabase Auth 이메일 로그인 실패 (anon key 사용):', _e.message);
+    }
+  }
   const {pw_hash: _h, ...safeAdmin} = adminMember || {};
   DB.s(K.AJ_MEMBER, safeAdmin);
   S = { role:'aj', name:'관리자', phone:'', ajType:'관리자',
@@ -1005,6 +1027,71 @@ async function _adminLogin(){
         loginAt:Date.now(), empNo:'admin', memberId:'' };
   DB.s(K.SESSION, S);
   toast('관리자로 로그인됩니다.','ok');
+  enterApp();
+}
+
+/**
+ * 사번+비밀번호로 AJ 관리자 로그인.
+ * Supabase Auth JWT 획득 우선 → 실패 시 로컬 sha256 폴백.
+ */
+async function _doEmpNoLogin() {
+  if (!_checkLoginLock()) return;
+  const empNo = (document.getElementById('aj-login-emp')?.value || '').trim();
+  const pw    = document.getElementById('aj-login-pw')?.value || '';
+  if (!empNo || !pw) { toast('사번과 비밀번호를 입력하세요', 'warn'); return; }
+
+  // 1) Supabase Auth 로그인 시도 (synthetic email)
+  const cleanEmp = empNo.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const email = `${cleanEmp}@aj.internal`;
+  let sbAuthOk = false;
+  try {
+    await _sbAuthSignInWithPassword(email, pw);
+    sbAuthOk = true;
+    console.log('[Auth] SB JWT 발급 완료:', email);
+  } catch (_e) {
+    console.warn('[Auth] SB Auth 실패, 로컬 sha256 폴백:', _e.message);
+  }
+
+  // 2) JWT 획득 성공 시 SB에서 최신 멤버 정보 갱신
+  if (sbAuthOk) await _pullAjMembersFromSB().catch(() => {});
+
+  // 3) 로컬 캐시에서 계정 확인
+  const members = _getAjMembers();
+  const member = members.find(m => m.emp_no === empNo);
+  if (!member) {
+    _recordLoginFailure();
+    toast('계정을 찾을 수 없습니다. 사번을 확인하세요.', 'err', 3000);
+    return;
+  }
+
+  // 4) SB Auth 실패 시 로컬 sha256 검증 (오프라인 폴백)
+  if (!sbAuthOk) {
+    const storedHash = member.pw_hash || '';
+    const saltedHash = await sha256(empNo + ':' + pw);
+    const plainHash  = await sha256(pw); // admin 계정 구버전 호환
+    if (!storedHash || (saltedHash !== storedHash && plainHash !== storedHash)) {
+      _recordLoginFailure();
+      toast('비밀번호가 올바르지 않습니다', 'err', 3000);
+      return;
+    }
+  }
+
+  _resetLoginAttempts();
+  const st = member.status || 'approved';
+  if (st === 'pending')  { toast('승인 대기 중입니다. AJ관리자에게 문의하세요', 'warn', 4000); return; }
+  if (st === 'rejected') { toast('가입이 거절되었습니다. AJ관리자에게 문의하세요', 'err', 4000); return; }
+
+  const { pw_hash: _h, ...safeMember } = member;
+  DB.s(K.AJ_MEMBER, safeMember);
+  S = {
+    role: 'aj', name: member.name, phone: member.phone || '',
+    ajType: member.aj_type || '관리자', company: 'AJ네트웍스',
+    siteId: 'all', siteName: '전체 현장',
+    loginAt: Date.now(), empNo: member.emp_no, memberId: ''
+  };
+  DB.s(K.SESSION, S);
+  DB.s('auto_login', true);
+  toast(`${member.name}님 환영합니다!`, 'ok');
   enterApp();
 }
 
@@ -1289,6 +1376,8 @@ function showNewAjMemberForm(){
   document.getElementById('aj-mem-type').value='관리자';
   document.getElementById('aj-mem-pw').value='';
   document.getElementById('aj-mem-pw').placeholder='비밀번호 (6자 이상)';
+  const emailEl = document.getElementById('aj-mem-email');
+  if(emailEl) emailEl.value='';
   document.getElementById('aj-mem-form-title').textContent='신규 계정 추가';
   document.getElementById('aj-member-form').style.display='block';
   document.getElementById('aj-member-list').style.display='none';
@@ -1303,6 +1392,8 @@ function editAjMember(idx){
   document.getElementById('aj-mem-type').value=m.aj_type||'관리자';
   document.getElementById('aj-mem-pw').value='';
   document.getElementById('aj-mem-pw').placeholder='변경 시에만 입력 (6자 이상)';
+  const emailEl = document.getElementById('aj-mem-email');
+  if(emailEl) emailEl.value = m.email||'';
   document.getElementById('aj-mem-form-title').textContent='계정 수정';
   document.getElementById('aj-member-form').style.display='block';
   document.getElementById('aj-member-list').style.display='none';
@@ -1314,6 +1405,7 @@ async function saveAjMember(){
   const phone = document.getElementById('aj-mem-phone').value.trim();
   const ajType = document.getElementById('aj-mem-type').value;
   const pw = document.getElementById('aj-mem-pw').value;
+  const email = (document.getElementById('aj-mem-email')?.value||'').trim().toLowerCase();
   if(!name){ toast('이름은 필수입니다','err'); return; }
   const members = _getAjMembers();
   const isNew = idx === -1;
@@ -1322,15 +1414,58 @@ async function saveAjMember(){
   const empNo = isNew ? ('M'+Date.now().toString(36).toUpperCase()) : members[idx].emp_no;
   // [보안] sha256(empNo + ':' + pw) — emp_no를 salt로 사용해 레인보우 테이블 방어
   const member = isNew
-    ? {emp_no:empNo, name, phone, pw_hash:await sha256(empNo+':'+pw), aj_type:ajType, created_at:new Date().toISOString()}
-    : {...members[idx], name, phone, aj_type:ajType};
+    ? {emp_no:empNo, name, phone, pw_hash:await sha256(empNo+':'+pw), aj_type:ajType, email, created_at:new Date().toISOString()}
+    : {...members[idx], name, phone, aj_type:ajType, email:email||members[idx].email||''};
   if(!isNew && pw) member.pw_hash = await sha256(empNo+':'+pw);
   if(isNew) members.unshift(member);
   else members[idx] = member;
   _saveAjMembers(members);
   _syncAjMemberSb(member);
+  // [보안] 이메일+비밀번호가 있으면 서버 API로 Supabase Auth 계정 생성/갱신
+  // 서버 환경변수 SB_SERVICE_KEY + ADMIN_SECRET 설정 필요
+  if (email && pw) {
+    _createSbAuthUser({ email, password: pw, name, empNo, ajType }).catch(_e => {
+      // 서버 미설정 또는 계정 이미 존재 시 조용히 무시
+      console.warn('[Auth] Supabase Auth 계정 생성 실패 (비필수):', _e.message);
+    });
+  }
   toast(isNew?'계정이 추가되었습니다':'계정이 수정되었습니다','ok');
   closeAjMemberForm();
+}
+
+/** 서버 API를 통해 Supabase Auth 비밀번호 변경 (service_role key 서버 전용) */
+async function _updateSbAuthPw(uid, newPassword) {
+  const adminSecret = DB.g('admin_secret', '');
+  if (!adminSecret) return; // ADMIN_SECRET 미설정 시 스킵
+  const res = await fetch('/api/auth/update-aj-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-admin-secret': adminSecret },
+    body: JSON.stringify({ uid, password: newPassword })
+  });
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || res.statusText);
+  }
+  return res.json();
+}
+
+/** 서버 API를 통해 Supabase Auth 계정 생성 (service_role key 서버 전용) */
+async function _createSbAuthUser({ email, password, name, empNo, ajType }) {
+  const adminSecret = DB.g('admin_secret','');
+  if (!adminSecret) return; // ADMIN_SECRET 미설정 시 스킵
+  const res = await fetch('/api/auth/create-aj-user', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-admin-secret': adminSecret
+    },
+    body: JSON.stringify({ email, password, name, empNo, ajType })
+  });
+  if (!res.ok) {
+    const d = await res.json().catch(()=>({}));
+    throw new Error(d.error || res.statusText);
+  }
+  return res.json();
 }
 async function resetAjMemberPw(idx){
   const members = _getAjMembers();
@@ -1339,9 +1474,15 @@ async function resetAjMemberPw(idx){
   const newPw = prompt(`[${m.name}] 새 비밀번호 입력 (6자 이상):`);
   if(!newPw) return;
   if(newPw.length<6){ toast('비밀번호는 6자 이상이어야 합니다','err'); return; }
-  members[idx].pw_hash = await sha256(newPw);
+  members[idx].pw_hash = await sha256(m.emp_no + ':' + newPw);
   _saveAjMembers(members);
   _patchAjMemberSb(m.emp_no, {pw_hash:members[idx].pw_hash});
+  // SB Auth 비밀번호도 동기화 (auth_id 있는 경우)
+  if (m.auth_id) {
+    _updateSbAuthPw(m.auth_id, newPw).catch(e => {
+      console.warn('[Auth] SB Auth 비밀번호 동기화 실패 (비필수):', e.message);
+    });
+  }
   toast(`[${m.name}] 비밀번호가 초기화되었습니다`,'ok');
 }
 function deleteAjMember(idx){
@@ -2188,6 +2329,8 @@ function doLogout(){
   if(typeof _retrySyncTimer !== 'undefined' && _retrySyncTimer){
     clearTimeout(_retrySyncTimer); _retrySyncTimer = null;
   }
+  // [보안] Supabase Auth 세션도 무효화 (서버 토큰 revoke + 로컬 삭제)
+  if(typeof _sbAuthSignOut === 'function') _sbAuthSignOut().catch(()=>{});
   S=null; DB.s(K.SESSION,null); DB.s('auto_login',false); location.reload();
 }
 
