@@ -537,15 +537,24 @@ async function onGoogleSignIn(response){
   const payload = _decodeJwt(response.credential);
   if(!payload?.email){ toast('Google 로그인 실패: 토큰 오류','err'); return; }
   const activeRole = window._gsiActiveRole || 'aj';
-  if(activeRole === 'tech') await _doGoogleTechLogin(payload.email, payload.name||'');
-  else if(activeRole === 'sub') await _doGoogleSubLogin(payload.email, payload.name||'');
-  // AJ 로그인: id_token(response.credential)을 전달해 Supabase Auth JWT 교환 진행
+  // 모든 역할에 idToken 전달 — Supabase Auth JWT 교환 후 RLS 인증 활성화
+  if(activeRole === 'tech') await _doGoogleTechLogin(payload.email, payload.name||'', response.credential);
+  else if(activeRole === 'sub') await _doGoogleSubLogin(payload.email, payload.name||'', response.credential);
   else await _doGoogleAjLogin(payload.email, payload.name||'', response.credential);
 }
 
 /* ── 기술인 Google 로그인 ── */
-async function _doGoogleTechLogin(email, googleName){
+async function _doGoogleTechLogin(email, googleName, idToken){
   toast('Google 계정 확인 중...','ok',2000);
+  // Supabase Auth JWT 교환 — RLS authenticated 역할 획득
+  if (idToken) {
+    try {
+      await _sbAuthSignInWithIdToken(idToken);
+      console.log('[Auth] Tech SB JWT 발급 완료');
+    } catch(_e) {
+      console.warn('[Auth] Tech SB JWT 교환 실패 (anon 폴백):', _e.message);
+    }
+  }
   const allMembers = getMembers();
   let member = null;
   // 서버 우선 조회 — 항상 SB에서 최신 데이터 사용 (status 변경 즉시 반영)
@@ -578,8 +587,17 @@ async function _doGoogleTechLogin(email, googleName){
 }
 
 /* ── 협력사 Google 로그인 ── */
-async function _doGoogleSubLogin(email, googleName){
+async function _doGoogleSubLogin(email, googleName, idToken){
   toast('Google 계정 확인 중...','ok',2000);
+  // Supabase Auth JWT 교환 — RLS authenticated 역할 획득
+  if (idToken) {
+    try {
+      await _sbAuthSignInWithIdToken(idToken);
+      console.log('[Auth] Sub SB JWT 발급 완료');
+    } catch(_e) {
+      console.warn('[Auth] Sub SB JWT 교환 실패 (anon 폴백):', _e.message);
+    }
+  }
   const allMembers = getMembers();
   let member = null;
   // 서버 우선 조회 — 승인 상태(status) 최신 반영 위해 항상 SB 먼저

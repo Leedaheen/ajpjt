@@ -153,14 +153,17 @@ CREATE POLICY "equipment: 인증 유저 쓰기"
   WITH CHECK (auth.role() = 'authenticated');
 
 -- ────────────────────────────────────────────────────────────────
--- 8. members 테이블 RLS (협력사 멤버)
+-- 8. members 테이블 RLS (협력사/기술인 멤버)
+--    SELECT는 anon 허용 — Kakao 로그인 시 google_email/kakao_id로 본인 조회 필요
+--    INSERT는 anon 허용 — 가입 신청 (비로그인 상태에서 가능)
+--    UPDATE/DELETE는 authenticated만 허용
 -- ────────────────────────────────────────────────────────────────
 ALTER TABLE public.members ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "members: 인증 유저 읽기" ON public.members;
-CREATE POLICY "members: 인증 유저 읽기"
+DROP POLICY IF EXISTS "members: 전체 읽기 허용" ON public.members;
+CREATE POLICY "members: 전체 읽기 허용"
   ON public.members FOR SELECT
-  USING (auth.role() = 'authenticated');
+  USING (true);  -- 카카오 로그인 시 anon 조회 허용
 
 DROP POLICY IF EXISTS "members: 신규 등록 허용 (anon)" ON public.members;
 CREATE POLICY "members: 신규 등록 허용 (anon)"
