@@ -5,6 +5,155 @@ const _pendingGETs = new Map();
 /* ── 지수 백오프 딜레이 (ms) — 네트워크 실패 시 순서대로 사용 ── */
 const _SB_RETRY_DELAYS = [5000, 15000, 30000];
 
+/* ═══════════════════════════════════════════════════════════
+   Supabase Auth 세션 관리
+   Google OAuth → Supabase Auth JWT 교환 후 저장/복원
+   - 저장: localStorage('sb_auth_session')
+   - 복원: 페이지 로드 시 자동 복원
+   - sbReq()는 JWT 우선 사용, 없으면 anon key 폴백
+═══════════════════════════════════════════════════════════ */
+let _sbAuthSession = (() => {
+  try { return JSON.parse(localStorage.getItem('sb_auth_session') || 'null'); } catch(_) { return null; }
+})();
+
+// [P0-3] 멀티탭 JWT 동기화 — 다른 탭에서 토큰 갱신 시 이 탭의 메모리도 갱신
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'sb_auth_session') {
+      try { _sbAuthSession = JSON.parse(e.newValue || 'null'); }
+      catch(_) { _sbAuthSession = null; }
+    }
+  });
+}
+
+/**
+ * [P0-4] 요청 직전 토큰 유효성 보장.
+ * 만료 30초 전이면 await refresh 후 최신 토큰 반환 (race condition 제거).
+ */
+async function _ensureValidToken() {
+  if (!_sbAuthSession?.access_token || !_sbAuthSession?.expires_at) return null;
+  const now = Date.now() / 1000;
+  if (now > _sbAuthSession.expires_at - 30) {
+    if (_sbAuthSession.refresh_token) {
+      await _sbAuthRefresh().catch(() => {});
+    }
+  }
+  return _sbAuthSession?.access_token || null;
+}
+
+/** @deprecated 동기 버전 — sbReq 내부에서는 _ensureValidToken() 사용 */
+function _sbGetAuthToken() {
+  if (!_sbAuthSession?.access_token) return null;
+  const exp = _sbAuthSession.expires_at;
+  if (exp && (Date.now() / 1000) > exp - 30) return null;
+  return _sbAuthSession.access_token;
+}
+
+/**
+ * [P2-2] 페이지 로드 시 캐시된 JWT 만료 근접 여부 사전 검사.
+ * enterApp() 초기화 시 한 번 호출.
+ */
+async function _validateCachedSbSession() {
+  if (!_sbAuthSession?.access_token || !_sbAuthSession?.expires_at) return;
+  const now = Date.now() / 1000;
+  if (_sbAuthSession.expires_at - now < 300) { // 5분 미만 남은 경우 즉시 갱신
+    await _sbAuthRefresh().catch(() => {});
+  }
+}
+
+/** Supabase Auth refresh_token으로 access_token 갱신 */
+async function _sbAuthRefresh() {
+  const rt = _sbAuthSession?.refresh_token;
+  if (!rt) return;
+  const sbUrl = DB.g(K.SB_URL, '') || SB_DEFAULT_URL;
+  const sbKey = DB.g(K.SB_KEY, '') || SB_DEFAULT_KEY;
+  if (!sbUrl || !sbKey) return;
+  try {
+    const res = await fetch(`${sbUrl}/auth/v1/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: { 'apikey': sbKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: rt })
+    });
+    if (res.ok) {
+      _sbAuthSession = await res.json();
+      localStorage.setItem('sb_auth_session', JSON.stringify(_sbAuthSession));
+    } else {
+      _sbAuthSession = null;
+      localStorage.removeItem('sb_auth_session');
+    }
+  } catch(_e) { /* 네트워크 오류 — 기존 세션 유지 */ }
+}
+
+/**
+ * Google id_token → Supabase Auth JWT 교환.
+ * Supabase 대시보드에서 Google OAuth 공급자가 활성화되어 있어야 함.
+ * @param {string} idToken - Google JWT (onGoogleSignIn response.credential)
+ */
+async function _sbAuthSignInWithIdToken(idToken) {
+  const sbUrl = DB.g(K.SB_URL, '') || SB_DEFAULT_URL;
+  const sbKey = DB.g(K.SB_KEY, '') || SB_DEFAULT_KEY;
+  if (!sbUrl || !sbKey) throw new Error('NO_SB_URL');
+  const res = await fetch(`${sbUrl}/auth/v1/token?grant_type=id_token`, {
+    method: 'POST',
+    headers: { 'apikey': sbKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider: 'google', id_token: idToken })
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`SB_AUTH_FAIL: ${err.slice(0, 120)}`);
+  }
+  _sbAuthSession = await res.json();
+  localStorage.setItem('sb_auth_session', JSON.stringify(_sbAuthSession));
+  return _sbAuthSession;
+}
+
+/**
+ * Supabase Auth 이메일+비밀번호 로그인.
+ * AJ 멤버에 email 필드가 있고 Supabase Auth 계정이 존재할 때 사용.
+ * @param {string} email
+ * @param {string} password
+ */
+async function _sbAuthSignInWithPassword(email, password) {
+  const sbUrl = DB.g(K.SB_URL, '') || SB_DEFAULT_URL;
+  const sbKey = DB.g(K.SB_KEY, '') || SB_DEFAULT_KEY;
+  if (!sbUrl || !sbKey) throw new Error('NO_SB_URL');
+  const res = await fetch(`${sbUrl}/auth/v1/token?grant_type=password`, {
+    method: 'POST',
+    headers: { 'apikey': sbKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password })
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`SB_AUTH_FAIL: ${err.slice(0, 120)}`);
+  }
+  _sbAuthSession = await res.json();
+  localStorage.setItem('sb_auth_session', JSON.stringify(_sbAuthSession));
+  return _sbAuthSession;
+}
+
+/** [P0-5] Supabase Auth 로그아웃 — 서버 토큰 무효화(await) + 로컬 세션 삭제 */
+async function _sbAuthSignOut() {
+  const token = _sbAuthSession?.access_token;
+  _sbAuthSession = null;
+  localStorage.removeItem('sb_auth_session');
+  if (token) {
+    const sbUrl = DB.g(K.SB_URL, '') || SB_DEFAULT_URL;
+    const sbKey = DB.g(K.SB_KEY, '') || SB_DEFAULT_KEY;
+    if (sbUrl && sbKey) {
+      try {
+        // 3초 타임아웃 내 서버 토큰 무효화 보장 (페이지 리로드 전 완료)
+        await Promise.race([
+          fetch(`${sbUrl}/auth/v1/logout`, {
+            method: 'POST',
+            headers: { 'apikey': sbKey, 'Authorization': `Bearer ${token}` }
+          }),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000))
+        ]);
+      } catch(_e) { /* 네트워크 오류 무시 — 로컬 삭제는 이미 완료 */ }
+    }
+  }
+}
+
 async function sbReq(table, method='GET', data=null, query=''){
   // localStorage 우선, 없으면 서버 주입 기본값(window._SRV) 사용 → 캐시 삭제 후 자동 복구
   const url = DB.g(K.SB_URL,'') || SB_DEFAULT_URL;
@@ -32,7 +181,10 @@ async function sbReq(table, method='GET', data=null, query=''){
       signal: controller.signal,
       headers: {
         'apikey': key,
-        'Authorization': `Bearer ${key}`,
+        // JWT 우선 사용 (Supabase Auth 로그인 시) → RLS auth.role()='authenticated'
+        // JWT 없으면 anon key 폴백 → RLS auth.role()='anon'
+        // [P0-4] await로 토큰 갱신 완료 후 사용 (race condition 제거)
+        'Authorization': `Bearer ${await _ensureValidToken() || key}`,
         'Content-Type': 'application/json',
         ...(prefer ? { 'Prefer': prefer } : {})
       }
@@ -203,7 +355,7 @@ async function syncNow(){
   // 다중 탭 락 — localStorage 기반 (60초 타임아웃으로 데드락 방지)
   const _LS_LOCK_KEY = '_sync_lock_ts';
   const prevLock = Number(localStorage.getItem(_LS_LOCK_KEY)||0);
-  if(prevLock && Date.now() - prevLock < 60000){
+  if(prevLock && Date.now() - prevLock < 30000){
     return;
   }
   localStorage.setItem(_LS_LOCK_KEY, Date.now());
@@ -382,7 +534,7 @@ async function _syncToSupabase(){
   // 부분 실패 테이블 로깅 (성공한 테이블은 이미 synced:true 처리됨)
   const _syncFailed = _syncResults.filter(r => r.status === 'rejected');
   if(_syncFailed.length){
-    _syncFailed.forEach(f => {};
+    _syncFailed.forEach(()=>{});
     if(_syncFailed.length === _syncResults.length) throw new Error('전체 테이블 동기화 실패');
   }
 
@@ -417,12 +569,12 @@ async function _syncToSupabase(){
   //    pull은 아래 _pullConfigFromSB() 내 _pullAjMembersFromSB()에서 수행
 
   // ── 설정 데이터 pull (sites/companies/notices/settings/invite/idle/aj_members) ──
-  await _pullConfigFromSB().catch(e => {};
+  await _pullConfigFromSB().catch(()=>{});
 
   // ── 다른 기기 변경사항 pull (충돌 방지) ─────────────────
   // 마지막 동기화 이후 서버에서 변경된 transit / AS 데이터를 내려받아 로컬 병합
   // updated_at 기준 비교: 서버 버전이 더 새로우면 로컬을 덮어씀
-  await _pullRecentFromSupabase().catch(e => {};
+  await _pullRecentFromSupabase().catch(()=>{});
   } catch(e) { throw e; }
 }
 
@@ -536,6 +688,35 @@ async function _pushSitesToSB(arr){
     projects:JSON.stringify(s.projects||[]), updated_at:new Date().toISOString()
   }));
   if(rows.length) await sbBatchUpsert('sites', rows);
+}
+
+async function _pushEquipItemsToSB(items){
+  if(!items||!items.length) return;
+  const sbUrl=DB.g(K.SB_URL,'');
+  if(!sbUrl) return;
+  const rows=items.map(e=>({
+    record_id:  e.id,
+    equip_no:   e.equipNo||'',
+    serial_no:  e.serialNo||'',
+    site_id:    e.siteId||'',
+    site_name:  e.siteName||'',
+    company:    e.company||'',
+    spec:       e.spec||'',
+    model:      e.model||'',
+    project:    e.project||'',
+    transit_id: e.transitId||'',
+    status:     e.status||'active',
+    in_date:    e.inDate||null,
+    out_date:   e.outDate||null,
+    updated_at: new Date().toISOString(),
+  }));
+  await sbBatchUpsert('equipment', rows, 'record_id');
+  // 업서트 성공 시 synced 플래그 갱신
+  const arr = getEquipMaster();
+  const pushed = new Set(items.map(e=>e.id));
+  arr.forEach(e=>{ if(pushed.has(e.id)) e.synced=true; });
+  _cache.equipment = arr;
+  DB.s(K.EQUIP, arr);
 }
 
 async function _pushCosToSB(obj){
@@ -664,7 +845,14 @@ async function _pullIdleLogsFromSB(){
 }
 
 async function _pullAjMembersFromSB(){
-  const rows = await sbReq('aj_members','GET',null,'?order=created_at').catch(()=>null);
+  // [P1-1] catch(()=>null) 대신 명시적 try/catch — RLS 실패 등 원인 로그
+  let rows;
+  try {
+    rows = await sbReq('aj_members','GET',null,'?order=created_at');
+  } catch(e) {
+    console.warn('[SB] aj_members 조회 실패 (로컬 캐시 유지):', e.message);
+    return;
+  }
   if(!Array.isArray(rows)||!rows.length) return;
   // 서버 데이터 우선, 로컬 전용 항목은 보존 (덮어쓰기 방지)
   const local = _getAjMembers();
@@ -950,7 +1138,7 @@ function _initRealtime(){
               if(!changed) return; // 변경 없으면 렌더 건너뜀 (깜빡임 방지)
               if(tbl==='transit'||tbl==='equipment') { renderTransit?.(); }
               else if(tbl==='as_requests') { renderASPage?.(); updateASBadge?.(); }
-              else if(tbl==='logs') { _renderHomeAsync?.(); }
+              else if(tbl==='logs') { _renderHomeAsync?.(); if(typeof curOpsTab!=='undefined'&&curOpsTab==='log') renderLog?.(); }
             });
           }, 1500);
         }

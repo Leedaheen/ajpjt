@@ -14,20 +14,19 @@ function _toggleHomeAcc(key){
 }
 function renderHome(){
   if(!S) return;
-  _renderHomeAsync().catch(e=> {};
+  _renderHomeAsync().catch(()=>{});
 }
 
 async function _renderHomeAsync(){
   const dash=document.getElementById('home-dash'); if(!dash) return;
+  // 스크롤 위치 보존 (1시간 자동 갱신 시 화면 점프 방지)
+  const _pgHome = document.getElementById('pg-home');
+  const _savedScroll = _pgHome ? _pgHome.scrollTop : 0;
   const siteId=S.siteId==='all'?null:S.siteId;
   const td=today();
 
-  // ── 데이터 수집 ──
-  let todayAll=await getTodayLogs();
-  // IDB 비어있으면 서버에서 오늘 로그 fetch (캐시 삭제 후 복구 대응)
-  if(!todayAll.length){
-    try{ todayAll = await getLogsByRange(td, td, null, 500); }catch(_e){}
-  }
+  // ── 데이터 수집 — 서버 직접 조회 우선 ──
+  let todayAll = await getTodayLogs();
   const todayLogs=siteId?todayAll.filter(l=>l.siteId===siteId):todayAll;
   const completedToday=todayLogs.filter(l=>l.status==='end');
   const rate=todayLogs.length>0?completedToday.length/todayLogs.length:null;
@@ -102,11 +101,14 @@ async function _renderHomeAsync(){
   const doneRate=allAS.length>0?Math.round(doneAS.length/allAS.length*100):null;
   const todayAS=allAS.filter(r=>{const d=r.requestedAt?new Date(r.requestedAt).toISOString().split('T')[0]:(r.date||''); return d===td;});
 
-  // ── 날씨 fetch (병렬) ──
+  // ── 날씨 fetch (3초 타임아웃) ──
   let wx=null;
   try{
     const lat=DB.g('site_lat','37.0505'), lng=DB.g('site_lng','127.0752');
-    const wr=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=precipitation_sum,temperature_2m_max,wind_speed_10m_max,weathercode&timezone=Asia%2FSeoul&forecast_days=2`);
+    const _wxAC=new AbortController();
+    const _wxTimer=setTimeout(()=>_wxAC.abort(),3000);
+    const wr=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=precipitation_sum,temperature_2m_max,wind_speed_10m_max,weathercode&timezone=Asia%2FSeoul&forecast_days=2`,{signal:_wxAC.signal});
+    clearTimeout(_wxTimer);
     const wd=await wr.json();
     if(wd.daily){
       const idx=wd.daily.time.indexOf(td);
@@ -300,19 +302,39 @@ async function _renderHomeAsync(){
     {t:'transit',    l:'🚛 반입/반출 데이터'},
   ].map(q=>`<button class="ai-qbtn" onclick="_askAIHome('${q.t}')">${q.l}</button>`).join('');
 
+  const _aiCollapsed = DB.g('_aiPanelCollapsed', false);
   const panel0=`<div class="ai-panel" style="margin-bottom:0">
     <div class="ai-hd">
       <div class="ai-tag">데이터 분석</div>
       <div style="font-size:12px;font-weight:700;margin-left:2px">운영 분석 리포트</div>
-      <button onclick="goTab('pg-ops');setTimeout(()=>setOpsTab('ana',document.getElementById('opst-ana')),150)" style="margin-left:auto;font-size:10px;font-weight:700;padding:3px 8px;border-radius:7px;background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.2);color:#60a5fa;cursor:pointer;flex-shrink:0">분석탭 →</button>
+      <div style="display:flex;gap:6px;margin-left:auto;flex-shrink:0">
+        <button onclick="goTab('pg-ops');setTimeout(()=>setOpsTab('ana',document.getElementById('opst-ana')),150)" style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:7px;background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.2);color:#60a5fa;cursor:pointer">분석탭 →</button>
+        <button id="ai-panel-toggle" onclick="_toggleAIPanel()" style="font-size:12px;padding:2px 8px;border-radius:7px;background:rgba(255,255,255,.07);border:1px solid var(--br);color:var(--tx2);cursor:pointer" title="${_aiCollapsed?'패널 펼치기':'패널 접기'}">${_aiCollapsed?'▼':'▲'}</button>
+      </div>
     </div>
-    <div style="display:flex;flex-wrap:wrap;gap:5px;margin:0 0 8px">${homeAnaQBtns}</div>
-    <div id="home-analysis-result"></div>
+    <div id="ai-panel-body" style="display:${_aiCollapsed?'none':'block'}">
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin:0 0 8px">${homeAnaQBtns}</div>
+      <div id="home-analysis-result"></div>
+    </div>
   </div>`;
 
   dash.innerHTML=panel0+panel1+panel2+panel3;
-  // 기본 분석: 미입력 업체
-  _askAIHome('missing');
+  // 스크롤 위치 복원
+  if(_pgHome && _savedScroll > 0) requestAnimationFrame(()=>{ _pgHome.scrollTop = _savedScroll; });
+  // 기본 분석: 미입력 업체 (접힌 상태면 패널 열릴 때 자동 실행)
+  if(!_aiCollapsed) _askAIHome('missing');
+}
+
+function _toggleAIPanel(){
+  const body = document.getElementById('ai-panel-body');
+  const btn  = document.getElementById('ai-panel-toggle');
+  if(!body) return;
+  const collapsed = body.style.display === 'none';
+  body.style.display = collapsed ? 'block' : 'none';
+  if(btn){ btn.textContent = collapsed ? '▲' : '▼'; btn.title = collapsed ? '패널 접기' : '패널 펼치기'; }
+  DB.s('_aiPanelCollapsed', !collapsed);
+  // 처음 펼칠 때 분석 결과가 없으면 자동 실행
+  if(collapsed && !document.getElementById('home-analysis-result')?.children.length) _askAIHome('missing');
 }
 
 
@@ -1085,7 +1107,7 @@ function _showPhotoPopup(reqId){
 
 /* ═══ AS 검색 상태 ═══ */
 let _asSearchQ = '';
-let _asFilter  = '대기'; // all / 대기 / 자재수급중 / 처리완료
+let _asFilter  = '대기'; // all / 대기 / 자재수급중 / 처리완료 / 취소
 let _asTypeFilter = 'all'; // all / 작동불량 / 충전불량 / 누유의심 / 파손 / 자재요청 / 오류코드 / 기타
 let _asLocFilter  = 'all'; // all / 모듈동 / 1F외곽 / 1F~9F / 기타
 let _asSort = 'desc'; // desc=최신순 / asc=오래된순
@@ -1146,6 +1168,7 @@ function renderASPage(){
     );
   }
   if(_asFilter !== 'all') reqs = reqs.filter(r=>r.status===_asFilter);
+  else reqs = reqs.filter(r=>r.status!=='취소'); // 전체보기에서도 취소는 기본 제외
   if(_asTypeFilter !== 'all') reqs = reqs.filter(r=>(r.type||r.faultType||'')===_asTypeFilter);
   if(_asLocFilter !== 'all') reqs = reqs.filter(r=>(r.location||'').startsWith(_asLocFilter));
   // 정렬
@@ -1184,6 +1207,8 @@ function renderASPage(){
   const _allAsSortedPre = getAsReqs().slice().sort((a,b)=>(a.requestedAt||a.ts||0)-(b.requestedAt||b.ts||0));
   window._asSeqMap = new Map(_allAsSortedPre.map((r,i)=>[r.id,i+1]));
 
+  // 스크롤 위치 보존
+  const _asScroll = el.scrollTop;
   el.innerHTML=`<div style="padding:10px 14px 80px">
 
   <!-- KPI 요약 -->
@@ -1212,9 +1237,9 @@ function renderASPage(){
         <option value="대기"${_asFilter==='대기'?' selected':''}>대기</option>
         <option value="자재수급중"${_asFilter==='자재수급중'?' selected':''}>자재수급중</option>
         <option value="처리완료"${_asFilter==='처리완료'?' selected':''}>처리완료</option>
+        <option value="취소"${_asFilter==='취소'?' selected':''}>취소</option>
       </select>
     </div>
-    <button onclick="_asSort=_asSort==='desc'?'asc':'desc';renderASPage()" style="flex-shrink:0;padding:0 10px;font-size:11px;font-weight:700;background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);color:var(--tx2);cursor:pointer;white-space:nowrap">${_asSort==='desc'?'최신순↓':'오래된순↑'}</button>
     <div class="site-select-wrap" style="flex:1">
       <select class="fg-select" style="width:100%;font-size:11px" onchange="_asTypeFilter=this.value;renderASPage()">
         <option value="all"${_asTypeFilter==='all'?' selected':''}>전체 유형</option>
@@ -1244,6 +1269,7 @@ function renderASPage(){
         <option value="기타"${_asLocFilter==='기타'?' selected':''}>기타</option>
       </select>
     </div>
+    <button onclick="_asSort=_asSort==='desc'?'asc':'desc';renderASPage()" style="flex-shrink:0;padding:0 10px;font-size:11px;font-weight:700;background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);color:var(--tx2);cursor:pointer;white-space:nowrap">${_asSort==='desc'?'최신순↓':'오래된순↑'}</button>
   </div>
 
 
@@ -1256,6 +1282,8 @@ function renderASPage(){
   window._asAllCards = reqs;
   window._asCardIdx  = Math.min(20, reqs.length);
   _attachASListSentinel(canFullAS);
+  // 스크롤 위치 복원 (자동 갱신/리얼타임 시 점프 방지)
+  if(_asScroll > 0) requestAnimationFrame(()=>{ el.scrollTop = _asScroll; });
 }
 
 // ── 업체별 고유 아바타 색상 ────────────────────────────────────
@@ -1397,13 +1425,18 @@ function _fmtAsDate(ts){
   return `${yy}/${mm}/${dd} ${hh}:${min}`;
 }
 function _asCard(r, canAct){
-  const seqNo = window._asSeqMap?.get(r.id) || 0;
+  // r.sbId = Supabase IDENTITY (고정 고유번호), 미동기화 레코드는 로컬 순번 fallback
+  const seqNo = r.sbId || window._asSeqMap?.get(r.id) || 0;
   const idx = seqNo - 1; // 하위 호환 (idx 사용하는 코드가 있을 경우)
   const isAJ = S?.role==='aj';
   const isEngineer = isAJ && S?.ajType==='정비기사';
   // 상태 색상
-  const stCol = r.status==='처리완료'?'#4ade80':r.status==='자재수급중'?'#f59e0b':'#f87171';
-  const stBg  = r.status==='처리완료'?'rgba(74,222,128,.15)':r.status==='자재수급중'?'rgba(245,158,11,.15)':'rgba(248,113,113,.15)';
+  const isCancelled = r.status==='취소';
+  const stCol = r.status==='처리완료'?'#4ade80':r.status==='자재수급중'?'#f59e0b':isCancelled?'#94a3b8':'#f87171';
+  const stBg  = r.status==='처리완료'?'rgba(74,222,128,.15)':r.status==='자재수급중'?'rgba(245,158,11,.15)':isCancelled?'rgba(148,163,184,.15)':'rgba(248,113,113,.15)';
+  // 취소 가능 여부: AJ(정비기사 포함) 또는 AS 글쓴이(sub)
+  const isMyAS = S?.memberId && r.submitterMemberId === S.memberId;
+  const canCancel = (canAct || isMyAS) && !isCancelled && r.status !== '처리완료';
 
   // 처리완료 정보 블록
   let resolvedBlock = '';
@@ -1415,8 +1448,8 @@ function _asCard(r, canAct){
       const rFull = rDate.toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric'})
                   + ' ' + rDate.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
       parts.push(`처리완료: ${rFull}`);
-      // requestedAt 우선, 없으면 ts(신청시각), 그 다음 createdAt
-      const base = r.requestedAt || r.ts || r.createdAt;
+      // requestedAt(신청시각) 우선, 없으면 서버 createdAt (ts는 로컬 타임스탬프로 부정확)
+      const base = r.requestedAt || r.createdAt;
       if(base){
         const diffMs = Number(r.resolvedAt) - Number(base);
         if(diffMs > 0){
@@ -1440,7 +1473,7 @@ function _asCard(r, canAct){
     <button onclick="_retryASPush('${r.id}')" style="font-size:10px;font-weight:700;padding:3px 8px;background:rgba(248,113,113,.2);border:1px solid rgba(248,113,113,.4);border-radius:5px;color:#f87171;cursor:pointer">재등록</button>
   </div>` : '';
 
-  return `<div class="lcard" style="margin-bottom:10px">
+  return `<div class="lcard" style="margin-bottom:10px${isCancelled?';opacity:0.45':''}">
     <!-- 헤더: 업체 + 상태 + 날짜 -->
     <div class="lc-top">
       <div class="lc-co">
@@ -1506,6 +1539,11 @@ function _asCard(r, canAct){
           style="flex:1;padding:5px 8px;font-size:11px;background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);color:var(--tx)">
         <button onclick="_addASComment('${r.id}')" style="padding:5px 12px;font-size:11px;background:rgba(74,222,128,.15);border:1px solid rgba(74,222,128,.35);border-radius:var(--rs);color:#4ade80;cursor:pointer;font-weight:700;flex-shrink:0">등록</button>
       </div>`:''}
+      <!-- 접수취소 버튼 — AS 글쓴이 또는 AJ -->
+      ${canCancel?`<div style="margin-bottom:${canAct?'6px':'0'}">
+        <button class="btn-ghost" style="width:100%;font-size:10px;padding:5px;color:#94a3b8;border-color:rgba(148,163,184,.4)"
+          onclick="_showASCancelPopup('${r.id}')">접수취소</button>
+      </div>`:''}
       <!-- AJ 처리 버튼 — AJ만 표시 -->
       ${canAct&&r.status!=='처리완료'?`<div style="display:flex;gap:6px">
         <button class="btn-ghost" style="flex:1;font-size:10px;padding:5px;color:#f59e0b;border-color:rgba(245,158,11,.4)"
@@ -1545,6 +1583,54 @@ function _showASCompletePopup(id){
   pop.addEventListener('click', e=>{ if(e.target===pop) pop.remove(); });
   document.body.appendChild(pop);
   setTimeout(()=>pop.querySelector('#_as-note-input')?.focus(), 100);
+}
+
+function _showASCancelPopup(id){
+  const existing = document.getElementById('_as-cancel-pop');
+  if(existing) existing.remove();
+  const pop = document.createElement('div');
+  pop.id = '_as-cancel-pop';
+  pop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:3000;display:flex;align-items:flex-end;justify-content:center;padding-bottom:env(safe-area-inset-bottom,0px)';
+  pop.innerHTML = `
+    <div style="width:100%;max-width:500px;background:var(--bg1);border-radius:16px 16px 0 0;padding:20px 16px 24px;box-sizing:border-box">
+      <div style="font-size:14px;font-weight:800;margin-bottom:4px;color:var(--tx)">❌ 접수취소</div>
+      <div style="font-size:11px;color:var(--tx3);margin-bottom:14px">취소 사유를 입력하면 댓글로 자동 등록됩니다</div>
+      <textarea id="_as-cancel-reason" rows="3" placeholder="취소 사유 입력 (필수)"
+        style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:13px;background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);color:var(--tx);resize:none;font-family:inherit;line-height:1.5"></textarea>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button onclick="document.getElementById('_as-cancel-pop').remove()"
+          style="flex:1;padding:11px;font-size:13px;font-weight:700;background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);color:var(--tx2);cursor:pointer">닫기</button>
+        <button id="_as-cancel-confirm"
+          style="flex:2;padding:11px;font-size:13px;font-weight:800;background:rgba(148,163,184,.15);border:1px solid rgba(148,163,184,.4);border-radius:var(--rs);color:#94a3b8;cursor:pointer">접수취소 확정</button>
+      </div>
+    </div>`;
+  pop.querySelector('#_as-cancel-confirm').addEventListener('click', ()=>{
+    const reason = pop.querySelector('#_as-cancel-reason').value.trim();
+    if(!reason){ pop.querySelector('#_as-cancel-reason').style.borderColor='#f87171'; return; }
+    pop.remove();
+    cancelASRequest(id, reason);
+  });
+  pop.addEventListener('click', e=>{ if(e.target===pop) pop.remove(); });
+  document.body.appendChild(pop);
+  setTimeout(()=>pop.querySelector('#_as-cancel-reason')?.focus(), 100);
+}
+
+function cancelASRequest(id, reason){
+  const reqs = getAsReqs();
+  const idx = reqs.findIndex(r=>r.id===id);
+  if(idx<0) return;
+  const r = reqs[idx];
+  r.status = '취소';
+  r.cancelledAt = Date.now();
+  r.cancelledBy = S?.name || '';
+  if(!Array.isArray(r.comments)) r.comments = [];
+  r.comments.push({text:'[접수취소] '+reason, author:S?.name||'', company:S?.company||'', role:S?.role||'', ts:Date.now()});
+  r.synced = false;
+  reqs[idx] = r;
+  saveAsReqs(reqs);
+  _syncToSupabase().catch(e=>console.warn('[as cancel sync]',e));
+  toast('접수취소 처리되었습니다','ok');
+  renderASPage();
 }
 
 function updateASStatus(id, status, resolvedNote){
@@ -1804,6 +1890,8 @@ function renderTransit(){
   const _allTrSorted=getTransit().sort((a,b)=>(a.ts||0)-(b.ts||0));
   window._trSeqMap=new Map(_allTrSorted.map((r,i)=>[r.id,i+1]));
 
+  // 스크롤 위치 보존
+  const _trScroll = el.scrollTop;
   el.innerHTML=`
   <!-- KPI 필터 탭 -->
   <div id="tr-kpi-bar" style="position:sticky;top:0;z-index:20;background:var(--bg1);padding:6px 8px 5px;border-bottom:1px solid var(--br)">
@@ -1889,6 +1977,8 @@ function renderTransit(){
   window._trDoneAll   = done;      window._trDoneIdx   = Math.min(20, done.length);
   window._trCancelAll = cancelled; window._trCancelIdx = Math.min(20, cancelled.length);
   _attachTrSentinels(el);
+  // 스크롤 위치 복원 (realtime/자동갱신 시 점프 방지)
+  if(_trScroll > 0) requestAnimationFrame(()=>{ el.scrollTop = _trScroll; });
 }
 
 function _filterTransit(){
@@ -2241,12 +2331,6 @@ function _trCard(r, seqNo, canEdit, canMsg){
   const doneBadge = isDone
     ? `<span style="font-size:9px;font-weight:800;padding:2px 7px;border-radius:8px;background:rgba(34,197,94,.2);color:#22c55e;margin-left:4px">${r.status}</span>`
     : '';
-  // 프로젝트 뱃지
-  const projectBadge = r.project
-    ? `<span style="font-size:9px;font-weight:800;padding:2px 6px;border-radius:6px;background:rgba(20,184,166,.2);color:#14b8a6">${r.project}</span>`
-    : '';
-
-
   // AJ 장비번호 영역
   let ajEquipHtml = '';
   if (r.ajEquip) {
@@ -2427,7 +2511,7 @@ function _trCard(r, seqNo, canEdit, canMsg){
           <span style="font-size:10px;font-weight:800;padding:2px 7px;border-radius:6px;background:rgba(${isIn?'96,165,250':'251,146,60'},.2);color:${typeColor};flex-shrink:0">${typeLabel}</span>
           ${doneBadge}
           <span style="font-weight:800;font-size:12px">${r.company||'—'}</span>
-          ${r.siteName?`<span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(245,158,11,.12);color:#f59e0b;font-weight:700">${r.siteName}</span>`:''}
+          <span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(245,158,11,.12);color:#f59e0b;font-weight:700">${r.siteName||r.siteId||'—'}</span>
           ${r.project?`<span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(20,184,166,.12);color:#14b8a6;font-weight:700">${r.project}</span>`:''}
         </div>
         <!-- 2행: 제원×수량 + 장비번호 -->
@@ -3068,6 +3152,9 @@ async function _saveInlineEquip(id) {
 // 인라인 자동완성 초기화 (카드 렌더 후 호출)
 function _initInlineEquipAC(id, siteId) {
   setTimeout(() => {
+    const inp = document.getElementById('inline-equip-' + id);
+    if (!inp || inp.dataset.acInit) return; // 이미 초기화됐거나 DOM 교체됨
+    inp.dataset.acInit = '1';
     setupEquipAutocomplete('inline-equip-' + id, {
       siteIdFn:  () => siteId || (S?.siteId === 'all' ? null : S?.siteId),
       companyFn: () => null,
@@ -3143,7 +3230,30 @@ async function _completeTransitInner(id) {
       if (val) rec.ajEquip = val;
     }
     if (!rec.ajEquip) {
-      if (!confirm('장비번호가 입력되지 않았습니다.\n장비번호 없이 반입완료 처리하시겠습니까?\n(나중에 카드에서 입력 가능)')) return;
+      // 장비번호 미입력 시 인라인 입력 모달 제공
+      const _equipInput = await new Promise(resolve => {
+        const _ov = document.createElement('div');
+        _ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:10005;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box';
+        _ov.innerHTML=`<div style="background:var(--bg2);border-radius:14px;padding:20px;width:100%;max-width:340px">
+          <div style="font-size:13px;font-weight:800;margin-bottom:6px;color:#fbbf24">⚠ 장비번호 미입력</div>
+          <div style="font-size:11px;color:var(--tx3);margin-bottom:12px">장비번호를 지금 입력하거나 건너뛰고 나중에 등록할 수 있습니다.</div>
+          <input id="_no-equip-inp" type="text" placeholder="예: GF123, GF456 (쉼표 구분)" style="width:100%;box-sizing:border-box;padding:9px 12px;border-radius:8px;border:1px solid var(--br);background:var(--bg3);color:var(--tx);font-size:12px;margin-bottom:12px;text-transform:uppercase">
+          <div style="display:flex;gap:8px">
+            <button id="_no-eq-cancel" style="flex:1;padding:9px;border-radius:8px;background:transparent;border:1px solid var(--br);color:var(--tx2);font-size:12px;cursor:pointer">취소</button>
+            <button id="_no-eq-skip" style="flex:1;padding:9px;border-radius:8px;background:rgba(251,146,60,.15);border:1px solid rgba(251,146,60,.3);color:#fb923c;font-size:12px;font-weight:700;cursor:pointer">번호없이 완료</button>
+            <button id="_no-eq-ok" style="flex:1;padding:9px;border-radius:8px;background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.3);color:#4ade80;font-size:12px;font-weight:700;cursor:pointer">입력 후 완료</button>
+          </div>
+        </div>`;
+        document.body.appendChild(_ov);
+        const _inp = _ov.querySelector('#_no-equip-inp');
+        _ov.querySelector('#_no-eq-cancel').onclick  = ()=>{ _ov.remove(); resolve(null); };
+        _ov.querySelector('#_no-eq-skip').onclick    = ()=>{ _ov.remove(); resolve(''); };
+        _ov.querySelector('#_no-eq-ok').onclick      = ()=>{ const v=_inp.value.toUpperCase().trim(); _ov.remove(); resolve(v||''); };
+        _inp.addEventListener('keydown', e=>{ if(e.key==='Enter'){ const v=_inp.value.toUpperCase().trim(); _ov.remove(); resolve(v||''); } });
+        setTimeout(()=>_inp.focus(), 50);
+      });
+      if (_equipInput === null) return; // 취소 → 완료 처리 중단
+      if (_equipInput) rec.ajEquip = _equipInput;
     }
   }
 
@@ -3177,7 +3287,7 @@ async function _completeTransitInner(id) {
     const changed = await registerEquipFromTransit(rec);
     if (changed) {
       toast(`${verb} · 장비 마스터 등록 완료`, 'ok');
-      _syncToSupabase().catch(e=> {};
+      _syncToSupabase().catch(()=>{});
     } else {
       toast(verb + ' 처리 완료' + (rec.ajEquip ? '' : ' (장비번호 미입력)'), rec.ajEquip ? 'ok' : 'warn');
     }
@@ -3189,7 +3299,7 @@ async function _completeTransitInner(id) {
     const changed = await deregisterEquipFromTransit(rec);
     if (changed) {
       toast(`${verb} · ${outNos.size}대 마스터 반출처리 완료`, 'ok');
-      _syncToSupabase().catch(e=> {};
+      _syncToSupabase().catch(()=>{});
     } else if (outNos.size === 0) toast(verb + ' 처리 완료 (장비번호 미입력)', 'warn');
     else toast(`${verb} · 마스터에서 장비를 찾을 수 없습니다 (이미 반출 또는 미등록)`, 'warn');
   }
@@ -3931,6 +4041,15 @@ async function submitAS(){
     return;
   }
   if(!equip){ toast('장비번호를 입력하세요','err'); return; }
+  // 동일 장비 중복 AS 방지 — 이미 대기/처리중인 AS가 있으면 경고
+  const _dupAS = getAS().filter(a =>
+    a.status !== '처리완료' && a.status !== '취소' &&
+    equipList.some(no => (a.equip||'').toUpperCase().split(/[,\s]+/).includes(no))
+  );
+  if(_dupAS.length){
+    const _dupNos = _dupAS.map(a=>a.equip).join(' / ');
+    if(!confirm(`⚠️ 이미 처리 중인 AS가 있습니다:\n${_dupNos}\n\n중복으로 신청하시겠습니까?`)) return;
+  }
   // 장비마스터 유효성 검사 — 역할 무관, 보유 장비 아니면 확인 팝업
   const _asSiteId = S.siteId==='all' ? null : S.siteId;
   if(_asSiteId){
@@ -4504,14 +4623,17 @@ async function _askAI(type, targetId='ai-query-result'){
 
   const siteId  = S?.siteId==='all' ? null : S?.siteId;
   const site    = S?.siteName || '현장';
-  const allLogs = getLogs().filter(l => siteId ? l.siteId===siteId : true);
-  const allTr   = getTransit().filter(r => siteId ? r.siteId===siteId : true);
   const now     = new Date();
+  const cut7    = new Date(now); cut7.setDate(cut7.getDate()-7);
+  const cut7S   = cut7.toISOString().split('T')[0];
+  const cut90   = new Date(now); cut90.setDate(cut90.getDate()-90);
+  const cut90S  = cut90.toISOString().split('T')[0];
+  // 서버에서 직접 최근 90일 데이터 조회
+  const allLogs = await getLogsByRange(cut90S, today(), siteId, 20000);
+  const allTr   = getTransit().filter(r => siteId ? r.siteId===siteId : true);
 
   // 공통 통계
   const logDone = allLogs.filter(l=>l.status==='end');
-  const cut7    = new Date(now); cut7.setDate(cut7.getDate()-7);
-  const cut7S   = cut7.toISOString().split('T')[0];
   const logs7   = allLogs.filter(l=>l.date>=cut7S);
   // 실내/실외 분리
   const OUTDOOR_FLOORS=['모듈동','1F외곽'];
@@ -4521,15 +4643,18 @@ async function _askAI(type, targetId='ai-query-result'){
   const rate7d  = logs7.length ? Math.round(logs7.filter(l=>l.status==='end').length/logs7.length*100) : 0;
   const hrs     = logDone.reduce((s,l)=>s+(+l.duration||0),0);
 
-  // 업체별 집계
+  // 업체별 집계 (최근 7일 기준 — 리포트 정확도)
   const coMap = {};
-  allLogs.forEach(l=>{ if(!l.company) return; if(!coMap[l.company]) coMap[l.company]={tot:0,done:0,hrs:0}; coMap[l.company].tot++; if(l.status==='end'){coMap[l.company].done++;coMap[l.company].hrs+=(+l.duration||0);} });
+  logs7.forEach(l=>{ if(!l.company) return; if(!coMap[l.company]) coMap[l.company]={tot:0,done:0,hrs:0}; coMap[l.company].tot++; if(l.status==='end'){coMap[l.company].done++;coMap[l.company].hrs+=(+l.duration||0);} });
   const coEntries = Object.entries(coMap).sort((a,b)=>b[1].done-a[1].done);
 
-  // 장비별 집계
+  // 장비별 집계 (최근 7일 기준)
   const eqMap = {};
-  allLogs.forEach(l=>{ if(!l.equip) return; if(!eqMap[l.equip]) eqMap[l.equip]={tot:0,done:0,hrs:0,company:l.company}; eqMap[l.equip].tot++; if(l.status==='end'){eqMap[l.equip].done++;eqMap[l.equip].hrs+=(+l.duration||0);} });
+  logs7.forEach(l=>{ if(!l.equip) return; if(!eqMap[l.equip]) eqMap[l.equip]={tot:0,done:0,hrs:0,company:l.company}; eqMap[l.equip].tot++; if(l.status==='end'){eqMap[l.equip].done++;eqMap[l.equip].hrs+=(+l.duration||0);} });
   const eqEntries = Object.entries(eqMap).sort((a,b)=>b[1].hrs-a[1].hrs);
+
+  // 7일 가동시간 (weekly 리포트 수치 일관성)
+  const hrs7 = logs7.filter(l=>l.status==='end').reduce((s,l)=>s+(+l.duration||0),0);
 
   // 반입반출
   const trIn  = allTr.filter(r=>r.type==='in');
@@ -4548,8 +4673,9 @@ async function _askAI(type, targetId='ai-query-result'){
       const wr=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=precipitation_sum,wind_speed_10m_max,weathercode&timezone=Asia%2FSeoul&past_days=7&forecast_days=1`);
       const wd=await wr.json();
       if(wd.daily){
-        const rainDays=wd.daily.precipitation_sum.filter(r=>r>1).length;
-        const windDays=wd.daily.wind_speed_10m_max.filter(w=>w>10).length;
+        // past_days=7 → index 0~6이 과거 7일, index 7이 오늘 — 오늘 제외하고 7일만 사용
+        const rainDays=wd.daily.precipitation_sum.slice(0,7).filter(r=>r>1).length;
+        const windDays=wd.daily.wind_speed_10m_max.slice(0,7).filter(w=>w>10).length;
         if(rainDays>2) weatherLines.push(`🌧 최근 7일 중 <b>${rainDays}일 우천</b> — 날씨 영향으로 가동 저조 가능성`);
         if(windDays>1) weatherLines.push(`💨 최근 7일 중 <b>${windDays}일 강풍</b>(10m/s↑) — 고소작업 제한 요인`);
       }
@@ -4563,7 +4689,7 @@ async function _askAI(type, targetId='ai-query-result'){
   if(type==='weekly'){
     lines.push(`📋 <b>${site}</b> 주간 운영 리포트`);
     lines.push(`• 최근 7일 가동률 <b>${rate7d}%</b> ${rate7d>=70?'— 목표 달성 ✓':'— 목표(70%) 미달 ⚠'}`);
-    lines.push(`• 누적 가동시간 <b>${fH2(hrs)}</b> · 총 기록 <b>${allLogs.length}건</b>`);
+    lines.push(`• 최근 7일 가동시간 <b>${fH2(hrs7)}</b> · 7일 기록 <b>${logs7.length}건</b>`);
     if(coEntries.length) lines.push(`• 최다 가동 업체: <b>${coEntries[0][0]}</b> ${coEntries[0][1].done}건 완료`);
     if(eqEntries.length) lines.push(`• 최다 사용 장비: <b>${eqEntries[0][0]}</b> ${fH2(eqEntries[0][1].hrs)}`);
     if(indoorLogs2.length>0||outdoorLogs2.length>0){
@@ -4648,9 +4774,8 @@ async function _askAI(type, targetId='ai-query-result'){
       if(!coEquipMap[e.company]) coEquipMap[e.company] = new Set();
       coEquipMap[e.company].add(e.equipNo);
     });
-    // 회사 목록: 장비마스터 보유사 + 등록된 협력사 (합집합)
-    const coNames = new Set([...Object.keys(coEquipMap)]);
-    for(const s of sites2) for(const co of getCos(s.id)) coNames.add(co.name);
+    // 회사 목록: 장비마스터에 active 장비 1대 이상 보유한 업체만
+    const coNames = new Set(Object.keys(coEquipMap));
     const now = new Date();
     const hhmm = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
     lines.push(`📊 <b>${site}</b> 금일 장비 사용현황 <span style="color:var(--tx3);font-size:10px">(${tdStr} ${hhmm} 기준)</span>`);
@@ -4704,7 +4829,6 @@ async function _askAI(type, targetId='ai-query-result'){
 async function runAI(){
   const el=document.getElementById('unused-equip-panel'); if(!el) return;
   const siteId=S.siteId==='all'?null:S.siteId;
-  const allLogs=getLogs().filter(l=>siteId?l.siteId===siteId:true);
 
   // ── 최근 1개월 내 1주일 미사용 장비 ──
   const now7=new Date();
@@ -4712,7 +4836,9 @@ async function runAI(){
   const cut1m=new Date(now7); cut1m.setMonth(cut1m.getMonth()-1);
   const cut7Str=cut7.toISOString().split('T')[0];
   const cut1mStr=cut1m.toISOString().split('T')[0];
-  const recentLogs=allLogs.filter(l=>l.date>=cut1mStr);
+  // 서버에서 직접 최근 1개월 데이터 조회
+  const allLogs=await getLogsByRange(cut1mStr, today(), siteId, 10000);
+  const recentLogs=allLogs;
   const lastUsed=new Map();
   for(const l of recentLogs){
     if(!l.equip) continue;
@@ -5056,7 +5182,7 @@ async function clearAppCache(){
 }
 
 // ── 장비 마스터 관리 시트 ────────────────────────────────────
-function openEquipMasterSheet() {
+async function openEquipMasterSheet() {
   let sh = document.getElementById('sh-equip-master');
   if (!sh) {
     sh = document.createElement('div');
@@ -5065,8 +5191,24 @@ function openEquipMasterSheet() {
     sh.onclick = function(e) { if (e.target === sh) closeSheet('sh-equip-master'); };
     document.body.appendChild(sh);
   }
-  _renderEquipMasterSheet(sh);
+
+  // 1) 시트를 열고 즉시 로딩 스피너 표시
+  sh.innerHTML = `<div class="sheet"><div class="sh-handle"></div>
+    <div class="sh-title">🏗 가동 장비 내역</div>
+    <div style="padding:40px 20px;text-align:center;color:var(--tx3);font-size:12px">
+      <div style="width:20px;height:20px;border:2px solid var(--br);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 10px"></div>
+      Supabase에서 장비 목록 불러오는 중...
+    </div></div>`;
   openSheet('sh-equip-master');
+
+  // 2) Supabase 로드 완료 후 렌더 (항상 서버 데이터가 기본값)
+  try {
+    await loadEquipFromSupabase();
+  } catch(_e) {}
+
+  // 3) 시트가 아직 열려있으면 최신 데이터로 렌더
+  const _sh = document.getElementById('sh-equip-master');
+  if (_sh && _sh.classList.contains('on')) _renderEquipMasterSheet(_sh);
 }
 
 function _renderEquipMasterSheet(sh) {
@@ -5092,20 +5234,18 @@ function _renderEquipMasterSheet(sh) {
     <div style="margin-bottom:10px">
       <div style="font-size:11px;font-weight:800;color:var(--blue);margin-bottom:4px;padding:4px 8px;background:rgba(59,130,246,.08);border-radius:6px">${co} (${list.length}대)</div>
       ${list.map(e => {
-        const _eProjs = getSites().find(s=>s.id===e.siteId)?.projects||[];
-        const _allProjs = (e.project && !_eProjs.includes(e.project)) ? [..._eProjs, e.project] : _eProjs;
-        const _projEl = _allProjs.length
-          ? `<select style="font-size:9px;padding:2px 5px;max-width:72px;border-radius:4px;border:1px solid var(--br);background:var(--bg2);color:${e.project?'#14b8a6':'var(--tx3)'}" onchange="_equipSetProject('${e.id}',this.value)"><option value="">구분없음</option>${_allProjs.map(p=>`<option value="${p}"${e.project===p?' selected':''}>${p}</option>`).join('')}</select>`
-          : (e.project?`<span style="font-size:9px;padding:2px 5px;background:rgba(20,184,166,.1);border-radius:4px;color:#14b8a6">${e.project}</span>`:'');
+        const _projEl = e.project
+          ? `<span title="수정 버튼으로 편집" style="font-size:9px;padding:2px 5px;background:rgba(20,184,166,.1);border-radius:4px;color:#14b8a6;cursor:help">${e.project} ✏</span>`
+          : `<span title="수정 버튼으로 프로젝트 입력" style="font-size:9px;padding:2px 5px;border-radius:4px;color:var(--tx3);border:1px dashed var(--br);cursor:help">프로젝트—</span>`;
         const _pendingBadge = e.pendingApproval
           ? `<span style="font-size:9px;padding:1px 5px;border-radius:4px;background:rgba(245,158,11,.15);color:#f59e0b;border:1px solid rgba(245,158,11,.3);margin-left:4px">⏳승인대기</span>`
           : '';
         const _approveBtn = (e.pendingApproval && isAJ)
           ? `<button onclick="_approveEquipEntry('${e.id}')" style="font-size:9px;padding:2px 8px;border-radius:4px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);color:#4ade80;cursor:pointer">✅승인</button>`
           : '';
-        const _eModels = EQUIP_MODELS[e.spec] || [];
-        const _allModels = (e.model && !_eModels.includes(e.model)) ? [..._eModels, e.model] : _eModels;
-        const _modelEl = `<select style="font-size:9px;padding:2px 5px;max-width:72px;border-radius:4px;border:1px solid var(--br);background:var(--bg2);color:${e.model?'#a78bfa':'var(--tx3)'}" onchange="_equipSetModel('${e.id}',this.value)"><option value="">모델(선택)</option>${_allModels.map(m=>`<option value="${m}"${e.model===m?' selected':''}>${m}</option>`).join('')}</select>`;
+        const _modelEl = e.model
+          ? `<span title="수정 버튼으로 편집" style="font-size:9px;padding:2px 5px;background:rgba(167,139,250,.1);border-radius:4px;color:#a78bfa;font-family:monospace;cursor:help">${e.model} ✏</span>`
+          : `<span title="수정 버튼으로 모델명 입력" style="font-size:9px;padding:2px 5px;border-radius:4px;color:var(--tx3);border:1px dashed var(--br);cursor:help">모델—</span>`;
         return `<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid var(--br)">
           <div style="flex:1;min-width:0">
             <span style="font-family:monospace;font-weight:700;font-size:12px;color:#60a5fa">${e.equipNo}</span>
@@ -5133,13 +5273,20 @@ function _renderEquipMasterSheet(sh) {
     </div>
     <div style="padding:0 4px 8px">
 
-      <!-- 일괄 CSV 등록 -->
+      <!-- 일괄 CSV/엑셀 등록 -->
       <details style="margin-bottom:12px">
-        <summary style="font-size:11px;font-weight:700;color:var(--tx3);cursor:pointer;padding:6px 8px;background:var(--bg2);border-radius:6px;user-select:none">📋 CSV 일괄 등록 (현장명,프로젝트명,업체명,장비제원,모델명,장비번호,반입일 형식)</summary>
+        <summary style="font-size:11px;font-weight:700;color:var(--tx3);cursor:pointer;padding:6px 8px;background:var(--bg2);border-radius:6px;user-select:none">📋 CSV / 엑셀 일괄 등록</summary>
         <div style="padding:8px 4px 4px">
-          <div style="font-size:10px;color:var(--tx3);margin-bottom:6px">한 줄에 하나씩: <code style="background:rgba(59,130,246,.1);padding:1px 5px;border-radius:3px">현장명,프로젝트명,업체명,장비제원,모델명,장비번호,반입일</code> 형식<br>예) P4복합동,Ph2,AJ네트웍스,10M,GS2636,GF123,2026-03-01</div>
-          <textarea id="eq-csv-input" rows="5" placeholder="P4복합동,Ph2,AJ네트웍스,10M,GS2636,GF123,2026-03-01" style="width:100%;padding:8px;font-size:12px;font-family:monospace;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx);resize:vertical;box-sizing:border-box"></textarea>
-          <button onclick="_equipMasterBulkAdd()" style="width:100%;margin-top:6px;padding:7px;font-size:12px;font-weight:700;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);border-radius:6px;color:#60a5fa;cursor:pointer">일괄 등록</button>
+          <div style="display:flex;gap:6px;margin-bottom:8px">
+            <button onclick="_equipExcelDownload()" style="flex:1;padding:6px 8px;font-size:11px;font-weight:700;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);border-radius:6px;color:#4ade80;cursor:pointer">📥 양식 다운</button>
+            <label style="flex:1;display:flex;align-items:center;justify-content:center;padding:6px 8px;font-size:11px;font-weight:700;background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.3);border-radius:6px;color:#a78bfa;cursor:pointer">
+              📊 엑셀 파일로 등록
+              <input type="file" accept=".xlsx,.xls" style="display:none" onchange="_equipExcelImport(this)">
+            </label>
+          </div>
+          <div style="font-size:10px;color:var(--tx3);margin-bottom:6px">CSV 직접 입력: <code style="background:rgba(59,130,246,.1);padding:1px 5px;border-radius:3px">현장명,프로젝트명,업체명,장비제원,모델명,장비번호,반입일</code><br>예) P4복합동,Ph2,AJ네트웍스,10M,GS2636,GF123,2026-03-01</div>
+          <textarea id="eq-csv-input" rows="4" placeholder="P4복합동,Ph2,AJ네트웍스,10M,GS2636,GF123,2026-03-01" style="width:100%;padding:8px;font-size:12px;font-family:monospace;border:1px solid var(--br);border-radius:6px;background:var(--bg2);color:var(--tx);resize:vertical;box-sizing:border-box"></textarea>
+          <button onclick="_equipMasterBulkAdd()" style="width:100%;margin-top:6px;padding:7px;font-size:12px;font-weight:700;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);border-radius:6px;color:#60a5fa;cursor:pointer">CSV 일괄 등록</button>
         </div>
       </details>
 
@@ -5244,6 +5391,9 @@ async function _equipSyncToSB() {
   toast(`장비 ${arr.length}대 Supabase 저장 완료`, 'ok');
 }
 
+// 날짜 문자열 정규화: YYYY.MM.DD / YYYY/MM/DD → YYYY-MM-DD
+const _normDate = s => (s||'').replace(/^(\d{4})[./](\d{1,2})[./](\d{1,2})$/, (_,y,m,d)=>`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`);
+
 async function _equipMasterBulkAdd() {
   const raw = document.getElementById('eq-csv-input')?.value.trim();
   if (!raw) { toast('CSV 내용을 입력하세요', 'err'); return; }
@@ -5253,8 +5403,9 @@ async function _equipMasterBulkAdd() {
   const siteName = getSites().find(s => s.id === siteId)?.name || siteId;
   const arr = getEquipMaster();
   const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  let added = 0, duped = 0;
-  const errLines = []; // M7: 어떤 행이 오류인지 추적
+  let added = 0;
+  const errLines = []; // {line, raw, equipNo, reason}
+  const dupedLines = []; // 이미 active로 존재하는 항목
   for (let li = 0; li < lines.length; li++) {
     const line = lines[li];
     const parts = line.split(/,|\t/).map(p => p.trim());
@@ -5269,18 +5420,18 @@ async function _equipMasterBulkAdd() {
       effectiveSiteId   = _csvSite?.id   || siteId;
       effectiveSiteName = _csvSite?.name || siteName;
       project = parts[1]; company = parts[2]; spec = parts[3]; model = _nh(parts[4]);
-      equipNo = _nh((parts[5]||'').toUpperCase()); inDate = parts[6] || today();
+      equipNo = _nh((parts[5]||'').toUpperCase()); inDate = _normDate(parts[6]) || today();
     } else if (parts.length >= 5 && !/^\d{4}-/.test(parts[3]) && /^\d{4}-/.test(parts[5]||'x')) {
       // 6열 구형식: 현장명,프로젝트명,업체명,장비제원,장비번호,반입일
       const _csvSite = getSites().find(s=>s.name===parts[0]||s.id===parts[0]);
       effectiveSiteId   = _csvSite?.id   || siteId;
       effectiveSiteName = _csvSite?.name || siteName;
       project = parts[1]; company = parts[2]; spec = parts[3];
-      equipNo = _nh((parts[4]||'').toUpperCase()); inDate = parts[5] || today();
+      equipNo = _nh((parts[4]||'').toUpperCase()); inDate = _normDate(parts[5]) || today();
     } else if (parts.length >= 3 && parts[2] && !/^\d{4}-/.test(parts[1])) {
       // 구형식1: 업체명,장비제원,장비번호[,반입일,프로젝트]
       company = parts[0]; spec = parts[1]; equipNo = _nh((parts[2]||'').toUpperCase());
-      inDate  = parts[3] || today(); project = parts[4] || '';
+      inDate  = _normDate(parts[3]) || today(); project = parts[4] || '';
       effectiveSiteId = siteId; effectiveSiteName = siteName;
     } else {
       // 구형식2: 업체명,장비번호
@@ -5288,14 +5439,17 @@ async function _equipMasterBulkAdd() {
       inDate  = today(); project = '';
       effectiveSiteId = siteId; effectiveSiteName = siteName;
     }
-    if (!company || !equipNo) { errLines.push(`${li+1}행: "${line.slice(0,30)}"`); continue; }
+    if (!company || !equipNo) {
+      errLines.push({line: li+1, raw: line.slice(0,40), equipNo: equipNo||'', reason: !company?'업체명 없음':'장비번호 없음'});
+      continue;
+    }
     const exists = arr.find(e => e.equipNo === equipNo && e.siteId === effectiveSiteId);
     if (exists) {
       if (exists.status !== 'active') {
         exists.status = 'active'; exists.inDate = inDate; exists.outDate = null;
         if (spec) exists.spec = spec; if (project) exists.project = project; if (model) exists.model = model;
         exists.synced = false; added++;
-      } else { duped++; }
+      } else { dupedLines.push({equipNo, company, line: li+1}); }
     } else {
       arr.push({
         id: 'eq-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,5),
@@ -5306,15 +5460,120 @@ async function _equipMasterBulkAdd() {
     }
   }
   await saveEquipMaster(arr);
-  if(added > 0) _syncToSupabase().catch(e=> {};
-  // M7: 오류 행 상세 안내
-  if(errLines.length){
-    const errMsg = `오류 ${errLines.length}행 (업체명·장비번호 필수):\n` + errLines.slice(0,5).join('\n') + (errLines.length>5?`\n외 ${errLines.length-5}행`:'');
-    toast(errMsg, 'warn', 8000);
-  }
-  toast(`${added}대 등록 완료${duped ? ' · ' + duped + '대 이미 존재' : ''}${errLines.length ? ' · ' + errLines.length + '행 오류' : ''}`, added > 0 ? 'ok' : 'warn');
+  if(added > 0) _syncToSupabase().catch(()=>{});
+  _showEquipImportResult(added, dupedLines, errLines);
   const sh = document.getElementById('sh-equip-master');
   if (sh) _renderEquipMasterSheet(sh);
+}
+
+function _showEquipImportResult(added, dupedLines, errLines){
+  const duped = dupedLines.length;
+  // 오류/중복 없고 전부 성공이면 토스트만
+  if(!errLines.length && !duped){
+    toast(`${added}대 등록 완료`, added>0?'ok':'warn');
+    return;
+  }
+  if(!errLines.length && duped && added>0){
+    toast(`${added}대 등록 완료 · ${duped}대 이미 존재 (생략)`, 'ok');
+    return;
+  }
+  // 오류 또는 중복 있으면 팝업
+  const existing = document.getElementById('_equip-import-result-pop');
+  if(existing) existing.remove();
+  const pop = document.createElement('div');
+  pop.id = '_equip-import-result-pop';
+  pop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:3000;display:flex;align-items:flex-end;justify-content:center;padding-bottom:env(safe-area-inset-bottom,0px)';
+  const errRows = errLines.map(e=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--br);font-size:11px">
+      <span style="flex-shrink:0;font-size:10px;color:var(--tx3);min-width:28px">${e.line}행</span>
+      <span style="flex-shrink:0;font-family:monospace;font-weight:700;color:#f87171;min-width:70px">${esc(e.equipNo||'—')}</span>
+      <span style="flex:1;color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px">${esc(e.raw)}</span>
+      <span style="flex-shrink:0;font-size:9px;padding:1px 5px;border-radius:4px;background:rgba(248,113,113,.12);color:#f87171">${esc(e.reason)}</span>
+    </div>`).join('');
+  const dupedRows = dupedLines.map(d=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:5px 10px;border-bottom:1px solid var(--br);font-size:11px">
+      <span style="flex-shrink:0;font-size:10px;color:var(--tx3);min-width:28px">${d.line}행</span>
+      <span style="font-family:monospace;font-weight:700;color:#f59e0b;min-width:70px">${esc(d.equipNo)}</span>
+      <span style="flex:1;color:var(--tx3);font-size:10px">${esc(d.company)}</span>
+      <span style="font-size:9px;padding:1px 5px;border-radius:4px;background:rgba(245,158,11,.12);color:#f59e0b">이미 active</span>
+    </div>`).join('');
+  pop.innerHTML = `
+    <div style="width:100%;max-width:520px;background:var(--bg1);border-radius:16px 16px 0 0;padding:16px 14px 20px;box-sizing:border-box;max-height:75vh;display:flex;flex-direction:column">
+      <div style="font-size:13px;font-weight:800;margin-bottom:8px;color:var(--tx)">📋 등록 결과</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        ${added>0?`<span style="font-size:11px;padding:3px 10px;border-radius:20px;background:rgba(74,222,128,.12);color:#4ade80;border:1px solid rgba(74,222,128,.3)">✅ 등록 ${added}대</span>`:''}
+        ${duped>0?`<span style="font-size:11px;padding:3px 10px;border-radius:20px;background:rgba(245,158,11,.12);color:#f59e0b;border:1px solid rgba(245,158,11,.3)">⏭ 이미 존재 ${duped}대</span>`:''}
+        ${errLines.length>0?`<span style="font-size:11px;padding:3px 10px;border-radius:20px;background:rgba(248,113,113,.12);color:#f87171;border:1px solid rgba(248,113,113,.3)">❌ 오류 ${errLines.length}행</span>`:''}
+      </div>
+      <div style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:10px">
+        ${dupedRows?`<div>
+          <div style="font-size:11px;font-weight:700;color:#f59e0b;margin-bottom:4px">⏭ 이미 등록된 장비 (스킵)</div>
+          <div style="border:1px solid rgba(245,158,11,.2);border-radius:8px;background:var(--bg2)">${dupedRows}</div>
+        </div>`:''}
+        ${errRows?`<div>
+          <div style="font-size:11px;font-weight:700;color:#f87171;margin-bottom:4px">❌ 오류 행 (업체명·장비번호 필수)</div>
+          <div style="border:1px solid rgba(248,113,113,.2);border-radius:8px;background:var(--bg2)">
+            <div style="display:flex;gap:8px;padding:4px 10px;background:var(--bg3);font-size:10px;font-weight:700;color:var(--tx3);border-radius:8px 8px 0 0">
+              <span style="min-width:28px">행</span><span style="min-width:70px">장비번호</span><span style="flex:1">원본</span><span>사유</span>
+            </div>
+            ${errRows}
+          </div>
+        </div>`:''}
+      </div>
+      <button onclick="document.getElementById('_equip-import-result-pop').remove()"
+        style="margin-top:12px;width:100%;padding:11px;font-size:13px;font-weight:700;background:var(--bg2);border:1px solid var(--br);border-radius:var(--rs);color:var(--tx2);cursor:pointer">확인</button>
+    </div>`;
+  pop.addEventListener('click', e=>{ if(e.target===pop) pop.remove(); });
+  document.body.appendChild(pop);
+}
+
+function _equipExcelDownload() {
+  if (typeof XLSX === 'undefined') { toast('엑셀 라이브러리 로딩 중... 잠시 후 다시 시도하세요', 'warn'); return; }
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['현장명','프로젝트명','업체명','장비제원','모델명','장비번호','반입일'],
+    ['P4복합동','Ph2','AJ네트웍스','10M','GS2636','GF123', today()],
+  ]);
+  ws['!cols'] = [{wch:14},{wch:10},{wch:16},{wch:8},{wch:10},{wch:10},{wch:12}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '장비목록');
+  XLSX.writeFile(wb, '장비등록양식.xlsx');
+}
+
+async function _equipExcelImport(input) {
+  if (typeof XLSX === 'undefined') { toast('엑셀 라이브러리 로딩 중... 잠시 후 다시 시도하세요', 'warn'); input.value=''; return; }
+  const file = input.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'binary' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      // 첫 행이 헤더("현장명")이면 제외
+      const dataRows = String(rows[0]?.[0]).trim() === '현장명' ? rows.slice(1) : rows;
+      const csv = dataRows
+        .filter(r => r.some(c => String(c).trim()))
+        .map(r => r.slice(0, 7).map(c => {
+          // 날짜: Excel 시리얼 숫자 → YYYY-MM-DD (epoch: 1899-12-30)
+          // 날짜 시리얼 범위: 40000(≈2009) ~ 80000(≈2118) — 장비번호 같은 큰 숫자 오인식 방지
+          if (typeof c === 'number' && c > 40000 && c < 80000) {
+            const dt = new Date(Math.round((c - 25569) * 86400000));
+            const y = dt.getUTCFullYear();
+            const mo = String(dt.getUTCMonth()+1).padStart(2,'0');
+            const d  = String(dt.getUTCDate()).padStart(2,'0');
+            return `${y}-${mo}-${d}`;
+          }
+          return String(c).trim();
+        }).join(','))
+        .join('\n');
+      const ta = document.getElementById('eq-csv-input');
+      if (ta) { ta.value = csv; await _equipMasterBulkAdd(); }
+    } catch(err) {
+      toast('엑셀 파일 읽기 오류: ' + err.message, 'err');
+    }
+    input.value = '';
+  };
+  reader.readAsBinaryString(file);
 }
 
 async function _equipMasterAdd() {
@@ -5722,6 +5981,26 @@ function openSubEquipSheet(){
 }
 
 /* Sites/Companies management */
+async function _openSiteMgr(){
+  closeSheet('sh-admin-hub');
+  setTimeout(()=>openSheet('sh-sites'), 60);
+  renderSiteMgr();
+  try {
+    await _pullSitesFromSB();
+    renderSiteMgr();
+  } catch(_e){}
+}
+
+async function _openCoMgr(){
+  closeSheet('sh-admin-hub');
+  setTimeout(()=>openSheet('sh-company'), 60);
+  renderCoMgr();
+  try {
+    await Promise.all([_pullSitesFromSB(), _pullCosFromSB()]);
+    renderCoMgr();
+  } catch(_e){}
+}
+
 function renderSiteMgr(){
   const sites=getSites();
   document.getElementById('site-mgr-list').innerHTML=sites.map((s)=>{
@@ -5751,6 +6030,14 @@ function saveProjects(siteId){
   sites[idx].projects=projects;
   saveSites(sites);
   renderSiteMgr();
+  // 반입반출 폼이 열려 있으면 project chips 즉시 갱신
+  const trProjRow = document.getElementById('tr-project-row');
+  if(trProjRow){
+    const projChips = projects.map(p=>`<span class="chip" onclick="this.classList.toggle('on')">${p}</span>`).join('');
+    trProjRow.innerHTML = projChips
+      ? `<div style="font-size:11px;color:var(--tx3);margin-bottom:4px">프로젝트</div><div id="tr-project-chips" style="display:flex;gap:6px;flex-wrap:wrap">${projChips}</div>`
+      : '';
+  }
   toast('프로젝트 저장됨','ok');
 }
 function addSite(){

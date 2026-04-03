@@ -106,46 +106,71 @@ function _runMemoryGuard(){
   } catch (_e) {}
 }
 
-// ── LOGS: IDB 우선 접근자 ───────────────────────────────
-// 오늘 로그 (빠른 홈화면용)
+// ── LOGS: 서버 우선 접근자 ───────────────────────────────
+// 오늘 로그 — Supabase 직접 조회, IDB는 오프라인 폴백
 async function getTodayLogs() {
   const td = today();
+  // 캐시 유효성 확인 (같은 날 + _fetchFromSB에 의해 최근 갱신된 경우만 재사용)
+  if (_cache.todayLogs && _cache.todayDate === td && _cache.todayLogsFromSB) return _cache.todayLogs;
+  const sbUrl = DB.g(K.SB_URL,'');
+  if(sbUrl){
+    try {
+      const siteId = (typeof S !== 'undefined' && S?.siteId !== 'all') ? S?.siteId : null;
+      const siteFilter = siteId ? `&site_id=eq.${encodeURIComponent(siteId)}` : '';
+      const rows = await sbReq('logs','GET',null,
+        `?select=*&date=eq.${td}${siteFilter}&order=created_at.desc&limit=500`);
+      if(Array.isArray(rows)){
+        // 미동기화 로컬 항목 병합 (방금 저장하고 아직 서버에 없는 것)
+        let localOnly = [];
+        try {
+          const idbRows = await IDB.getByIndex('logs', 'date', td);
+          const sbIds = new Set(rows.map(r=>r.record_id||String(r.id)));
+          localOnly = idbRows.filter(r => !r.synced && !sbIds.has(r.id));
+        } catch(_e) {}
+        const mapped = rows.map(_sbLogToLocal);
+        const merged = [...mapped, ...localOnly].sort((a,b)=>(b.ts||0)-(a.ts||0));
+        _cache.todayLogs = merged;
+        _cache.todayDate = td;
+        _cache.todayLogsFromSB = true;
+        return merged;
+      }
+    } catch(_e) {}
+  }
+  // 오프라인 폴백: IDB
   if (_cache.todayLogs && _cache.todayDate === td) return _cache.todayLogs;
   try {
     const rows = await IDB.getByIndex('logs', 'date', td);
     _cache.todayLogs = rows;
     _cache.todayDate = td;
+    _cache.todayLogsFromSB = false;
     return rows;
   } catch (_e) { return []; }
 }
 
-// 날짜 범위 로그 조회 (이력 탭용)
+// 날짜 범위 로그 조회 (이력 탭용) — 서버 직접 조회 우선
 async function getLogsByRange(from, to, siteId=null, limit=200) {
   const sbUrl = DB.g(K.SB_URL,'');
   if(sbUrl){
-    // Supabase 서버사이드 쿼리 — select=* 사용 (컬럼 추가 시에도 안전)
     let q = `?select=*&date=gte.${from}&date=lte.${to}&order=created_at.desc&limit=${limit}`;
-    if(siteId) q += `&site_id=eq.${siteId}`;
+    if(siteId) q += `&site_id=eq.${encodeURIComponent(siteId)}`;
     try {
       const rows = await sbReq('logs','GET',null,q);
       const sbRows = Array.isArray(rows) ? rows.map(_sbLogToLocal) : [];
-      // IDB에서 미동기화 로컬 항목도 병합 (날짜 범위 내 synced=false인 것)
+      // 미동기화 로컬 항목만 병합 (IDB에서 synced=false인 것, 서버에 없는 것)
       try {
         const idbRange = IDBKeyRange.bound(from, to);
         let idbRows = await IDB.getRange('logs', 'date', idbRange);
         if(siteId) idbRows = idbRows.filter(l => l.siteId === siteId);
         const sbIds = new Set(sbRows.map(r => r.id));
-        const localOnly = idbRows.filter(r => !sbIds.has(r.id));
-        // SB 0건이어도 IDB 데이터 있으면 반환 (오프라인/신규 저장 직후 포함)
-        if(localOnly.length || sbRows.length === 0){
-          const merged = [...sbRows, ...localOnly].sort((a,b)=>(b.ts||0)-(a.ts||0));
-          if(merged.length) return merged.slice(0, limit);
+        const localOnly = idbRows.filter(r => !r.synced && !sbIds.has(r.id));
+        if(localOnly.length){
+          return [...sbRows, ...localOnly].sort((a,b)=>(b.ts||0)-(a.ts||0)).slice(0, limit);
         }
       } catch (_e) {}
       return sbRows;
     } catch (_e) {}
   }
-  // 폴백: IDB 로컬
+  // 오프라인 폴백: IDB 로컬
   try {
     const range = IDBKeyRange.bound(from, to);
     let rows = await IDB.getRange('logs', 'date', range);
@@ -342,6 +367,7 @@ function _sbAsToLocal(row){
   if(row.comments){ try{ const p=JSON.parse(row.comments); if(Array.isArray(p)) _comments=p; }catch(_){} }
   return {
     id:           row.record_id||String(row.id),
+    sbId:         row.id ? Number(row.id) : null,  // Supabase IDENTITY — 고정 고유번호
     date:         row.date,
     siteId:       row.site_id,
     siteName:     row.site_name,
@@ -399,7 +425,7 @@ async function _fetchFromSB(){
     const asSinceStr=asSince.toISOString();
     // select=* 대신 필요한 컬럼만 지정 → payload 절감 (DB에 없는 컬럼 제외)
     const TR_COLS = 'record_id,date,type,site_id,site_name,company,equip_specs,aj_equip,reporter_name,reporter_phone,manager_name,manager_phone,manager_location,note,status,messages,created_at';
-    const AS_COLS = 'record_id,date,site_id,site_name,company,equip,location,fault_type,description,reporter_name,reporter_phone,status,tech_name,tech_phone,resolved_at,resolve_note,requested_at,material_at,created_at';
+    const AS_COLS = 'id,record_id,date,site_id,site_name,company,equip,location,fault_type,description,reporter_name,reporter_phone,status,tech_name,tech_phone,resolved_at,resolve_note,requested_at,material_at,created_at';
 
     // 컬럼 오류 시 select=* fallback 헬퍼
     const _sbGetWithFallback = async (table, q, fallbackQ) => {
@@ -415,7 +441,7 @@ async function _fetchFromSB(){
 
     // transit: 최근 30일 생성 OR 아직 예정 상태(지연 포함) — 날짜 필터로 누락 방지
     const trOrFilter = encodeURIComponent('예정');
-    const [trRows, asRows] = await Promise.all([
+    const [trRows, asRows, logRows] = await Promise.all([
       _sbGetWithFallback(
         'transit',
         `?select=${TR_COLS}${siteFilter}&or=(created_at.gte.${sinceStr},status.eq.${trOrFilter})&order=created_at.desc&limit=300`,
@@ -426,6 +452,10 @@ async function _fetchFromSB(){
         `?select=${AS_COLS}${siteFilter}&created_at=gte.${asSinceStr}&order=created_at.desc&limit=200`,
         `?select=*${siteFilter}&created_at=gte.${asSinceStr}&order=created_at.desc&limit=200`
       ),
+      // 오늘 가동내역 — 홈화면·분석 캐시 실시간 갱신용
+      sbReq('logs','GET',null,`?select=*${siteFilter}&date=eq.${today()}&order=created_at.desc&limit=500`).catch(()=>null),
+      // 장비 마스터 — 운영분석리포트 항상 최신 유지
+      loadEquipFromSupabase().catch(()=>null),
     ]);
     let changed=false;
     if(Array.isArray(trRows)&&trRows.length){
@@ -515,6 +545,21 @@ async function _fetchFromSB(){
         }
       }
       if(asChanged){ changed=true; await saveAsReqs(localAs); }
+    }
+    // ── 오늘 가동내역 — 서버에서 직접 pull하여 캐시 갱신 ────────────────
+    if(Array.isArray(logRows)){
+      const td = today();
+      const mapped = logRows.map(_sbLogToLocal);
+      _cache.todayLogs = mapped;
+      _cache.todayDate = td;
+      _cache.todayLogsFromSB = true;
+      if(_cache.logs){
+        const todayIds = new Set(mapped.map(l=>l.id));
+        const rest = _cache.logs.filter(l=>l.date!==td||!todayIds.has(l.id));
+        _cache.logs = [...mapped, ...rest].slice(0,1000);
+        _buildLogIndex(_cache.logs);
+      }
+      changed = true;
     }
     // ── AJ관리자: members 테이블 동기화 (신규 가입 신청 반영) ────────────
     if(S?.role === 'aj'){
@@ -621,6 +666,9 @@ async function saveEquipMaster(arr) {
   _cache.equipment = arr;
   try { await IDB.putAll('equipment', arr); } catch (_e) {}
   DB.s(K.EQUIP, arr);
+  // 변경 항목만 즉시 Supabase 반영 (synced=false 인 것만)
+  const unsynced = arr.filter(e => !e.synced);
+  if (unsynced.length) _pushEquipItemsToSB(unsynced).catch(() => {});
 }
 
 // Supabase에서 equipment 전체 로드 (앱 시작 시 or 수동 새로고침)
@@ -629,7 +677,9 @@ async function loadEquipFromSupabase() {
     const SB_URL = DB.g(K.SB_URL,'');
     const SB_KEY = DB.g(K.SB_KEY,'');
     if (!SB_URL || !SB_KEY) return;
-    const res = await fetch(SB_URL + '/rest/v1/equipment?select=*&order=created_at.desc&limit=2000', {
+    const _sid = (typeof S !== 'undefined' && S?.siteId && S.siteId !== 'all') ? S.siteId : null;
+    const _sf = _sid ? `&site_id=eq.${encodeURIComponent(_sid)}` : '';
+    const res = await fetch(SB_URL + `/rest/v1/equipment?select=*${_sf}&order=created_at.desc&limit=2000`, {
       headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
     });
     if (!res.ok) return;
@@ -977,12 +1027,6 @@ function saveCos(obj){
   DB.s(K.COS, obj);
   _pushCosToSB(obj).catch(()=>{});
 }
-function saveSites(arr){
-  _cache.sites = null;
-  DB.s(K.SITES, arr);
-  _pushSitesToSB(arr).catch(()=>{});
-}
-
 /* IDB 180일 초과 로그 자동 정리 — 데이터 무제한 누적 방지 */
 async function _purgeOldLogs(){
   const KEY = '_logPurgeTs';
