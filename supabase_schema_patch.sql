@@ -62,15 +62,41 @@ CREATE INDEX IF NOT EXISTS idx_as_requests_updated_at
   ON public.as_requests(updated_at DESC);
 
 -- ================================================================
--- PART 3: 확인 쿼리
+-- PART 3: aj_members 테이블 — auth_id / email 컬럼 추가
 -- ================================================================
 
--- 컬럼 목록 확인
-SELECT table_name, column_name, data_type, column_default
+-- 3-1. auth_id: Supabase Auth UUID (첫 로그인 시 /api/auth/link-auth-id 로 채워짐)
+--      nullable — 연결 전까지 NULL 유지
+ALTER TABLE public.aj_members
+  ADD COLUMN IF NOT EXISTS auth_id text;
+
+-- 3-2. email: 로그인에 사용된 이메일 (empNo@aj.internal 또는 Google 이메일)
+ALTER TABLE public.aj_members
+  ADD COLUMN IF NOT EXISTS email text;
+
+-- 3-3. auth_id 유니크 인덱스 (NULL 행은 제외 → 중복 NULL 허용, 연결된 계정은 유일)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_aj_members_auth_id
+  ON public.aj_members(auth_id)
+  WHERE auth_id IS NOT NULL;
+
+-- 3-4. email 인덱스
+CREATE INDEX IF NOT EXISTS idx_aj_members_email
+  ON public.aj_members(email);
+
+-- 3-5. phone 인덱스 (로그인 전 anon phone 조회 성능)
+CREATE INDEX IF NOT EXISTS idx_aj_members_phone
+  ON public.aj_members(phone);
+
+-- ================================================================
+-- PART 4: 확인 쿼리
+-- ================================================================
+
+-- 컬럼 목록 확인 (transit, as_requests, aj_members)
+SELECT table_name, column_name, data_type, column_default, is_nullable
 FROM information_schema.columns
 WHERE table_schema = 'public'
-  AND table_name IN ('transit', 'as_requests')
-  AND column_name IN ('updated_at', 'dispatch')
+  AND table_name IN ('transit', 'as_requests', 'aj_members')
+  AND column_name IN ('updated_at', 'dispatch', 'auth_id', 'email')
 ORDER BY table_name, column_name;
 
 -- 트리거 확인
@@ -79,3 +105,11 @@ FROM information_schema.triggers
 WHERE trigger_schema = 'public'
   AND event_object_table IN ('transit', 'as_requests')
 ORDER BY event_object_table;
+
+-- aj_members 인덱스 확인
+SELECT indexname, tablename, indexdef
+FROM pg_indexes
+WHERE schemaname = 'public'
+  AND tablename = 'aj_members'
+  AND indexname IN ('idx_aj_members_auth_id', 'idx_aj_members_email', 'idx_aj_members_phone')
+ORDER BY indexname;
