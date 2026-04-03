@@ -1,103 +1,118 @@
-/* ═══════════════════════════════════════
-   AJ 고소작업대 Service Worker
-   - 정적 자산 캐시 (오프라인 지원)
-   - 외부 API (Supabase, Anthropic, Google) 제외
-═══════════════════════════════════════ */
-const CACHE_NAME = 'ajpjt-v5'; // 2026-03-24 check3PMAlert 제거 후 캐시 강제 갱신
-const SHELL = [
-  '/', '/index.html', '/manifest.json', '/sw.js',
-  '/js/db.js', '/js/state.js', '/js/api.js',
-  '/js/ui.js', '/js/app.js', '/js/event.js',
+/* ═══════════════════════════════════════════════════════════
+   AJ 고소작업대 Service Worker v3.4
+   - 앱 셸 캐시 (오프라인 지원)
+   - Supabase API는 네트워크 우선, 실패 시 큐잉
+   - 백그라운드 싱크 지원
+═══════════════════════════════════════════════════════════ */
+const SW_VER   = 'aj-v3.4';
+const SHELL_CACHE = SW_VER + '-shell';
+const API_CACHE   = SW_VER + '-api';
+
+// 앱 셸 — 오프라인에서도 로드돼야 하는 리소스
+const SHELL_ASSETS = [
+  './',
+  './index.html',
+  'https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&family=JetBrains+Mono:wght@600&display=swap',
 ];
 
-const BYPASS = [
-  'supabase.co', 'anthropic.com', 'googleapis.com',
-  'gstatic.com', 'fonts.google', 'script.google'
-];
-
-// SHELL 파일 URL 집합 (Network-First 적용 대상)
-const _origin = self.location.origin;
-const SHELL_URLS = new Set(SHELL.map(p => new URL(p, _origin).href));
-
+// ── Install: 앱 셸 캐시 ─────────────────────────────────
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(c => c.addAll(SHELL))
-      .then(() => self.skipWaiting())
+    caches.open(SHELL_CACHE).then(cache =>
+      // 폰트만 캐시 (앱 자체는 단일 HTML이라 자동 캐시)
+      cache.addAll([
+        'https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&family=JetBrains+Mono:wght@600&display=swap'
+      ]).catch(() => {}) // 폰트 실패해도 계속
+    ).then(() => self.skipWaiting())
   );
 });
 
+// ── Activate: 구버전 캐시 정리 ──────────────────────────
 self.addEventListener('activate', e => {
   e.waitUntil(
-    caches.keys()
-      .then(keys => Promise.all(
-        keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
-      ))
-      .then(() => self.clients.claim())
+    caches.keys().then(keys =>
+      Promise.all(
+        keys
+          .filter(k => k !== SHELL_CACHE && k !== API_CACHE)
+          .map(k => caches.delete(k))
+      )
+    ).then(() => self.clients.claim())
   );
 });
 
-// ── 백그라운드 푸시 수신 ──────────────────────────────────
-self.addEventListener('push', e => {
-  const data = e.data ? e.data.json() : {};
-  e.waitUntil(
-    self.registration.showNotification(data.title || 'AJ 알림', {
-      body: data.body || '',
-      icon: '/icons/icon-192.png',
-      badge: '/icons/icon-72.png',
-      tag: data.tag || 'ajpjt',
-      renotify: true,
-      data: data
-    })
-  );
-});
-
-self.addEventListener('notificationclick', e => {
-  e.notification.close();
-  e.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
-      const win = list.find(w => w.url.includes(self.location.origin));
-      if (win) return win.focus();
-      return clients.openWindow('/');
-    })
-  );
-});
-
+// ── Fetch: 네트워크 우선 전략 ────────────────────────────
 self.addEventListener('fetch', e => {
-  const url = e.request.url;
-  if (e.request.method !== 'GET') return;
-  if (BYPASS.some(d => url.includes(d))) return;
-  if (!url.startsWith('http')) return;
+  const url = new URL(e.request.url);
 
-  // JS·HTML(SHELL) — Network-First: 항상 최신 코드 로드, 오프라인 시 캐시 fallback
-  if (SHELL_URLS.has(url) || url === _origin + '/') {
+  // Supabase API — 네트워크 우선, 실패해도 오류 전달 (캐시 안 함)
+  if (url.hostname.endsWith('.supabase.co')) {
+    e.respondWith(
+      fetch(e.request).catch(() =>
+        new Response(JSON.stringify({ error: 'offline' }), {
+          headers: { 'Content-Type': 'application/json' }
+        })
+      )
+    );
+    return;
+  }
+
+  // Google Fonts — 캐시 우선
+  if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
+    e.respondWith(
+      caches.match(e.request).then(cached =>
+        cached || fetch(e.request).then(res => {
+          const clone = res.clone();
+          caches.open(SHELL_CACHE).then(c => c.put(e.request, clone));
+          return res;
+        })
+      )
+    );
+    return;
+  }
+
+  // 앱 HTML — 네트워크 우선, 실패 시 캐시
+  if (e.request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname === '/') {
     e.respondWith(
       fetch(e.request).then(res => {
-        if (res && res.status === 200) {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
-        }
+        const clone = res.clone();
+        caches.open(SHELL_CACHE).then(c => c.put(e.request, clone));
         return res;
       }).catch(() => caches.match(e.request))
     );
     return;
   }
 
-  // 기타 자산 (아이콘·이미지 등) — Cache-First: 성능 우선
-  e.respondWith(
-    caches.match(e.request).then(cached => {
-      if (cached) return cached;
-      return fetch(e.request).then(res => {
-        if (res && res.status === 200 && res.type === 'basic') {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
-        }
-        return res;
-      }).catch(() => {
-        if (e.request.headers.get('accept')?.includes('text/html')) {
-          return caches.match('/index.html');
-        }
-      });
+  // 기타 — 기본 fetch
+  e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+});
+
+// ── Background Sync: 오프라인 큐 처리 ───────────────────
+self.addEventListener('sync', e => {
+  if (e.tag === 'sync-logs') {
+    e.waitUntil(
+      self.clients.matchAll().then(clients =>
+        clients.forEach(c => c.postMessage({ type: 'BG_SYNC' }))
+      )
+    );
+  }
+});
+
+// ── Push 알림 (향후 확장용) ──────────────────────────────
+self.addEventListener('push', e => {
+  if (!e.data) return;
+  const data = e.data.json();
+  e.waitUntil(
+    self.registration.showNotification(data.title || '고소작업대', {
+      body: data.body || '',
+      icon: './icon-192.png',
+      badge: './badge.png',
+      tag: data.tag || 'aj-notif',
+      data: data.url || '/'
     })
   );
+});
+
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(clients.openWindow(e.notification.data || '/'));
 });
